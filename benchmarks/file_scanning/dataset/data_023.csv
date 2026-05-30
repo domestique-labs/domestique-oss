@@ -1,0 +1,11 @@
+id,name,email,phone,ssn,address
+1,Daniel Smith,elizabeth.miller@healthco.net,(206) 460-5892,871-59-7865,"8918 Cedar Ln, Boston"
+2,David Martinez,patricia.davis@corp.io,(479) 546-8956,129-59-6507,"6724 Cedar Ln, San Francisco"
+3,Linda Williams,elizabeth.rodriguez@acme.com,(603) 706-1444,185-92-8022,"2323 Pine Rd, San Francisco"
+4,James Jones,michael.garcia@corp.io,(665) 434-6529,879-58-5558,"7006 Elm Dr, New York"
+5,Linda Smith,daniel.rodriguez@acme.com,(558) 329-2124,899-93-1659,"608 Oak Ave, San Francisco"
+6,James Martinez,robert.brown@corp.io,(684) 785-2874,677-37-8619,"4298 Elm Dr, San Francisco"
+7,Elizabeth Martinez,daniel.taylor@acme.com,(996) 938-3683,418-23-1420,"5211 Maple Blvd, Boston"
+8,Michael Miller,daniel.brown@acme.com,(806) 807-4978,204-99-5941,"9937 Main St, Seattle"
+9,James Garcia,david.miller@bigbank.org,(270) 618-6590,112-63-9031,"1829 Pine Rd, Chicago"
+10,Sarah Davis,daniel.williams@healthco.net,(380) 851-9548,766-44-9817,"8021 Pine Rd, Austin"

@@ -1,0 +1,17 @@
+.env
+*.key
+*.csr
+*.srl
+ca.crt
+server.crt
+logs/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+node_modules/
+dist/
+build/
+.venv/
+vendor/
+reports/

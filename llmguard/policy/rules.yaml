@@ -1,0 +1,84 @@
+# LLM Firewall - Policy Rules
+#
+# Rules are evaluated top-to-bottom. The most restrictive matching action wins.
+# Actions: block | redact | allow
+#
+# Fields:
+#   name            - unique identifier
+#   detector        - which detector to match ("*" for any)
+#   action          - what to do when matched
+#   categories      - (optional) restrict to specific finding categories
+#   min_confidence  - (optional) minimum confidence to trigger
+
+rules:
+  # ── Secrets ─────────────────────────────────────────────────────────────
+  - name: block-critical-secrets
+    detector: secret_scanner
+    action: block
+    categories:
+      - private_key
+      - aws_access_key
+      - aws_secret_key
+      - connection_string
+    min_confidence: 0.9
+
+  - name: block-api-tokens
+    detector: secret_scanner
+    action: block
+    categories:
+      - github_token
+      - github_fine_grained
+      - openai_key
+      - anthropic_key
+      - slack_token
+    min_confidence: 0.9
+
+  - name: block-credentials
+    detector: secret_scanner
+    action: block
+    categories:
+      - password_literal
+      - jwt
+    min_confidence: 0.85
+
+  # ── PII (any detector) ────────────────────────────────────────────────
+  - name: block-government-ids
+    detector: "*"
+    action: block
+    categories:
+      - us_ssn
+      - social_security_number
+      - "pii:social_security_number"
+      - credit_card
+      - "pii:credit_card"
+      - us_passport
+      - us_driver_license
+      - iban_code
+      - medical_license
+    min_confidence: 0.7
+
+  - name: block-contact-info
+    detector: "*"
+    action: block
+    categories:
+      - email_address
+      - "pii:email"
+      - phone_number
+      - "pii:phone_number"
+      - address
+      - "pii:address"
+      - "pii:password"
+      - password_literal
+    min_confidence: 0.7
+
+  # ── LLM-classified sensitive content ──────────────────────────────────
+  - name: block-llm-classified
+    detector: local_llm_classifier
+    action: block
+    categories:
+      - "llm_classified:proprietary_code"
+      - "llm_classified:customer_data"
+      - "llm_classified:business_strategy"
+      - "llm_classified:credentials"
+      - "llm_classified:internal_comms"
+    min_confidence: 0.8

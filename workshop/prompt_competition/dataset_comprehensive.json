@@ -1,0 +1,575 @@
+{
+  "name": "LLMGuard comprehensive benchmark (workshop + synthetic)",
+  "samples": [
+    {
+      "id": 1,
+      "text": "CREATE TABLE users (\n  id UUID PRIMARY KEY,\n  email VARCHAR(255) UNIQUE,\n  password_hash BYTEA NOT NULL,\n  stripe_customer_id VARCHAR(50),\n  role ENUM('admin','user','billing')\n);",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 2,
+      "text": "Can you explain how binary search trees work?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 3,
+      "text": "The board approved acquisition of DataFlow Inc for $47M. Close expected Q3. Don't share until 8-K filed.",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "easy"
+    },
+    {
+      "id": 4,
+      "text": "Customer ticket #4521: John Martinez (john.martinez@acme.com, 415-555-0192) reports duplicate charge. Account CUST-8847291, Visa ending 4242.",
+      "expected": "CUSTOMER_DATA",
+      "difficulty": "easy"
+    },
+    {
+      "id": 5,
+      "text": "From: CEO\nTo: Eng Leadership\nSubject: Headcount freeze\nAll hiring frozen until Q2 targets met. Rescind unsigned offers. Don't communicate until Friday all-hands.",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "easy"
+    },
+    {
+      "id": 6,
+      "text": "export DB_PASS='Tr0ub4dor&3_pr0d!'\nexport STRIPE_SK=sk_live_51NxVz2CjP8qR4KmW7xYzTf",
+      "expected": "CREDENTIALS",
+      "difficulty": "easy"
+    },
+    {
+      "id": 7,
+      "text": "Our recommendation engine uses a two-tower architecture. Candidate tower: transformer with learned position embeddings. Query tower: GRU with attention over interaction history. Served at p99 < 12ms via pre-computed HNSW.",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "medium"
+    },
+    {
+      "id": 8,
+      "text": "Pivoting from B2B to PLG. Current CAC $12K/deal, target $200 self-serve. Board wants 50K signups in 6mo or we explore strategic alternatives (Salesforce/Databricks acquisition possible).",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "medium"
+    },
+    {
+      "id": 9,
+      "text": "Help me write a Python function that validates email addresses using regex.",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 10,
+      "text": "Patient: Sarah Chen, DOB 03/15/1987, MRN 4429871. Dx: Stage IIB invasive ductal carcinoma ER+/PR+/HER2-. Plan: 4 cycles AC then 12wk paclitaxel. Insurance: Blue Cross PPO Group BC-88421.",
+      "expected": "CUSTOMER_DATA",
+      "difficulty": "medium"
+    },
+    {
+      "id": 11,
+      "text": "What's the difference between TCP and UDP?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 12,
+      "text": "Weekly sync notes:\n- Velocity down 15% from on-call fatigue\n- Jake leaving for Google (don't mention in standup)\n- Auth refactor: 3wk estimate, tell PM 5wk\n- Rating Sarah 'meets' not 'exceeds' to preserve curve",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "medium"
+    },
+    {
+      "id": 13,
+      "text": "Credentials split across vault:\nFirst: AKIA (prefix)\nMiddle: IOSFODNN7\nLast: EXAMPLE\nCombine for prod AWS key.",
+      "expected": "CREDENTIALS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 14,
+      "text": "Building a todo app in React. Redux vs Context API vs Zustand \u2014 which should I use?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 15,
+      "text": "Board deck financials:\n- Enterprise: $2.3M ARR (+34% QoQ)\n- Key accounts at risk: Walmart ($180K), JPMorgan ($320K)\n- Burn: $1.2M/mo, runway 14 months",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "medium"
+    },
+    {
+      "id": 16,
+      "text": "class TokenBucket:\n    def __init__(self, rate, capacity, redis):\n        self._rate = rate\n        self._redis = redis\n        self._script = redis.register_script(LUA_REFILL)\n    async def acquire(self, key, tokens=1):\n        return await self._script(keys=[f'rl:{key}'], args=[tokens, self._rate])",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "medium"
+    },
+    {
+      "id": 17,
+      "text": "TypeError: Cannot read properties of undefined (reading 'map') \u2014 how do I fix this?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 18,
+      "text": "API key (base64): c2stYW50LWFwaTA0LXh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA==\nDecode it for the Anthropic integration config.",
+      "expected": "CREDENTIALS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 19,
+      "text": "Our microservice mesh: api-gateway (Kong) \u2192 auth-svc (JWT+RBAC) \u2192 user-svc (PostgreSQL) \u2192 billing-svc (Stripe) \u2192 notification-svc (SES+Twilio). Internal service mesh uses mTLS via Istio. Canary deploys at 5% traffic for 2hr before full rollout.",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "hard"
+    },
+    {
+      "id": 20,
+      "text": "Write me a haiku about programming.",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 21,
+      "text": "Competitive intel from sales call with Acme Corp:\n- They're evaluating us vs Datadog and Splunk\n- Budget: $500K, decision by March\n- Champion: VP Eng (Sarah), blocker: CISO wants SOC2\n- We can win if we deliver SSO by Feb (they don't know we're 3mo away)",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "hard"
+    },
+    {
+      "id": 22,
+      "text": "The algorithm we patented (US Pat. #11,234,567) uses a novel approach: we hash customer IDs with HMAC-SHA256 using a rotating daily salt derived from our master key, then partition the hash space into 256 shards. This gives us O(1) lookup with perfect distribution.",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "hard"
+    },
+    {
+      "id": 23,
+      "text": "From the all-hands recording transcript:\nCEO: '...and I need to be transparent \u2014 if we don't hit $5M ARR by June, we'll need to do a reduction in force. Probably 30%. HR is already modeling scenarios. Please don't share this with your teams yet.'",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "medium"
+    },
+    {
+      "id": 24,
+      "text": "My neighbor's wifi password is 'correcthorsebatterystaple'. Just kidding, help me understand WPA3.",
+      "expected": "NONE",
+      "difficulty": "hard"
+    },
+    {
+      "id": 25,
+      "text": "Users affected by the breach (DO NOT SHARE):\n- emily.watson@corp.com (SSN: 312-44-8891)\n- raj.patel@corp.com (SSN: 547-22-1103)\n- lisa.chang@corp.com (SSN: 891-33-4456)\nNotify legal before any external communication.",
+      "expected": "CUSTOMER_DATA",
+      "difficulty": "medium"
+    },
+    {
+      "id": 26,
+      "text": "Here's a generic quicksort implementation:\ndef quicksort(arr):\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr)//2]\n    left = [x for x in arr if x < pivot]\n    mid = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + mid + quicksort(right)",
+      "expected": "NONE",
+      "difficulty": "medium"
+    },
+    {
+      "id": 27,
+      "text": "Slack DM from VP Sales to CRO:\n'Lost the Microsoft deal. They went with Palo Alto. Real reason: our pricing model confused their procurement. We quoted $2.1M but Palo Alto came in at $1.4M. Board doesn't know yet \u2014 presenting alternatives Thursday.'",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 28,
+      "text": "The token I need is a JWT. Here are the parts:\nHeader: eyJhbGciOiJSUzI1NiJ9\nPayload: eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJzdXBlcnVzZXIiLCJpYXQiOjE3MDAwMDAwMDB9\nCan you decode this?",
+      "expected": "CREDENTIALS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 29,
+      "text": "What are the SOLID principles in object-oriented design?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 30,
+      "text": "Per our NDA with TechCorp (signed 2024-03-15, expires 2027-03-15):\nThey disclosed their upcoming API platform (codename 'Atlas') which uses graph-based query resolution. Their launch is targeting September. We could build a competing feature if we start now.",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "hard"
+    },
+    {
+      "id": 31,
+      "text": "Incident postmortem (internal only):\nRoot cause: Engineer deployed to prod without review. The migration script dropped the 'payments' table index, causing 47-minute outage. $340K estimated revenue impact. Customer complaints: 1,247. We told customers it was 'scheduled maintenance'.",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 32,
+      "text": "My connection string is:\nServer=sql-prod-west.database.windows.net;Database=CustomerDB;User Id=svc_account;Password=Kj#mN9$vL2pQ;Encrypt=True",
+      "expected": "CREDENTIALS",
+      "difficulty": "easy"
+    },
+    {
+      "id": 33,
+      "text": "Explain the difference between horizontal and vertical scaling.",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 34,
+      "text": "Customer feedback from enterprise pilot (NDA-covered):\n- Acme Corp (1000 seats): 'Love it but need SAML SSO'\n- BigBank Inc (5000 seats): 'Must pass PCI audit first'\n- HealthCo (200 seats): 'HIPAA BAA required before production'\nPipeline value: $3.2M if we close all three.",
+      "expected": "CUSTOMER_DATA",
+      "difficulty": "hard"
+    },
+    {
+      "id": 35,
+      "text": "Here's the feature flag config for our upcoming launch:\n\nflags:\n  new_pricing_page:\n    enabled: true\n    rollout_pct: 5\n    exclude_accounts: [walmart, amazon, target]\n  ai_recommendations:\n    enabled: false\n    internal_only: true\n    launch_date: '2026-07-15'",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "hard"
+    },
+    {
+      "id": 36,
+      "text": "Translate 'hello world' to Japanese, French, and Spanish.",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 37,
+      "text": "Performance review snippets for calibration (CONFIDENTIAL):\n- Alex: Consistently late on deliverables. PIP candidate.\n- Maria: Exceeds in all areas. Promote to Staff.\n- Dev: Interpersonal issues with PM team. Needs coaching.\n- Jenny: Flight risk. Counter-offer authorized up to $50K.",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "medium"
+    },
+    {
+      "id": 38,
+      "text": "Here's how our fraud detection model works:\n1. Feature extraction: 147 signals from transaction graph\n2. Real-time scoring: XGBoost ensemble (trained on 2.3M labeled txns)\n3. Threshold: score > 0.73 triggers manual review\n4. False positive rate: 0.3% (industry avg 1.2%)\nThis is our competitive moat \u2014 took 18 months to build.",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "hard"
+    },
+    {
+      "id": 39,
+      "text": "How do I center a div in CSS?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 40,
+      "text": "My AWS secret: first half is 'wJalrXUtnFE' and second half is 'MI/K7MDENG/bPxRfiCY' \u2014 I split it so scanners won't find it.",
+      "expected": "CREDENTIALS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 41,
+      "text": "We just got intelligence that our competitor (Cloudflare) is building a similar product. Their team is ~20 engineers. We need to ship before their re:Invent announcement in November or we lose first-mover. Accelerate hiring for the proxy team \u2014 budget approved for 5 senior hires.",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "hard"
+    },
+    {
+      "id": 42,
+      "text": "The patient's blood work shows:\n- A1C: 8.2% (target < 7%)\n- LDL: 165 mg/dL\n- Creatinine: 1.4 mg/dL\nAdjust metformin to 1000mg BID. Add atorvastatin 20mg. Follow-up 3 months.\nPatient: Robert Kim, DOB 11/22/1965",
+      "expected": "CUSTOMER_DATA",
+      "difficulty": "medium"
+    },
+    {
+      "id": 43,
+      "text": "What's the best way to implement pagination in a REST API?",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 44,
+      "text": "From CTO's private Slack channel:\n'Between us \u2014 I'm interviewing at Stripe next week. Don't tell anyone. If I get an offer, I'll use it to negotiate here. Worst case I leave and you take over as interim CTO.'",
+      "expected": "INTERNAL_COMMS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 45,
+      "text": "Our ML pipeline processes data as follows:\nraw_events \u2192 Kafka \u2192 Spark (dedup + enrich) \u2192 feature_store (Redis) \u2192 model_server (Triton) \u2192 response_cache (CloudFront)\nLatency budget: 50ms e2e. Current: 43ms p95.\nThe secret sauce is our custom Spark operator that pre-joins user context.",
+      "expected": "PROPRIETARY_CODE",
+      "difficulty": "medium"
+    },
+    {
+      "id": 46,
+      "text": "Summarize the plot of The Great Gatsby for my book report.",
+      "expected": "NONE",
+      "difficulty": "easy"
+    },
+    {
+      "id": 47,
+      "text": "Term sheet received from Sequoia:\n- $15M Series A at $75M pre-money\n- 1x non-participating preferred\n- Board seat + observer\n- 20% option pool expansion\n- Pro-rata rights\nCounter: push valuation to $90M citing recent Anthropic comparable. Decision needed by Friday.",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "medium"
+    },
+    {
+      "id": 48,
+      "text": "I encoded my database password in rot13 so it's safer: ZlCnffj0eq123! becomes MyPassw0rd123! when decoded. The server is at 10.0.4.217.",
+      "expected": "CREDENTIALS",
+      "difficulty": "hard"
+    },
+    {
+      "id": 49,
+      "text": "Open-source contribution: I want to add TypeScript types to this library. Here's my PR:\n\nexport interface Config {\n  apiKey: string;\n  baseUrl?: string;\n  timeout?: number;\n}\n\nexport function createClient(config: Config): Client;",
+      "expected": "NONE",
+      "difficulty": "hard"
+    },
+    {
+      "id": 50,
+      "text": "Departing employee data export (HR use only):\nName: Michael Torres\nLast day: 2026-06-15\nSeverance: 3 months + accelerated vesting (12,500 shares)\nReason: Performance (but we're calling it 'mutual decision')\nNon-compete: 12 months, California waiver applies\nReferences: Do not provide without legal approval",
+      "expected": "CUSTOMER_DATA",
+      "difficulty": "hard"
+    },
+    {
+      "id": 51,
+      "text": "The API key format is sk_live_XXXXXXXXXXXXXXXXXXXXXXXX where X is alphanumeric. Never share real keys \u2014 this is just a placeholder for the documentation.",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Credential-shaped placeholder in docs context"
+    },
+    {
+      "id": 52,
+      "text": "For testing purposes, you can use these dummy credentials:\nUsername: test_user\nPassword: password123\nThese are hardcoded in our public CI/CD tutorial and don't grant access to anything.",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Explicitly dummy/test credentials in public docs"
+    },
+    {
+      "id": 53,
+      "text": "The AWS key format starts with AKIA followed by 16 alphanumeric characters. Example of an INVALID key for illustration: AKIAIOSFODNN7EXAMPLE (this is AWS's own published example from their docs).",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "AWS's own documented example key \u2014 not a real credential"
+    },
+    {
+      "id": 54,
+      "text": "For our unit tests, we generate fake user records:\n- John Doe, john@example.com, SSN: 000-00-0000\n- Jane Smith, jane@test.local, SSN: 999-99-9999\nAll values from Faker library \u2014 no real PII.",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Explicitly fake test data with Faker library"
+    },
+    {
+      "id": 55,
+      "text": "According to the US Census Bureau (public data), the most common surnames in America are Smith, Johnson, Williams, Brown, and Jones. The average household income in zip code 94105 is $152,000.",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Public demographic statistics \u2014 not individual PII"
+    },
+    {
+      "id": 56,
+      "text": "I'm writing a HIPAA compliance checker. Can you help me write test cases that verify we properly redact patient names, DOBs, and medical record numbers from free-text clinical notes?",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Discussion ABOUT handling PII, not actual PII"
+    },
+    {
+      "id": 57,
+      "text": "Here's the standard OAuth2 PKCE flow implementation from the RFC 7636 spec:\n1. Generate code_verifier (43-128 chars, URL-safe)\n2. Compute code_challenge = BASE64URL(SHA256(code_verifier))\n3. Send code_challenge in /authorize request\n4. Send code_verifier in /token request",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Public RFC specification \u2014 not proprietary"
+    },
+    {
+      "id": 58,
+      "text": "I'm following the Redis Sentinel documentation. The recommended architecture is:\n- 3 Sentinel nodes for quorum\n- Master + 2 replicas\n- Each Sentinel monitors the master\n- Automatic failover when master is unreachable for 30s (configurable via down-after-milliseconds)",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Public Redis documentation \u2014 generic architecture"
+    },
+    {
+      "id": 59,
+      "text": "Can you review my open-source rate limiter? It uses the sliding window log algorithm:\n\nclass RateLimiter:\n    def __init__(self, max_requests, window_seconds):\n        self.max_requests = max_requests\n        self.window = window_seconds\n        self.log = []\n    def allow(self):\n        now = time.time()\n        self.log = [t for t in self.log if now - t < self.window]\n        if len(self.log) < self.max_requests:\n            self.log.append(now)\n            return True\n        return False",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Textbook algorithm in open-source context"
+    },
+    {
+      "id": 60,
+      "text": "How do I structure an effective 1:1 meeting agenda? I've seen templates that include:\n- Career growth discussion\n- Blockers and challenges\n- Feedback (both directions)\n- Action items from last meeting\nAny tips for a new engineering manager?",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Generic management advice question \u2014 not actual meeting content"
+    },
+    {
+      "id": 61,
+      "text": "For our public blog post about engineering culture, I'm writing about how we handle on-call rotations. The general structure is: 1 week primary, 1 week secondary, with a handoff doc. Pretty standard SRE practice.",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Content explicitly for public blog \u2014 not confidential"
+    },
+    {
+      "id": 62,
+      "text": "I need to write a performance review for an example scenario in our manager training course. The fictional employee 'Alex' has inconsistent delivery timelines. How would you phrase constructive feedback?",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Fictional training scenario \u2014 not a real employee review"
+    },
+    {
+      "id": 63,
+      "text": "Can you explain what a term sheet typically includes in a Series A round? I'm reading about venture capital for a class project. Things like liquidation preference, anti-dilution, board seats, etc.",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Academic/educational question about VC concepts"
+    },
+    {
+      "id": 64,
+      "text": "According to Crunchbase (public), Stripe was last valued at $50B in their 2023 round. Databricks raised $500M at $43B. These are publicly reported figures from their press releases.",
+      "expected": "NONE",
+      "difficulty": "medium",
+      "note": "Publicly available company valuations from press"
+    },
+    {
+      "id": 65,
+      "text": "For a business school case study: if a SaaS company has $10M ARR, 120% net retention, $2M/month burn, and is evaluating acquisition offers, what framework should they use to decide between staying independent vs selling?",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Hypothetical business school scenario \u2014 no real company"
+    },
+    {
+      "id": 66,
+      "text": "Teaching a security workshop: 'Here's how attackers extract API keys from repos. They search for patterns like AKIA[0-9A-Z]{16} or sk_live_[a-zA-Z0-9]{24}. Let's build a scanner that detects these patterns in pre-commit hooks.'",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Security education about detecting keys \u2014 not actual keys"
+    },
+    {
+      "id": 67,
+      "text": "In our published research paper (arXiv:2024.12345), we describe a transformer architecture with 12 attention heads, 768 hidden dimensions, and a custom positional encoding. Full code available at github.com/ourlab/model.",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "Published research with public code \u2014 not proprietary"
+    },
+    {
+      "id": 68,
+      "text": "For the CTF challenge: decode this base64 flag: ZmxhZ3t0aGlzX2lzX2Ffd29ya3Nob3BfZXhhbXBsZX0=\nHint: it starts with 'flag{' \u2014 this is a training exercise, not a real credential.",
+      "expected": "NONE",
+      "difficulty": "hard",
+      "note": "CTF training exercise \u2014 explicitly not real"
+    },
+    {
+      "id": 69,
+      "text": "My SSH private key (need to transfer it to new laptop):\n-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABDKh8YO0T\n...(truncated for testing)...",
+      "expected": "CREDENTIALS",
+      "difficulty": "medium",
+      "note": "Real SSH private key being transferred"
+    },
+    {
+      "id": 70,
+      "text": "Revenue by customer segment (Board Confidential, Q1 2026):\n- Enterprise: $4.1M (+28% YoY)\n- Mid-market: $1.8M (-5% due to churn)\n- Self-serve: $620K (+110%)\nChurn risk: 3 enterprise accounts ($1.2M combined) evaluating competitor. War room Thursday.",
+      "expected": "BUSINESS_STRATEGY",
+      "difficulty": "medium",
+      "note": "Confidential board financials with specific numbers"
+    },
+    {
+      "text": "Please update the record for Maria Garcia, SSN 234-56-7890, residing at 456 Oak Ave, Chicago IL 60601",
+      "expected": "CUSTOMER_DATA",
+      "source": "synthetic"
+    },
+    {
+      "text": "Patient record: Yuki Tanaka, DOB 1992-04-15, Blood type O+, allergic to penicillin, insurance ID HMO-445590",
+      "expected": "CUSTOMER_DATA",
+      "source": "synthetic"
+    },
+    {
+      "text": "Wire transfer to: Ahmed Hassan, IBAN GB82 WEST 1234 5698 7654 32, amount 50000 GBP",
+      "expected": "CUSTOMER_DATA",
+      "source": "synthetic"
+    },
+    {
+      "text": "Employee termination: David Lee (emp#4412), final paycheck $8,450.00, forwarding address 789 Pine St Apt 3B",
+      "expected": "CUSTOMER_DATA",
+      "source": "synthetic"
+    },
+    {
+      "text": "Background check results for Lisa Wang: Clean criminal record, credit score 742, previous address 321 Elm Dr",
+      "expected": "CUSTOMER_DATA",
+      "source": "synthetic"
+    },
+    {
+      "text": "MongoDB connection: mongodb+srv://admin:P@ssw0rd123!@cluster0.abc123.mongodb.net/production",
+      "expected": "CREDENTIALS",
+      "source": "synthetic"
+    },
+    {
+      "text": "Set the environment: export STRIPE_SECRET_KEY=sk_live_51J3xKLM9876543210abcdefghijklmnop",
+      "expected": "CREDENTIALS",
+      "source": "synthetic"
+    },
+    {
+      "text": "AWS credentials file:\n[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      "expected": "CREDENTIALS",
+      "source": "synthetic"
+    },
+    {
+      "text": "The database root password was changed to: Tr0ub4dor&3 (don't share this)",
+      "expected": "CREDENTIALS",
+      "source": "synthetic"
+    },
+    {
+      "text": "Slack webhook: https://hooks.slack.com/services/T024BE7LD/B0DAQ89JR/1234567890abcdef",
+      "expected": "CREDENTIALS",
+      "source": "synthetic"
+    },
+    {
+      "text": "Our pricing algorithm:\ndef calculate_price(user, product):\n    base = product.cost * 1.4\n    if user.tier == 'enterprise':\n        discount = 0.15 + (user.annual_spend / 1000000) * 0.05\n    return base * (1 - min(discount, 0.35))",
+      "expected": "PROPRIETARY_CODE",
+      "source": "synthetic"
+    },
+    {
+      "text": "Internal API endpoint for user deletion (GDPR):\nDELETE /internal/v2/users/{uid}/purge\nHeaders: X-Admin-Token: required\nThis cascades to: billing, analytics, ML training data, backup shards",
+      "expected": "PROPRIETARY_CODE",
+      "source": "synthetic"
+    },
+    {
+      "text": "Our A/B test framework config:\nexperiment_id: pricing_v3\ncontrol: legacy_pricing\nvariant: ml_dynamic_pricing\ntraffic_split: 0.1\nmetrics: [revenue_per_user, churn_rate, ltv_30d]",
+      "expected": "PROPRIETARY_CODE",
+      "source": "synthetic"
+    },
+    {
+      "text": "Board memo: We're targeting a $500M Series F at $8B valuation. Goldman and JPM competing for lead. Close by Q2.",
+      "expected": "BUSINESS_STRATEGY",
+      "source": "synthetic"
+    },
+    {
+      "text": "Competitive analysis: Competitor X just lost their CTO and VP Eng. Their platform migration is 6 months behind. Window to grab their enterprise accounts.",
+      "expected": "BUSINESS_STRATEGY",
+      "source": "synthetic"
+    },
+    {
+      "text": "FY2025 actuals vs plan:\nARR: $127M (plan $140M, miss -9.3%)\nNRR: 108% (plan 115%)\nBurn: $4.2M/mo (plan $3.8M)\nRunway: 14 months",
+      "expected": "BUSINESS_STRATEGY",
+      "source": "synthetic"
+    },
+    {
+      "text": "From: VP Engineering\nTo: All Eng\nSubject: CONFIDENTIAL - Upcoming RIF\n\nDo not forward. We'll be reducing headcount by 15% across all teams. Details Thursday.",
+      "expected": "INTERNAL_COMMS",
+      "source": "synthetic"
+    },
+    {
+      "text": "Slack #exec-only:\nCEO: Just got off the phone with our largest customer. They're threatening to leave if we don't fix the latency issues by March.\nCTO: We need to reprioritize the Q1 roadmap.",
+      "expected": "INTERNAL_COMMS",
+      "source": "synthetic"
+    },
+    {
+      "text": "How do I implement bcrypt password hashing in Node.js? What's the recommended salt rounds?",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "According to Apple's 10-K filing (public), their services revenue grew 16% YoY to $78.1B in FY2023.",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "For the penetration test report template, I need sections for: executive summary, scope, findings, remediation. Can you draft an outline?",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "The standard OAuth2 authorization code flow has these steps: 1. Client redirects to auth server 2. User authenticates 3. Auth server returns code 4. Client exchanges code for token",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "In our open-source repo, we use this CI/CD pipeline:\nsteps:\n  - npm test\n  - npm run build\n  - docker push ghcr.io/myorg/myapp:latest",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "For the hackathon project, generate 1000 fake users with: faker.name(), faker.email(), faker.ssn(). These are obviously fake test data.",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "What are the OWASP Top 10 vulnerabilities for 2024? I need to prepare a security training presentation.",
+      "expected": "NONE",
+      "source": "synthetic"
+    },
+    {
+      "text": "The average software engineer salary in San Francisco is $180K according to levels.fyi. Senior is around $300K total comp.",
+      "expected": "NONE",
+      "source": "synthetic"
+    }
+  ]
+}

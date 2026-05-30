@@ -1,0 +1,13 @@
+
+Engineering All-Hands - March 2024
+
+Agenda:
+1. Q1 retrospective
+2. Infrastructure migration update
+3. New hire onboarding process
+4. Team social planning
+
+Action items:
+- Review deployment pipeline by next Friday
+- Schedule cross-team sync for mobile launch
+- Update documentation for new API endpoints

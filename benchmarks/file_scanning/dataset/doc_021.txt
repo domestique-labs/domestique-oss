@@ -1,0 +1,11 @@
+
+API Specification v2.0
+
+Endpoints:
+  GET /api/users - List all users
+  POST /api/users - Create user
+  DELETE /api/users/:id - Remove user
+
+Rate limits: 100 req/min per client
+Authentication: OAuth 2.0 bearer tokens
+Response format: JSON with pagination

@@ -1,0 +1,15 @@
+# Production Configuration - DO NOT COMMIT
+[database]
+host = prod-db.internal.corp.io
+port = 5432
+username = admin
+password = P@sshy5KmqcTBaH7
+
+[api]
+openai_key = Bearer eyRU8VVQmxBe8Q6vNuQ2hU5tGtQAuzSsJi
+stripe_secret = sk_live_mAQ8yRV5lNKtzJ1atsnBYLMP
+
+[aws]
+access_key_id = AKIAU322N64KFS6VFPTO
+secret_access_key = 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
+region = us-east-1

@@ -1,0 +1,674 @@
+{
+  "name": "LLMGuard benchmark v2 (300 samples)",
+  "description": "Comprehensive DLP benchmark with diverse PII, credentials, code, strategy, comms, and adversarial NONE samples",
+  "samples": [
+    {
+      "text": "School records: Emma Davis, grade 8, parent: Catherine Davis (510) 555-0168",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Pricing change: Enterprise tier moving from $50/seat to $65/seat starting July. Existing contracts grandfathered for 12 months.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "1:1 notes with direct report:\n- Performance concerns: missing deadlines, quality issues\n- PIP discussion planned for next week\n- Discussed potential team reassignment",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "Terraform state contains: client_secret = 4a7f8b2c-1234-5678-9012-abcdef012345",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "How does the event loop work in Node.js?",
+      "expected": "NONE"
+    },
+    {
+      "text": "GitHub token: ghp_rjn9Wvgfygw2wMqZcUDIh7yfJs1ON43x (expires March)",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Can you explain what a neural network is in simple terms?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Can you recommend a good book on system design interviews?",
+      "expected": "NONE"
+    },
+    {
+      "text": "The latest version of PostgreSQL (17) includes improved query performance.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Our team meeting is scheduled for 3pm in Conference Room B.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Retirement account: Barbara Johnson, SSN 567-89-0123, balance $892,450",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Background check: Michael Brown, DOB 09/14/1990, DL# D4421-55903-10090",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "How do I write a good README file for an open source project?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Social security number: 078-05-1120",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "For our hackathon, we're using faker.js to generate test data.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Slack bot token: xoxb-123456789012-1234567890123-AbCdEfGhIjKlMnOpQrStUvWx",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "How do I implement caching effectively in a web application?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Explain the publish-subscribe pattern with an example.",
+      "expected": "NONE"
+    },
+    {
+      "text": "The SSH key is: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDFjR admin@prod",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Can you explain the difference between Git merge and Git rebase?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Call Dr. Sarah Williams at 310-555-0199 about the lab results for patient #4421",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "The weather forecast says it will be sunny tomorrow with a high of 72F.",
+      "expected": "NONE"
+    },
+    {
+      "text": "My email is sarah.jones@company.com",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Customer #8892: John Martinez, john.martinez@email.com, last order $2,340",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Our ML pipeline processes 50M events/day:\nKafka -> Spark streaming -> feature store -> XGBoost model -> Redis cache\nLatency p99: 12ms, model refresh: hourly",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Q4 actuals: ARR $127M (plan $140M, -9.3%), NRR 108% (plan 115%), burn $4.2M/mo, runway 14mo",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Here's a generic quicksort implementation from the textbook.",
+      "expected": "NONE"
+    },
+    {
+      "text": "HR file: Kevin O'Brien, hired 2019-06-01, base $145K, equity 12000 RSUs",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Prescription: Amlodipine 5mg for Helen Park, DOB 04/12/1968, refill #3",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "How do I implement OAuth 2.0 login with Google in my web app?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Architecture: mobile app -> CDN -> API gateway (Kong) -> auth service -> GraphQL federation -> microservices (12 total) -> Postgres shards (4 regions)",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Due diligence findings on acquisition target: $8M revenue, 85% gross margin, but technical debt estimated at 18 months of eng capacity.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Slack DM between VP Eng and CTO:\n'The platform rewrite is 3 months behind. We need to cut scope or push the launch. Customer X is threatening to leave if we don't deliver by April.'",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "AWS announced new pricing for EC2 instances starting January 2025.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Our AB test framework collects:\n- Revenue per user (primary metric)\n- Engagement time (secondary)\n- Churn rate (guardrail, must not increase >5%)\nMinimum sample: 50K users, runtime: 14 days",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Credit card: 4532-0150-0000-1234 exp 08/27",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "How do I center a div in CSS? I've tried flexbox but it's not working.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Our recommendation engine:\ndef score_user(u):\n    recency = (now() - u.last_purchase).days\n    return u.ltv * 0.4 + u.engagement * 0.3 + (1/max(recency,1)) * 0.3",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Student loan for Michelle Adams, acct 992841-003, balance $42,890",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "The Datadog API key is: ab1234567890abcdef1234567890abcd",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Passport: Thomas Anderson, P4421553, issued 2022-03-15, US",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "What is a load balancer and how does it work?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Partnership deal with Microsoft: co-sell agreement, Azure marketplace listing, $5M MDF commitment.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "All-hands recording transcript:\nCEO: '...and I want to be transparent - we missed our hiring targets by 40%. This affects our product roadmap significantly.'",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "Feature flag config:\nexperiment: dynamic_pricing_v4\ncontrol: static_pricing\ntreatment: ml_price_optimization\nrollout: 5% of enterprise tier",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Meeting notes: Customer Advisory Board (NDA):\n- 7 of 10 members requested SOC2 Type II\n- 3 threatened to leave without FedRAMP by EOY\n- Pricing feedback: 'overpriced vs. Competitor Y'",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "The fraud detection model uses these features:\n1. Transaction amount z-score\n2. Time-of-day pattern deviation\n3. Merchant category mismatch\n4. Device fingerprint novelty score",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Azure storage key: DefaultEndpointsProtocol=https;AccountName=prod;AccountKey=abc123+def456==",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Internal rate limiter config:\ntier_limits = {'free': 100, 'pro': 10000, 'enterprise': 'unlimited'}\nwindow: sliding_window_counter with Redis sorted sets",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Incident postmortem (internal only):\nRoot cause: Engineer deployed untested migration to prod\nImpact: 4.5 hours downtime, ~$2.1M estimated revenue loss\nAction items: mandatory staging deploy gate",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "What is the time complexity of quicksort in the average case?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Explain the difference between horizontal and vertical scaling.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Our encryption at rest uses AES-256-GCM with per-tenant KEKs rotated monthly.\nKEK derivation: HKDF-SHA256(master_key, tenant_id, date_prefix)",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Loan applicant: Priya Sharma, annual income $94,000, SSN 219-09-9999",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "How do I handle CORS errors in a React application?",
+      "expected": "NONE"
+    },
+    {
+      "text": "What's the difference between authentication and authorization?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Internal API: POST /internal/v2/users/{uid}/risk-score\nComputes fraud risk using: transaction velocity, device fingerprint, IP geolocation, and behavioral biometrics",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "What are the differences between Agile and Waterfall methodologies?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Membership: #44219, Dr. Rachel Green, rachel.green@hospital.org, renewed 2025",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "What are the pros and cons of microservices vs monolithic architecture?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Customer churn prediction model:\ndef predict_churn(customer):\n    features = extract_features(customer.usage_90d, customer.tickets, customer.nps)\n    return model.predict_proba(features)[0][1]",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Wire transfer to: Yuki Nakamura, IBAN DE89370400440532013000",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Explain how HTTPS and TLS handshake works.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Please send the NDA to patricia.miller@lawfirm.com for review",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "What are the SOLID principles in software engineering?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Board approved: acquire DataSync Inc for $47M cash + $8M earnout. Target close by Q3.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Redis password: SET requirepass StrongR3dis!Pass_2025",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "What is technical debt and how should a team manage it?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Patient: Lisa Chen, DOB 05/22/1983, allergic to sulfa drugs",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Executive sync notes:\nCFO: 'We have 14 months of runway at current burn. If we don't close Series E by September, we need to cut 30% of headcount.'",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "How do I debug a memory leak in a Node.js application?",
+      "expected": "NONE"
+    },
+    {
+      "text": "export OPENAI_API_KEY=sk-proj-abc123def456ghi789jkl012mno345",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "What are some good strategies for improving code review processes?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Google published a paper on their new Gemma language model family.",
+      "expected": "NONE"
+    },
+    {
+      "text": "The React documentation recommends using functional components with hooks.",
+      "expected": "NONE"
+    },
+    {
+      "text": "HR investigation notes:\nComplaint filed against Manager X for hostile work environment\nWitnesses interviewed: 3 of 5 corroborate claims\nNext step: legal review before formal action",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "What is the purpose of a .env file in a project?",
+      "expected": "NONE"
+    },
+    {
+      "text": "What are the best practices for REST API design?",
+      "expected": "NONE"
+    },
+    {
+      "text": "The contractor's SSN is 456-78-9012, needed for 1099 filing",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "How do I implement rate limiting in an Express.js API?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Reference letter for Daniel Garcia from VP Engineering, reviews attached",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Can you help me optimize this SQL query that's running slowly?",
+      "expected": "NONE"
+    },
+    {
+      "text": "What is Kubernetes and when should I use it?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Insurance claim for Robert Taylor, policy #HMO-229184, DOB 11/30/1975",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Product sunset: Legacy V1 API to be deprecated March 2026. 340 customers still on V1, $12M ARR at risk.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Death certificate: Margaret Thompson, DOB 01/15/1940, DOD 12/22/2024",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Cost reduction: cutting cloud spend from $8M/mo to $5.5M/mo through reserved instances and architecture optimization.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "According to the 2024 Stack Overflow survey, Python is the most popular language.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Stripe key for production: sk_live_51J3xKLMn0pQ9876543210abcdefgh",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "MongoDB URI: mongodb+srv://admin:SecretP@ss99@cluster.abc.net/prod",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Dental records for Elizabeth Park, DOB 02/28/1995, next appointment 3/15",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "How does garbage collection work in Java?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Market analysis: TAM $14B, SAM $3.2B, SOM target $480M by 2028. Key differentiator: on-prem deployment option.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "What are WebSockets and how do they differ from HTTP polling?",
+      "expected": "NONE"
+    },
+    {
+      "text": "The standard OAuth2 PKCE flow prevents authorization code interception attacks.",
+      "expected": "NONE"
+    },
+    {
+      "text": "How do I set up a GitHub Actions CI/CD pipeline for a Node.js project?",
+      "expected": "NONE"
+    },
+    {
+      "text": "HIPAA release for Amanda Foster, MRN 2289910, attending Dr. Patel",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "What's the best way to implement a binary search tree in Python?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Can you explain what a bloom filter is and when to use one?",
+      "expected": "NONE"
+    },
+    {
+      "text": "How many lines of code does the Linux kernel have?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Strategy offsite notes:\n- Kill Project Alpha (sunk cost: $4M)\n- Double down on Enterprise vertical\n- Evaluate acqui-hire of 3 startups in the ML space",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "Customer complaint from Brian Foster, acct #22-4419, re: overcharge of $89.50",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "IPO preparation: hired Goldman as lead underwriter, targeting $4B+ valuation, S-1 filing by October.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "What is Docker and how does it differ from a virtual machine?",
+      "expected": "NONE"
+    },
+    {
+      "text": "What is the difference between REST and GraphQL?",
+      "expected": "NONE"
+    },
+    {
+      "text": "From: CEO\nTo: Exec Team\nSubject: CONFIDENTIAL - Reorg Plan\n\nEffective March 1, we're merging Engineering and Product under a single CTO.",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "How do I deploy a Flask application to Heroku?",
+      "expected": "NONE"
+    },
+    {
+      "text": "CI/CD: on merge to main:\n1. Run 4500 unit tests (3min)\n2. Build Docker images\n3. Deploy to staging\n4. Run E2E suite against staging API\n5. Canary deploy to 5% prod traffic\n6. Full rollout after 30min if error rate < 0.1%",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Jenkins password was changed to: Build!Mast3r2025 on all nodes",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Can you help me write a regex that matches valid URLs?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Series D terms: $200M at $2.8B pre-money. Lead: Sequoia. Board seats: 2 new independent directors.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Revenue forecast FY2026: $210M ARR (+65% YoY). Path to profitability by Q2 2027.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Please write a unit test for a function that calculates fibonacci numbers.",
+      "expected": "NONE"
+    },
+    {
+      "text": "The CEO's personal cell is 917-555-0125, only for emergencies",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "How do I set up eslint and prettier in a TypeScript project?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Please update billing: Jennifer Lee, card ending 8834, zip 94103",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "The JWT secret is: my-super-secret-jwt-key-that-nobody-should-know-12345",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "What is the observer pattern and when should I use it?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Contact the client at alex.thompson@bigcorp.com or (415) 555-0193",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Deployment runbook for database migration:\n1. Enable maintenance mode\n2. Run: psql -f migrations/v42_add_compliance_fields.sql\n3. Verify: SELECT count(*) FROM audit_log WHERE version='42'",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Postgres: psql -h prod-db.internal -U admin -d maindb (password: PgPr0d!2025)",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Board minutes (confidential):\n- Approved $50M credit facility with Silicon Valley Bank\n- CEO performance review: exceeds expectations\n- Discussed strategic alternatives including potential sale",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "Employee ID: 44521, Name: Marcus Rivera, Salary: $125,000",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Can you explain the difference between TCP and UDP?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Emergency room visit: George Liu, MRN 5567823, chief complaint: chest pain",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Competitive intel: Rival Corp just lost their VP Engineering and 3 senior architects. Their cloud migration is 6 months behind.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Go-to-market pivot: shifting from bottom-up PLG to enterprise sales-led. Hiring 20 AEs in Q1.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Slack #leadership:\nVP Sales: Lost the Acme deal ($2M ARR). They went with Competitor X on price.\nCEO: Set up a win-back plan. What would it take?",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "Flight booking: PNR ABCDEF, passenger Ashley Young, passport G12345678",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Compensation committee notes:\nCEO total comp: $850K base + $2M equity\nRevised engineer bands: L5 $180-220K, L6 $220-280K\nEquity refresh pool: $15M for 2026",
+      "expected": "INTERNAL_COMMS"
+    },
+    {
+      "text": "What does it mean for a function to be 'pure' in functional programming?",
+      "expected": "NONE"
+    },
+    {
+      "text": "For my university thesis, I'm analyzing public SEC filings from Fortune 500 companies.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Customer concentration risk: top 3 accounts = 28% of ARR. Board mandate to reduce to <20% by year-end.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "What are the best practices for logging in production applications?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Send the invoice to accounting@acme.com, attention Susan Park, ext 4412",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "What's the best IDE for Python development - VS Code or PyCharm?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Layoff plan: 15% reduction across engineering and G&A. Save $18M annually. Execute before Q2 earnings.",
+      "expected": "BUSINESS_STRATEGY"
+    },
+    {
+      "text": "Can you explain how DNS resolution works step by step?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Database password: Tr0ub4dor&3 (production MySQL)",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "You can reach me at 212-555-0187",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Internal caching strategy:\nL1: in-process LRU (100MB, 5min TTL)\nL2: Redis cluster (50GB, 1hr TTL)\nL3: CDN edge (24hr TTL, purge on deploy)",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "How do I implement pagination in a REST API?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Vault token: hvs.CAESIJlU9p2kFg7WMJHLD-my-test-token-here",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Explain the CAP theorem in distributed systems.",
+      "expected": "NONE"
+    },
+    {
+      "text": "What is A/B testing and how do companies like Netflix use it?",
+      "expected": "NONE"
+    },
+    {
+      "text": "SMTP credentials: smtp.gmail.com port 587, user: alerts@company.com, pass: EmailP@ss2025!",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "What year was the first iPhone released?",
+      "expected": "NONE"
+    },
+    {
+      "text": "I need to prepare a presentation about the history of the internet.",
+      "expected": "NONE"
+    },
+    {
+      "text": "Can you explain what MapReduce is and give a simple example?",
+      "expected": "NONE"
+    },
+    {
+      "text": "npm token: //registry.npmjs.org/:_authToken=npm_aB1cD2eF3gH4iJ5kL6mN7oP8qR",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Root password for the staging server: !StagingR00t_2025#",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Tax return: Christopher Lee, filing jointly, AGI $187,500, SSN 342-88-1234",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Emergency contact: Maria Santos, wife, (503) 555-0142",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Tenant application: James Wilson, SSN ending 4521, income $6200/mo",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "What's the difference between SQL and NoSQL databases?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Can you help me understand the MVC design pattern?",
+      "expected": "NONE"
+    },
+    {
+      "text": "Vaccination record: Olivia White, DOB 07/03/2001, Pfizer doses 1-3 complete",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Please review the pull request I submitted for the login page redesign.",
+      "expected": "NONE"
+    },
+    {
+      "text": "The manager's direct line is 650-555-0144, ask for Steve Williams",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Auto insurance quote for Ryan Clark, VIN 1HGBH41JXMN109186, DOB 08/25/1992",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "The encryption key is stored at: AES256_KEY=dGhpcyBpcyBhIHNlY3JldCBrZXk=",
+      "expected": "CREDENTIALS"
+    },
+    {
+      "text": "Schema for our billing system:\nCREATE TABLE subscriptions (\n  id UUID, customer_id UUID, plan TEXT,\n  mrr_cents INT, churn_risk FLOAT, internal_tier TEXT\n)",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Our search ranking formula:\nscore = bm25(query, doc) * 0.6 + semantic_sim(query_emb, doc_emb) * 0.3 + freshness_boost(doc.updated_at) * 0.1",
+      "expected": "PROPRIETARY_CODE"
+    },
+    {
+      "text": "Ship to: David Kim, 1847 Willow Creek Dr, Portland OR 97205",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "Interview feedback for candidate ID 7782: strong technical skills, offered $160K",
+      "expected": "CUSTOMER_DATA"
+    },
+    {
+      "text": "According to Crunchbase, the global SaaS market is valued at $197B.",
+      "expected": "NONE"
+    }
+  ]
+}

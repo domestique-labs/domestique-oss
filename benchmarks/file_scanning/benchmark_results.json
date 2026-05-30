@@ -1,0 +1,621 @@
+{
+  "metrics": {
+    "accuracy": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 22,
+    "fp": 0,
+    "tn": 7,
+    "fn": 0
+  },
+  "category_metrics": {
+    "SSN": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "address": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "api_key": {
+      "precision": 1.0,
+      "recall": 0.7777777777777778
+    },
+    "credential": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "credit_card": {
+      "precision": 1.0,
+      "recall": 1.0
+    },
+    "email": {
+      "precision": 0.9230769230769231,
+      "recall": 1.0
+    },
+    "name": {
+      "precision": 1.0,
+      "recall": 0.9
+    },
+    "phone": {
+      "precision": 1.0,
+      "recall": 1.0
+    }
+  },
+  "latency": {
+    "image": {
+      "avg_ms": 68.21597677804272,
+      "p50_ms": 56.107374985003844,
+      "p95_ms": 333.47270800732076,
+      "count": 18
+    },
+    "document": {
+      "avg_ms": 0.055050000082701445,
+      "p50_ms": 0.05549998604692519,
+      "p95_ms": 0.07358301081694663,
+      "count": 5
+    },
+    "spreadsheet": {
+      "avg_ms": 0.0995833349103729,
+      "p50_ms": 0.07754200487397611,
+      "p95_ms": 0.16829100786708295,
+      "count": 3
+    },
+    "code": {
+      "avg_ms": 0.0561526685487479,
+      "p50_ms": 0.053625000873580575,
+      "p95_ms": 0.06324998685158789,
+      "count": 3
+    }
+  },
+  "results": [
+    {
+      "file": "img_000.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "predicted_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "total_time_ms": 333.47270800732076,
+      "extraction_time_ms": 332.5870420085266,
+      "detection_time_ms": 0.8756660099606961,
+      "status": "\u2713 TP",
+      "detections_count": 5
+    },
+    {
+      "file": "img_001.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "credit_card"
+      ],
+      "predicted_categories": [
+        "email",
+        "credit_card"
+      ],
+      "total_time_ms": 57.80145799508318,
+      "extraction_time_ms": 57.74770802236162,
+      "detection_time_ms": 0.04416599404066801,
+      "status": "\u2713 TP",
+      "detections_count": 2
+    },
+    {
+      "file": "img_002.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "api_key"
+      ],
+      "total_time_ms": 56.2487920105923,
+      "extraction_time_ms": 56.19466697680764,
+      "detection_time_ms": 0.04420900950208306,
+      "status": "\u2713 TP",
+      "detections_count": 2
+    },
+    {
+      "file": "img_003.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "name",
+        "SSN"
+      ],
+      "predicted_categories": [
+        "name",
+        "SSN"
+      ],
+      "total_time_ms": 58.24004200985655,
+      "extraction_time_ms": 58.185000001685694,
+      "detection_time_ms": 0.04675000673159957,
+      "status": "\u2713 TP",
+      "detections_count": 6
+    },
+    {
+      "file": "img_004.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "email",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "email"
+      ],
+      "total_time_ms": 48.81379200378433,
+      "extraction_time_ms": 48.74637498869561,
+      "detection_time_ms": 0.057666999055072665,
+      "status": "\u2713 TP",
+      "detections_count": 2
+    },
+    {
+      "file": "img_005.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "predicted_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "total_time_ms": 47.08908300381154,
+      "extraction_time_ms": 47.031624999362975,
+      "detection_time_ms": 0.04700000863522291,
+      "status": "\u2713 TP",
+      "detections_count": 5
+    },
+    {
+      "file": "img_006.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "credit_card"
+      ],
+      "predicted_categories": [
+        "email",
+        "credit_card"
+      ],
+      "total_time_ms": 57.40887499996461,
+      "extraction_time_ms": 57.3530420078896,
+      "detection_time_ms": 0.046542001655325294,
+      "status": "\u2713 TP",
+      "detections_count": 2
+    },
+    {
+      "file": "img_007.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential"
+      ],
+      "total_time_ms": 57.57645799894817,
+      "extraction_time_ms": 57.525290991179645,
+      "detection_time_ms": 0.0417920236941427,
+      "status": "\u2713 TP",
+      "detections_count": 1
+    },
+    {
+      "file": "img_008.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "name",
+        "SSN"
+      ],
+      "predicted_categories": [
+        "name",
+        "SSN"
+      ],
+      "total_time_ms": 58.18787499447353,
+      "extraction_time_ms": 58.13066699192859,
+      "detection_time_ms": 0.04916699253953993,
+      "status": "\u2713 TP",
+      "detections_count": 4
+    },
+    {
+      "file": "img_009.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "email",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "email",
+        "api_key"
+      ],
+      "total_time_ms": 47.70479100989178,
+      "extraction_time_ms": 47.665416001109406,
+      "detection_time_ms": 0.03250001464039087,
+      "status": "\u2713 TP",
+      "detections_count": 3
+    },
+    {
+      "file": "img_010.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "predicted_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "total_time_ms": 50.38270799559541,
+      "extraction_time_ms": 50.33745800028555,
+      "detection_time_ms": 0.03762499545700848,
+      "status": "\u2713 TP",
+      "detections_count": 5
+    },
+    {
+      "file": "img_011.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "credit_card"
+      ],
+      "predicted_categories": [
+        "email",
+        "credit_card"
+      ],
+      "total_time_ms": 55.10612498619594,
+      "extraction_time_ms": 55.05520798033103,
+      "detection_time_ms": 0.04366700886748731,
+      "status": "\u2713 TP",
+      "detections_count": 2
+    },
+    {
+      "file": "img_012.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "api_key"
+      ],
+      "total_time_ms": 56.107374985003844,
+      "extraction_time_ms": 56.06091700610705,
+      "detection_time_ms": 0.03904200275428593,
+      "status": "\u2713 TP",
+      "detections_count": 2
+    },
+    {
+      "file": "img_013.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "name",
+        "SSN"
+      ],
+      "predicted_categories": [
+        "name",
+        "SSN"
+      ],
+      "total_time_ms": 58.43674999778159,
+      "extraction_time_ms": 58.38375000166707,
+      "detection_time_ms": 0.04483401426114142,
+      "status": "\u2713 TP",
+      "detections_count": 6
+    },
+    {
+      "file": "img_014.png",
+      "type": "image",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "email",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "email",
+        "api_key"
+      ],
+      "total_time_ms": 47.87866701371968,
+      "extraction_time_ms": 47.83200001111254,
+      "detection_time_ms": 0.039417005609720945,
+      "status": "\u2713 TP",
+      "detections_count": 3
+    },
+    {
+      "file": "img_015.png",
+      "type": "image",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 48.00220800098032,
+      "extraction_time_ms": 47.960791998775676,
+      "detection_time_ms": 0.03270799061283469,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    },
+    {
+      "file": "img_016.png",
+      "type": "image",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 45.45299999881536,
+      "extraction_time_ms": 45.41608298313804,
+      "detection_time_ms": 0.029291986720636487,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    },
+    {
+      "file": "img_017.png",
+      "type": "image",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 43.97687499294989,
+      "extraction_time_ms": 43.9460419875104,
+      "detection_time_ms": 0.02487501478753984,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    },
+    {
+      "file": "doc_018.txt",
+      "type": "document",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "name",
+        "SSN",
+        "email"
+      ],
+      "predicted_categories": [
+        "name",
+        "SSN",
+        "email"
+      ],
+      "total_time_ms": 0.07358301081694663,
+      "extraction_time_ms": 0.0011249794624745846,
+      "detection_time_ms": 0.05283299833536148,
+      "status": "\u2713 TP",
+      "detections_count": 6
+    },
+    {
+      "file": "doc_019.txt",
+      "type": "document",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "api_key"
+      ],
+      "total_time_ms": 0.05549998604692519,
+      "extraction_time_ms": 0.0005420006345957518,
+      "detection_time_ms": 0.045541994040831923,
+      "status": "\u2713 TP",
+      "detections_count": 5
+    },
+    {
+      "file": "doc_020.txt",
+      "type": "document",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "credit_card",
+        "phone"
+      ],
+      "predicted_categories": [
+        "email",
+        "address",
+        "SSN",
+        "credit_card",
+        "phone"
+      ],
+      "total_time_ms": 0.05649999366141856,
+      "extraction_time_ms": 0.00016600824892520905,
+      "detection_time_ms": 0.047999987145885825,
+      "status": "\u2713 TP",
+      "detections_count": 5
+    },
+    {
+      "file": "doc_021.txt",
+      "type": "document",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 0.04258300759829581,
+      "extraction_time_ms": 0.00020902371034026146,
+      "detection_time_ms": 0.03516601282171905,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    },
+    {
+      "file": "doc_022.txt",
+      "type": "document",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 0.047084002289921045,
+      "extraction_time_ms": 0.00029199873097240925,
+      "detection_time_ms": 0.04008400719612837,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    },
+    {
+      "file": "data_023.csv",
+      "type": "spreadsheet",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "predicted_categories": [
+        "email",
+        "address",
+        "name",
+        "SSN",
+        "phone"
+      ],
+      "total_time_ms": 0.16829100786708295,
+      "extraction_time_ms": 0.016833015251904726,
+      "detection_time_ms": 0.14487499720416963,
+      "status": "\u2713 TP",
+      "detections_count": 50
+    },
+    {
+      "file": "data_024.csv",
+      "type": "spreadsheet",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "name",
+        "credit_card"
+      ],
+      "predicted_categories": [
+        "name",
+        "credit_card"
+      ],
+      "total_time_ms": 0.07754200487397611,
+      "extraction_time_ms": 0.008875009370967746,
+      "detection_time_ms": 0.06358299287967384,
+      "status": "\u2713 TP",
+      "detections_count": 10
+    },
+    {
+      "file": "data_025.csv",
+      "type": "spreadsheet",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 0.052916991990059614,
+      "extraction_time_ms": 0.005415990017354488,
+      "detection_time_ms": 0.043167005060240626,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    },
+    {
+      "file": "code_026.py",
+      "type": "code",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "api_key"
+      ],
+      "total_time_ms": 0.051583017921075225,
+      "extraction_time_ms": 0.00020902371034026146,
+      "detection_time_ms": 0.046250002924352884,
+      "status": "\u2713 TP",
+      "detections_count": 3
+    },
+    {
+      "file": "code_027.env",
+      "type": "code",
+      "expected_sensitive": true,
+      "predicted_sensitive": true,
+      "expected_categories": [
+        "credential",
+        "api_key"
+      ],
+      "predicted_categories": [
+        "credential",
+        "email",
+        "api_key"
+      ],
+      "total_time_ms": 0.053625000873580575,
+      "extraction_time_ms": 0.0002500019036233425,
+      "detection_time_ms": 0.04833299317397177,
+      "status": "\u2713 TP",
+      "detections_count": 8
+    },
+    {
+      "file": "code_028.py",
+      "type": "code",
+      "expected_sensitive": false,
+      "predicted_sensitive": false,
+      "expected_categories": [],
+      "predicted_categories": [],
+      "total_time_ms": 0.06324998685158789,
+      "extraction_time_ms": 0.00020902371034026146,
+      "detection_time_ms": 0.05820899968966842,
+      "status": "\u2713 TN",
+      "detections_count": 0
+    }
+  ]
+}

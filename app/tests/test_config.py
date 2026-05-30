@@ -1,0 +1,170 @@
+"""Unit tests for the configuration module.
+
+Tests cover:
+- Schema serialization/deserialization
+- Config store load/save/reset
+- Graceful handling of corrupted files
+- Thread-safety of the singleton store
+"""
+
+from __future__ import annotations
+
+import json
+import tempfile
+import threading
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from app.config.schema import AppConfig, DetectionStackConfig
+from app.config.store import ConfigStore
+
+
+# --- Schema Tests ----------------------------------------------------
+
+
+class TestDetectionStackConfig:
+    """Tests for DetectionStackConfig dataclass."""
+
+    def test_defaults(self):
+        stack = DetectionStackConfig()
+        assert stack.regex is True
+        assert stack.gliner_pii is True
+        assert stack.openai_privacy_filter is False
+        assert stack.qwen3_1_7b is True
+        assert stack.gemma4_e2b is False
+
+    def test_custom_values(self):
+        stack = DetectionStackConfig(regex=False, gemma4_e2b=True)
+        assert stack.regex is False
+        assert stack.gemma4_e2b is True
+
+
+class TestAppConfig:
+    """Tests for AppConfig dataclass."""
+
+    def test_defaults(self):
+        config = AppConfig()
+        assert config.proxy_port == 8000
+        assert config.proxy_enabled is False
+        assert config.fail_mode == "closed"
+        assert config.llm_preset == "balanced"
+        assert isinstance(config.detection_stack, DetectionStackConfig)
+
+    def test_to_dict_roundtrip(self):
+        original = AppConfig(proxy_port=9000, fail_mode="open")
+        data = original.to_dict()
+        restored = AppConfig.from_dict(data)
+        assert restored.proxy_port == 9000
+        assert restored.fail_mode == "open"
+        assert restored.detection_stack.regex is True
+
+    def test_from_dict_missing_fields(self):
+        """Gracefully handle partial configs (e.g., old versions)."""
+        data = {"proxy_port": 7777}
+        config = AppConfig.from_dict(data)
+        assert config.proxy_port == 7777
+        assert config.fail_mode == "closed"  # default
+        assert config.detection_stack.regex is True  # default
+
+    def test_from_dict_extra_fields_ignored(self):
+        """Unknown fields don't crash deserialization."""
+        data = {"proxy_port": 8000, "unknown_field": "ignored"}
+        config = AppConfig.from_dict(data)
+        assert config.proxy_port == 8000
+
+    def test_from_dict_with_detection_stack(self):
+        data = {
+            "proxy_port": 8080,
+            "detection_stack": {
+                "regex": False,
+                "gliner_pii": True,
+                "qwen3_1_7b": False,
+            },
+        }
+        config = AppConfig.from_dict(data)
+        assert config.detection_stack.regex is False
+        assert config.detection_stack.gliner_pii is True
+        assert config.detection_stack.qwen3_1_7b is False
+        # Unspecified fields get defaults
+        assert config.detection_stack.gemma4_e2b is False
+
+
+# --- Store Tests -----------------------------------------------------
+
+
+class TestConfigStore:
+    """Tests for ConfigStore persistence layer."""
+
+    def setup_method(self):
+        """Reset singleton state before each test."""
+        ConfigStore.reset()
+
+    def test_load_creates_default_if_missing(self, tmp_path):
+        config_path = tmp_path / "config.json"
+        with patch("app.config.store.CONFIG_PATH", config_path), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            config = ConfigStore.load()
+            assert config.proxy_port == 8000
+            assert config_path.exists()
+
+    def test_save_and_reload(self, tmp_path):
+        config_path = tmp_path / "config.json"
+        with patch("app.config.store.CONFIG_PATH", config_path), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            config = AppConfig(proxy_port=1234)
+            ConfigStore.save(config)
+
+            ConfigStore.reset()
+            loaded = ConfigStore.load()
+            assert loaded.proxy_port == 1234
+
+    def test_corrupted_file_resets_to_default(self, tmp_path):
+        config_path = tmp_path / "config.json"
+        config_path.write_text("not valid json {{{")
+        with patch("app.config.store.CONFIG_PATH", config_path), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            config = ConfigStore.load()
+            assert config.proxy_port == 8000  # default
+
+    def test_save_dict(self, tmp_path):
+        config_path = tmp_path / "config.json"
+        with patch("app.config.store.CONFIG_PATH", config_path), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            result = ConfigStore.save_dict({"proxy_port": 5555})
+            assert result.proxy_port == 5555
+            assert ConfigStore.current().proxy_port == 5555
+
+    def test_current_loads_lazily(self, tmp_path):
+        config_path = tmp_path / "config.json"
+        with patch("app.config.store.CONFIG_PATH", config_path), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            config = ConfigStore.current()
+            assert config is not None
+            assert config.proxy_port == 8000
+
+    def test_thread_safety(self, tmp_path):
+        """Concurrent writes don't corrupt state."""
+        config_path = tmp_path / "config.json"
+        with patch("app.config.store.CONFIG_PATH", config_path), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()
+            errors = []
+
+            def writer(port):
+                try:
+                    ConfigStore.save(AppConfig(proxy_port=port))
+                except Exception as e:
+                    errors.append(e)
+
+            threads = [threading.Thread(target=writer, args=(i,)) for i in range(20)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            assert len(errors) == 0
+            # Final state is valid
+            loaded = ConfigStore.current()
+            assert 0 <= loaded.proxy_port < 20

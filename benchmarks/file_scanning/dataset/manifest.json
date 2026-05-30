@@ -1,0 +1,446 @@
+{
+  "name": "LLMGuard File Scanning Benchmark v1.0",
+  "total_samples": 29,
+  "positive_samples": 22,
+  "negative_samples": 7,
+  "categories": [
+    "SSN",
+    "address",
+    "api_key",
+    "credential",
+    "credit_card",
+    "email",
+    "name",
+    "phone"
+  ],
+  "file_types": [
+    "code",
+    "document",
+    "image",
+    "spreadsheet"
+  ],
+  "samples": [
+    {
+      "file": "img_000.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "email",
+        "phone",
+        "SSN",
+        "address"
+      ],
+      "sensitive_values": [
+        "Sarah Johnson",
+        "james.taylor@bigbank.org",
+        "(450) 328-3286",
+        "854-23-9935",
+        "1524 Maple Blvd, Austin"
+      ],
+      "description": "Form screenshot with personal info"
+    },
+    {
+      "file": "img_001.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "credit_card",
+        "email"
+      ],
+      "sensitive_values": [
+        "4013-3890-8386-3794",
+        "james.williams@healthco.net"
+      ],
+      "description": "Chat window with email and credit card"
+    },
+    {
+      "file": "img_002.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "api_key",
+        "credential"
+      ],
+      "sensitive_values": [
+        "ghp_rjn9Wvgfygw2wMqZcUDIh7yfJs1ON43x",
+        "yifDLkDmWJ6UuVTAIjvFu7WICPhDeOZIiBOB/Y6s"
+      ],
+      "description": "Terminal output with API keys"
+    },
+    {
+      "file": "img_003.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "SSN"
+      ],
+      "sensitive_values": [
+        "John Williams",
+        "352-81-9830",
+        "John Taylor",
+        "698-64-7543",
+        "Jennifer Brown",
+        "241-75-9085"
+      ],
+      "description": "Spreadsheet screenshot with employee data"
+    },
+    {
+      "file": "img_004.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "credential",
+        "api_key",
+        "email"
+      ],
+      "sensitive_values": [
+        "P@ssfWd3hjOkYRBM",
+        "sk-yyMDHqJ38aRUhR4IWrXPvhsBkDa9U4Uq",
+        "david.williams@techfirm.dev"
+      ],
+      "description": "Slack message with credentials"
+    },
+    {
+      "file": "img_005.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "email",
+        "phone",
+        "SSN",
+        "address"
+      ],
+      "sensitive_values": [
+        "Mary Wilson",
+        "john.wilson@techfirm.dev",
+        "(823) 303-3504",
+        "482-30-9837",
+        "8789 Main St, Seattle"
+      ],
+      "description": "Form screenshot with personal info"
+    },
+    {
+      "file": "img_006.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "credit_card",
+        "email"
+      ],
+      "sensitive_values": [
+        "5701-5430-3911-7182",
+        "robert.wilson@healthco.net"
+      ],
+      "description": "Chat window with email and credit card"
+    },
+    {
+      "file": "img_007.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "api_key",
+        "credential"
+      ],
+      "sensitive_values": [
+        "Bearer eykqH3MB9n7IWUSmTtzQPxC5HChpoevbLJ",
+        "DCajhDieQjEJ+Bq8F80ymm3T207gmhZRnFyy5r2x"
+      ],
+      "description": "Terminal output with API keys"
+    },
+    {
+      "file": "img_008.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "SSN"
+      ],
+      "sensitive_values": [
+        "John Davis",
+        "355-19-8260",
+        "David Johnson",
+        "151-93-9856",
+        "James Johnson",
+        "871-40-3724"
+      ],
+      "description": "Spreadsheet screenshot with employee data"
+    },
+    {
+      "file": "img_009.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "credential",
+        "api_key",
+        "email"
+      ],
+      "sensitive_values": [
+        "P@ssAFEn3z5dkyay",
+        "ghp_7YYDsBS9UYJQTFjmsn9dLVIdVuddLEG6",
+        "david.williams@acme.com"
+      ],
+      "description": "Slack message with credentials"
+    },
+    {
+      "file": "img_010.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "email",
+        "phone",
+        "SSN",
+        "address"
+      ],
+      "sensitive_values": [
+        "David Johnson",
+        "robert.johnson@techfirm.dev",
+        "(269) 791-4853",
+        "513-25-5033",
+        "9585 Maple Blvd, New York"
+      ],
+      "description": "Form screenshot with personal info"
+    },
+    {
+      "file": "img_011.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "credit_card",
+        "email"
+      ],
+      "sensitive_values": [
+        "3716-9985-4353-4624",
+        "linda.garcia@acme.com"
+      ],
+      "description": "Chat window with email and credit card"
+    },
+    {
+      "file": "img_012.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "api_key",
+        "credential"
+      ],
+      "sensitive_values": [
+        "sk-DNKgeInGqi7w4e4pxskC1ITtNZPHaQ0J",
+        "MnrHontIKARAH+Ggl2JfaQqHu42bojteVs3qfNUf"
+      ],
+      "description": "Terminal output with API keys"
+    },
+    {
+      "file": "img_013.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "SSN"
+      ],
+      "sensitive_values": [
+        "Jennifer Brown",
+        "798-41-2684",
+        "Jennifer Rodriguez",
+        "995-62-3532",
+        "Patricia Williams",
+        "919-32-7755"
+      ],
+      "description": "Spreadsheet screenshot with employee data"
+    },
+    {
+      "file": "img_014.png",
+      "type": "image",
+      "contains_sensitive": true,
+      "categories": [
+        "credential",
+        "api_key",
+        "email"
+      ],
+      "sensitive_values": [
+        "P@ssblV7vY7AZQ3V",
+        "AKIArkYSgy3c2Eom06Dwt0Y3oobQmzvr3e9X",
+        "john.garcia@techfirm.dev"
+      ],
+      "description": "Slack message with credentials"
+    },
+    {
+      "file": "img_015.png",
+      "type": "image",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Clean image without sensitive data"
+    },
+    {
+      "file": "img_016.png",
+      "type": "image",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Clean image without sensitive data"
+    },
+    {
+      "file": "img_017.png",
+      "type": "image",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Clean image without sensitive data"
+    },
+    {
+      "file": "doc_018.txt",
+      "type": "document",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "SSN",
+        "email"
+      ],
+      "sensitive_values": [
+        "Jennifer Smith",
+        "218-43-3925",
+        "elizabeth.jones@acme.com",
+        "Mary Martinez",
+        "544-54-6139",
+        "michael.martinez@techfirm.dev"
+      ],
+      "description": "HR employee records with PII"
+    },
+    {
+      "file": "doc_019.txt",
+      "type": "document",
+      "contains_sensitive": true,
+      "categories": [
+        "credential",
+        "api_key"
+      ],
+      "sensitive_values": [
+        "P@sshy5KmqcTBaH7",
+        "Bearer eyRU8VVQmxBe8Q6vNuQ2hU5tGtQAuzSsJi",
+        "zsdfF8j61yX/ZFsan2Cw7gFp6r7O425u85HFJ+EJ"
+      ],
+      "description": "Configuration file with API keys and passwords"
+    },
+    {
+      "file": "doc_020.txt",
+      "type": "document",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "SSN",
+        "address",
+        "phone",
+        "email",
+        "credit_card"
+      ],
+      "sensitive_values": [
+        "Linda Johnson",
+        "830-46-4841",
+        "4551 Elm Dr, Chicago",
+        "(753) 182-3267",
+        "robert.brown@healthco.net",
+        "3723-1665-8760-3669"
+      ],
+      "description": "Legal settlement with full PII"
+    },
+    {
+      "file": "doc_021.txt",
+      "type": "document",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Technical specification for API v2"
+    },
+    {
+      "file": "doc_022.txt",
+      "type": "document",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Meeting minutes without PII"
+    },
+    {
+      "file": "data_023.csv",
+      "type": "spreadsheet",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "email",
+        "phone",
+        "SSN",
+        "address"
+      ],
+      "sensitive_values": [
+        "elizabeth.miller@healthco.net",
+        "871-59-7865",
+        "patricia.davis@corp.io",
+        "129-59-6507",
+        "elizabeth.rodriguez@acme.com",
+        "185-92-8022"
+      ],
+      "description": "Customer database export with full PII"
+    },
+    {
+      "file": "data_024.csv",
+      "type": "spreadsheet",
+      "contains_sensitive": true,
+      "categories": [
+        "name",
+        "credit_card"
+      ],
+      "sensitive_values": [
+        "3794-5314-7379-9650",
+        "5354-5494-8083-1367",
+        "3777-0143-6349-5788"
+      ],
+      "description": "Transaction log with credit card numbers"
+    },
+    {
+      "file": "data_025.csv",
+      "type": "spreadsheet",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Analytics metrics without PII"
+    },
+    {
+      "file": "code_026.py",
+      "type": "code",
+      "contains_sensitive": true,
+      "categories": [
+        "credential",
+        "api_key"
+      ],
+      "sensitive_values": [
+        "P@ssCt3LBtKNdN9V",
+        "xoxb-h0ezFeKORdjjZK8tfphJWAMMYNoXHyC6"
+      ],
+      "description": "Python file with hardcoded database password and API key"
+    },
+    {
+      "file": "code_027.env",
+      "type": "code",
+      "contains_sensitive": true,
+      "categories": [
+        "credential",
+        "api_key"
+      ],
+      "sensitive_values": [
+        "mABHkuEwjua058LeDKK6jDHz2oCtIsjhvNK4p7MZ",
+        "sk_live_8rGIFCfMc4BVuMqbfo9R13KL"
+      ],
+      "description": ".env file with multiple secrets"
+    },
+    {
+      "file": "code_028.py",
+      "type": "code",
+      "contains_sensitive": false,
+      "categories": [],
+      "sensitive_values": [],
+      "description": "Clean utility code without secrets"
+    }
+  ]
+}

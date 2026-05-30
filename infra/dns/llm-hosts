@@ -1,0 +1,15 @@
+# LLM Provider Domain Overrides for CoreDNS
+# Maps LLM API domains to the firewall proxy IP
+# Replace 10.0.1.100 with your actual firewall proxy IP/VIP
+
+10.0.1.100 api.openai.com
+10.0.1.100 api.anthropic.com
+10.0.1.100 generativelanguage.googleapis.com
+10.0.1.100 api.cohere.ai
+10.0.1.100 api.mistral.ai
+10.0.1.100 api.together.xyz
+
+# Azure OpenAI (wildcard - may need specific entries per deployment)
+10.0.1.100 eastus.api.cognitive.microsoft.com
+10.0.1.100 westus.api.cognitive.microsoft.com
+10.0.1.100 eastus2.api.cognitive.microsoft.com

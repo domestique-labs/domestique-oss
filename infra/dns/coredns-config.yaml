@@ -1,0 +1,29 @@
+# CoreDNS configuration for LLM domain interception
+# Deploy this on your internal DNS server to redirect LLM API traffic to the firewall proxy.
+
+# Replace FIREWALL_PROXY_IP with your actual proxy cluster IP/VIP
+# This file overrides specific domains while forwarding everything else to upstream DNS.
+
+.:53 {
+    # Log all queries (optional, for debugging)
+    log
+
+    # Health check endpoint
+    health :8080
+
+    # Prometheus metrics
+    prometheus :9153
+
+    # Override LLM provider domains → firewall proxy
+    hosts /etc/coredns/llm-hosts {
+        fallthrough
+    }
+
+    # Forward everything else to upstream DNS
+    forward . 8.8.8.8 8.8.4.4 {
+        prefer_udp
+    }
+
+    # Cache responses
+    cache 300
+}
