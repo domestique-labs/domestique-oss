@@ -146,4 +146,10 @@ install.ps1           # Windows PowerShell installer
 
 ## License
 
-MIT
+**[Apache License 2.0](./LICENSE)** — open source. Use it, modify it, ship it, contribute
+back. See [`NOTICE`](./NOTICE).
+
+This is the **Community Edition**: the full single-device LLM firewall, free and open. The
+commercial LLMGuard editions — fleet management, non-bypassable MDM enforcement, compliance
+automation, analytics, and support — are separate proprietary products. "LLMGuard" is a
+trademark of LLM-Guard; the license covers the code, not the name.
