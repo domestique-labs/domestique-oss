@@ -560,7 +560,52 @@ def _auto_install_ollama() -> bool:
     return False
 
 
+def _ensure_linux_venv() -> None:
+    """On Linux, auto-create and re-exec into a `.venv` before doing anything else.
+
+    Mirrors install.ps1 (Windows) and scripts/install.sh (macOS), which both
+    create/use a venv before running pip. Without this, `pip install -e` runs
+    against the system Python and fails outright on PEP 668
+    ("externally-managed-environment") distros like Debian 12+/Ubuntu 23.10+.
+    No-op if we're already running inside `.venv` (or not on Linux).
+    """
+    if platform.system() != "Linux":
+        return
+
+    venv_python = ROOT / ".venv" / "bin" / "python"
+    try:
+        already_in_venv = Path(sys.executable).resolve() == venv_python.resolve()
+    except OSError:
+        already_in_venv = False
+    if already_in_venv:
+        return
+
+    if not venv_python.exists():
+        print("▶ creating .venv ...")
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "venv", str(ROOT / ".venv")], check=True
+            )
+            subprocess.run(
+                [str(venv_python), "-m", "pip", "install", "--upgrade", "pip",
+                 "--quiet"],
+                check=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as exc:
+            print(f"  ⚠ could not create .venv automatically: {exc}")
+            print("  ⚠ continuing with the current Python interpreter — if the")
+            print("    next step fails with 'externally-managed-environment',")
+            print("    create a venv yourself:")
+            print("      python3 -m venv .venv && source .venv/bin/activate")
+            return
+
+    print("▶ re-launching installer inside .venv ...")
+    os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()),
+                                 *sys.argv[1:]])
+
+
 def main() -> int:
+    _ensure_linux_venv()
     args = parse_args()
     banner()
 

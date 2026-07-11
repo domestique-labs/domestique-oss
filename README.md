@@ -46,8 +46,18 @@ run.bat                                 # opens dashboard at http://127.0.0.1:98
 ```bash
 git clone https://github.com/majercakdavid/llmguard.git
 cd llmguard
-python3 scripts/install.py              # interactive: picks features + preset
-python3 -m app                          # opens dashboard at http://127.0.0.1:9876
+python3 scripts/install.py              # creates .venv, then picks features + preset
+./run.sh                                # opens dashboard at http://127.0.0.1:9876
+```
+
+`scripts/install.py` auto-creates a `.venv` and re-launches itself inside it
+before installing anything, so `pip install -e` never runs against the
+system Python (this avoids the `externally-managed-environment` error on
+PEP 668 distros like Debian 12+/Ubuntu 23.10+). `./run.sh` then picks up
+that same `.venv` automatically. If venv creation ever fails (e.g. the
+`python3-venv` package isn't installed), create one manually first:
+```bash
+python3 -m venv .venv && source .venv/bin/activate
 ```
 
 **Non-interactive (CI / headless):**
