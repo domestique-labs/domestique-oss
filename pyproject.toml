@@ -88,13 +88,26 @@ strict = true
 warn_return_any = true
 
 [[tool.mypy.overrides]]
-# Third-party libraries used by llmguard that ship no type stubs / py.typed marker.
+# Third-party libraries used by llmguard that ship no type stubs / py.typed marker,
+# OR that live in optional extras not installed in the core `types` CI job (which
+# runs `pip install -e ".[dev]"` only). The core type gate must not depend on which
+# ML extras happen to be present in the environment.
 module = [
     "yaml",
     "sentence_transformers",
     "sentence_transformers.*",
     "gliner",
     "gliner.*",
+    "numpy",
+    "numpy.*",
+    "spacy",
+    "spacy.*",
+    "presidio_analyzer",
+    "presidio_analyzer.*",
+    "presidio_anonymizer",
+    "presidio_anonymizer.*",
+    "torch",
+    "torch.*",
 ]
 ignore_missing_imports = true
 
