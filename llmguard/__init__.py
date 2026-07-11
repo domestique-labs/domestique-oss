@@ -29,8 +29,8 @@ LiteLLM Integration:
 
 from __future__ import annotations
 
-from llmguard.sdk import scan, redact, is_safe, ScanResult, RedactResult
 from llmguard.callback import LLMGuardCallback
+from llmguard.sdk import RedactResult, ScanResult, is_safe, redact, scan
 
 __all__ = [
     "scan",

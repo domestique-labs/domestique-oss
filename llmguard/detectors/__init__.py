@@ -6,9 +6,10 @@ to run all detectors in parallel without caring about internals.
 
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from llmguard.models import Detection
+if TYPE_CHECKING:
+    from llmguard.models import Detection
 
 
 @runtime_checkable
