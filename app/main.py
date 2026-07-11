@@ -157,6 +157,32 @@ def _launch_macos(*, api_port: int) -> None:
     ns_app.run()
 
 
+def _ensure_cert_generated_portable() -> None:
+    """Generate the CA (if missing) before the portable dashboard opens.
+
+    Portable mode (Windows/Linux) has no equivalent of the macOS
+    ``AppDelegate._ensure_cert_trusted()`` bootstrap step, so a fresh
+    install's CA was never generated and the dashboard's cert-install gate
+    had nothing to install (see audit finding C1).
+
+    ``BrowserProxyService.setup()`` -> ``interceptor.generate_ca()`` is
+    idempotent: it returns immediately without touching the files if a CA
+    already exists (see ``generate_ca()``'s early-return when
+    ``CA_CERT_PATH``/``CA_KEY_PATH`` are both present), so calling this
+    unconditionally on every launch never regenerates or overwrites an
+    existing CA.
+    """
+    try:
+        from app.server.api import get_browser_proxy_service
+
+        svc = get_browser_proxy_service()
+        if not svc.is_setup:
+            print("▶ First-time setup: generating certificate authority...")
+            svc.setup()
+    except Exception as exc:
+        print(f"  ⚠ Certificate setup failed: {exc}")
+
+
 def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     """Launch the portable browser-dashboard experience."""
     ConfigStore.load()
@@ -168,6 +194,13 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     import app.server.api as _api
     _api._startup_state["phase"] = "ready"
     _api._startup_state["detail"] = ""
+
+    # First-time setup: generate the CA (BEFORE opening the browser). This
+    # mirrors AppDelegate._ensure_cert_trusted() on macOS. Without this,
+    # portable mode (Windows/Linux) never generates a CA on a fresh install,
+    # so the dashboard's cert-install gate has nothing to install and the
+    # user is stuck at the gate forever.
+    _ensure_cert_generated_portable()
 
     # Ensure Ollama is available and the configured model is ready.
     import threading
