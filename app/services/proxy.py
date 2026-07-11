@@ -146,20 +146,20 @@ class ProxyService:
     def _build_env(config: AppConfig) -> dict:
         """Build environment variables for the proxy process."""
         env = os.environ.copy()
-        env["LLM_FIREWALL_PORT"] = str(config.proxy_port)
-        env["LLM_FIREWALL_FAIL_MODE"] = config.fail_mode
+        env["LLMGUARD_PORT"] = str(config.proxy_port)
+        env["LLMGUARD_FAIL_MODE"] = config.fail_mode
 
         stack = config.detection_stack
         has_llm = stack.qwen3_1_7b or stack.gemma4_e2b
-        env["LLM_FIREWALL_ENABLE_LOCAL_LLM"] = str(has_llm).lower()
-        env["LLM_FIREWALL_ENABLE_SECRET_DETECTION"] = str(stack.regex).lower()
+        env["LLMGUARD_ENABLE_LOCAL_LLM"] = str(has_llm).lower()
+        env["LLMGUARD_ENABLE_SECRET_DETECTION"] = str(stack.regex).lower()
 
         # Select the LLM model based on priority
         if stack.gemma4_e2b:
             from llmguard.detectors.local_llm import _resolve_gemma_model
-            env["LLM_FIREWALL_LOCAL_LLM_MODEL"] = _resolve_gemma_model()
+            env["LLMGUARD_LOCAL_LLM_MODEL"] = _resolve_gemma_model()
         elif stack.qwen3_1_7b:
-            env["LLM_FIREWALL_LOCAL_LLM_MODEL"] = "qwen3:1.7b"
+            env["LLMGUARD_LOCAL_LLM_MODEL"] = "qwen3:1.7b"
 
         return env
 
