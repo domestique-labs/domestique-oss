@@ -55,7 +55,10 @@ python3 -m app                          # opens dashboard at http://127.0.0.1:98
 python scripts/install.py --yes --features all --preset balanced
 ```
 
-Re-run the installer any time to add features or change presets.
+Re-run the installer any time to add features or switch to a different
+preset. It only *adds* — deselecting a previously-installed feature or
+preset on a later run does not uninstall it; remove it manually (e.g.
+`pip uninstall gliner`) if you want it gone.
 
 ### What gets installed
 

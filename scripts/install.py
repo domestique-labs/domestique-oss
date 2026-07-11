@@ -416,6 +416,9 @@ def pick_features(args: argparse.Namespace) -> set[str]:
             print(f"  [{mark}] {FEATURE_EXTRAS[key]['label']} (default)")
         return chosen
 
+    print("  note: this installer only ADDS features. Answering 'no' below (or")
+    print("        omitting a feature from --features on a later run) will not")
+    print("        uninstall anything already installed for that feature.")
     chosen: set[str] = set()
     for key, info in FEATURE_EXTRAS.items():
         size = f" (~{info['extra_download_mb']} MB)"
@@ -611,6 +614,12 @@ def main() -> int:
     else:
         print("    ./run.sh                 start the desktop app")
     print("    open http://127.0.0.1:9876/   dashboard")
+    print()
+    print("  note: re-running this installer only ADDS features/presets you")
+    print("        select — it never uninstalls a feature you deselect on a")
+    print("        later run. To remove one, uninstall its pip extra manually")
+    print("        (e.g. `pip uninstall gliner`) and clear the matching")
+    print("        detection_stack toggle in the dashboard.")
     if config_changed:
         print()
         print("  ⚠  the dashboard config was updated. If the app is currently")
