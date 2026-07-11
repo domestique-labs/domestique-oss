@@ -1,0 +1,17 @@
+{
+  "commit": "baseline",
+  "corpus_sha": "33ddbb37e88ac473234c88f80cc6ee0ca5d299e943551350bb5910c9f321473f",
+  "metrics": {
+    "action_match_rate": 0.5333333333333333,
+    "bypass_rate": 0.2727272727272727,
+    "f1": 0.8421052631578948,
+    "false_positive_rate": 0.0,
+    "latency_p50_ms": 22.681,
+    "latency_p95_ms": 39.268,
+    "latency_p99_ms": 665.185,
+    "n": 15,
+    "precision": 1.0,
+    "recall": 0.7272727272727273
+  },
+  "profile": "core"
+}
