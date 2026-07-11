@@ -451,7 +451,7 @@
     <!-- Hardware Preset — full width horizontal bar -->
     <div class="card" style="margin-bottom:20px">
       <h2><span class="icon">💻</span> Hardware Preset</h2>
-      <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:12px">
+      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px">
         <div class="preset-card" data-preset="minimal" onclick="selectPreset(this)">
           <div class="preset-title">Minimal</div>
           <div class="preset-desc">Regex only</div>
@@ -462,10 +462,15 @@
           <div class="preset-desc">Regex + Qwen3 1.7B</div>
           <div class="preset-size">1.8GB GPU · ~164ms · F1 92%</div>
         </div>
-        <div class="preset-card" data-preset="maximum" onclick="selectPreset(this)">
-          <div class="preset-title">Max Recall</div>
+        <div class="preset-card" data-preset="quality" onclick="selectPreset(this)">
+          <div class="preset-title">Quality</div>
           <div class="preset-desc">Regex + GLiNER + Qwen3</div>
           <div class="preset-size">1.8GB GPU · ~209ms · 91% recall</div>
+        </div>
+        <div class="preset-card" data-preset="legacy-cpu" onclick="selectPreset(this)">
+          <div class="preset-title">Legacy CPU</div>
+          <div class="preset-desc">Regex + Llama 3.2 1B</div>
+          <div class="preset-size">CPU only · no GPU required</div>
         </div>
       </div>
     </div>
@@ -897,16 +902,17 @@ let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || {
   proxy_enabled: false,
   detection_stack: {
     regex: true, gliner_pii: false, openai_privacy_filter: false,
-    qwen3_1_7b: true, gemma4_e2b: false,
+    qwen3_1_7b: true, gemma4_e2b: false, legacy_cpu: false,
   },
   llm_preset: 'balanced',
 };
 
 // Preset definitions
 const PRESETS = {
-  minimal:  { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: false, gemma4_e2b: false },
-  balanced: { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: true,  gemma4_e2b: false },
-  maximum:  { regex: true, gliner_pii: true,  openai_privacy_filter: false, qwen3_1_7b: true,  gemma4_e2b: false },
+  minimal:      { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: false },
+  balanced:     { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
+  quality:      { regex: true, gliner_pii: true,  openai_privacy_filter: false, qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
+  'legacy-cpu': { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: true },
 };
 
 function selectPreset(el) {
@@ -1254,8 +1260,9 @@ setInterval(async () => {
       // Determine active preset
       const stack = cfg.detection_stack || {};
       let presetName = 'Custom';
+      const PRESET_LABELS = { minimal: 'Minimal', balanced: 'Balanced', quality: 'Quality', 'legacy-cpu': 'Legacy CPU' };
       for (const [name, preset] of Object.entries(PRESETS)) {
-        if (Object.entries(preset).every(([k,v]) => stack[k] === v)) { presetName = name.charAt(0).toUpperCase() + name.slice(1); break; }
+        if (Object.entries(preset).every(([k,v]) => stack[k] === v)) { presetName = PRESET_LABELS[name] || name; break; }
       }
       document.getElementById('sbPreset').textContent = presetName;
     }
