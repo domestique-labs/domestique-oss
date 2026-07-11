@@ -1,0 +1,30 @@
+# Security Policy
+
+LLMGuard is a security tool, so we take vulnerabilities in it seriously.
+
+## Reporting a vulnerability
+
+**Please do not open a public GitHub issue for security vulnerabilities.**
+
+Report privately via one of:
+- **GitHub Private Vulnerability Reporting** — the **Report a vulnerability** button under this
+  repo's **Security** tab (preferred), or
+- Email **security@sealworks.dev** *(TODO: confirm/replace with the real security address)*.
+
+Please include: a description, affected version/commit, reproduction steps or PoC, and impact.
+We aim to acknowledge within **3 business days** and to agree on a disclosure timeline with you.
+Please give us reasonable time to fix before any public disclosure (coordinated disclosure).
+
+## Scope
+- The `llmguard/` core engine, the API proxy (`llmguard/app.py`), the browser MITM addon
+  (`app/services/mitm_addon.py`), the dashboard API (`app/server/api.py`), and the CA/cert handling.
+- Particularly interested in: detection bypasses (data that should be caught but isn't),
+  fail-open conditions, CA/TLS interception weaknesses, and dashboard/API auth issues.
+
+## Out of scope
+- Findings that require a already-compromised host / root on the endpoint.
+- The intentional fail-**closed** behavior (blocking on detector error is by design).
+- Third-party dependencies (report those upstream), unless we ship an insecure default.
+
+## Supported versions
+Pre-1.0: only the latest `main` is supported. Fixes land on `main`.
