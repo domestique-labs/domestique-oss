@@ -1,6 +1,10 @@
 # Local dev gate — mirrors CI lint-core. Install with: pre-commit install
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
+    # Keep this rev in sync with the `ruff` constraint in pyproject.toml's [dev]
+    # extras (currently ruff>=0.8,<1). CI installs a floating version in that
+    # range; if they diverge, local and CI lint can disagree. Bump via
+    # `pre-commit autoupdate` when the dev-extras ruff constraint changes.
     rev: v0.15.20
     hooks:
       - id: ruff
