@@ -45,8 +45,28 @@ def launch(
     _launch_portable(api_port=api_port, open_dashboard=open_dashboard)
 
 
+def _configure_console_utf8() -> None:
+    """Make console output UTF-8 safe on every platform.
+
+    Windows consoles default to cp1252 and raise UnicodeEncodeError on the status
+    glyphs LLMGuard prints (e.g. the certificate-setup messages). The macOS launch
+    path already did this; doing it here in ``main()`` also covers the portable
+    Windows/Linux path, which otherwise crashes on first-run output.
+    """
+    import os
+
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point used by ``python -m app``."""
+    _configure_console_utf8()
     parser = argparse.ArgumentParser(description="Launch LLMGuard")
     parser.add_argument(
         "--mode",
