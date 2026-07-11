@@ -71,6 +71,18 @@ rules:
       - password_literal
     min_confidence: 0.7
 
+  # ── Detector infrastructure failures (fail-closed) ─────────────────────
+  # Synthetic findings emitted by the pipeline/detectors themselves when a
+  # detector could not actually run (crashed, or GLiNER model unavailable).
+  # No real scan happened, so we must not silently ALLOW - block instead.
+  - name: block-detector-failures
+    detector: "*"
+    action: block
+    categories:
+      - detector_error
+      - gliner_not_cached
+    min_confidence: 0.99
+
   # ── LLM-classified sensitive content ──────────────────────────────────
   - name: block-llm-classified
     detector: local_llm_classifier

@@ -7,10 +7,11 @@ scanned request must be flagged with the distinct, actionable category
 ``gliner_not_cached`` instead of the generic ``pipeline:detector_error``
 that every other unexpected detector exception collapses into.
 
-This does NOT change the fail-closed block/allow decision itself (see
-``llmguard/policy/rules.yaml`` — neither category currently has a matching
-rule, so both resolve the same way through the policy engine); it only
-makes the *reason* diagnosable.
+It also asserts the fail-closed BLOCK decision itself: ``llmguard/policy/
+rules.yaml`` has an explicit ``block-detector-failures`` rule matching both
+``detector_error`` and ``gliner_not_cached`` at high confidence, so a
+synthetic failure finding must always resolve to ``Action.BLOCK`` /
+``should_block is True`` - never silently ALLOW.
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import pytest
 
 from llmguard.config import Settings
 from llmguard.detectors.registry import create_detector_pipeline
+from llmguard.models import Action
 
 
 def _gliner_only_settings() -> Settings:
@@ -48,6 +50,8 @@ class TestGLiNERNotCached:
         assert "gliner_not_cached" in categories
         assert "detector_error" not in categories
         assert "gliner_pii" in detectors
+        assert result.action is Action.BLOCK
+        assert result.should_block is True
 
     def test_uncached_model_yields_gliner_not_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """`gliner` package present but model not in the offline HF cache -> OSError -> gliner_not_cached."""
@@ -69,6 +73,8 @@ class TestGLiNERNotCached:
         categories = {f.category for f in result.findings}
         assert "gliner_not_cached" in categories
         assert "detector_error" not in categories
+        assert result.action is Action.BLOCK
+        assert result.should_block is True
 
     def test_only_warns_once(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The one-time actionable log must not spam on every request."""
@@ -115,3 +121,5 @@ class TestGLiNERNotCached:
         categories = {f.category for f in result.findings}
         assert "detector_error" in categories
         assert "gliner_not_cached" not in categories
+        assert result.action is Action.BLOCK
+        assert result.should_block is True
