@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import structlog
+
 from llmguard.config import Settings
 from llmguard.detectors.local_llm import LocalLLMClassifier
 from llmguard.detectors.pii import PIIDetector
@@ -26,6 +28,8 @@ from llmguard.policy import PolicyEngine
 
 if TYPE_CHECKING:
     from llmguard.detectors import Detector
+
+logger = structlog.get_logger()
 
 
 def build_detectors(settings: Settings) -> list[Detector]:
@@ -58,14 +62,15 @@ def build_detectors(settings: Settings) -> list[Detector]:
             class _GLiNERDetector:
                 """Lightweight wrapper for GLiNER PII model (lazy-loaded)."""
 
-                def __init__(self, labels: list[str], threshold: float):
+                def __init__(self, labels: list[str], threshold: float) -> None:
                     self._model = None
                     self._labels = labels
                     self._threshold = threshold
 
-                def _ensure_model(self):
+                def _ensure_model(self) -> None:
                     if self._model is None:
                         from gliner import GLiNER
+
                         self._model = GLiNER.from_pretrained("knowledgator/gliner-pii-base-v1.0")
                         self._model.predict_entities("warmup", self._labels)
 
@@ -83,17 +88,19 @@ def build_detectors(settings: Settings) -> list[Detector]:
                         if e["score"] >= self._threshold:
                             start = text.find(e["text"])
                             end = start + len(e["text"]) if start >= 0 else len(text)
-                            findings.append(Detection(
-                                detector=self.name,
-                                category=f"pii:{e['label']}",
-                                confidence=e["score"],
-                                span=Span(start=max(0, start), end=end),
-                            ))
+                            findings.append(
+                                Detection(
+                                    detector=self.name,
+                                    category=f"pii:{e['label']}",
+                                    confidence=e["score"],
+                                    span=Span(start=max(0, start), end=end),
+                                )
+                            )
                     return findings
 
             detectors.append(_GLiNERDetector(_gliner_labels, _gliner_threshold))
-        except Exception:
-            pass  # GLiNER not installed
+        except Exception as exc:
+            logger.debug("gliner_unavailable", error=str(exc))
 
     # Tier 2c: Semantic / encoding / entropy detection.
     if settings.enable_semantic_detection:

@@ -7,12 +7,13 @@ persistent httpx connection pool for minimal overhead.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import litellm
 import structlog
 
-from llmguard.config import Settings
+if TYPE_CHECKING:
+    from llmguard.config import Settings
 
 logger = structlog.get_logger()
 

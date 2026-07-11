@@ -13,15 +13,11 @@ All functions are thread-safe and can be called from any context.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from app.services.redaction import (
-    RedactionEngine,
     RedactionAction,
-    RedactionRule,
-    TokenStore,
+    RedactionEngine,
 )
 
 
@@ -59,7 +55,7 @@ class RedactResult:
     is_safe: bool
     categories: list[str] = field(default_factory=list)
     token_count: int = 0
-    _engine: Optional[RedactionEngine] = field(default=None, repr=False)
+    _engine: RedactionEngine | None = field(default=None, repr=False)
 
     def restore(self, llm_response: str) -> str:
         """De-tokenize an LLM response back to original values.
@@ -76,7 +72,7 @@ class RedactResult:
 
 
 # Module-level engine (thread-safe, reusable)
-_default_engine: Optional[RedactionEngine] = None
+_default_engine: RedactionEngine | None = None
 
 
 def _get_engine() -> RedactionEngine:

@@ -27,9 +27,12 @@ Configuration:
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any
 
-from app.services.redaction import RedactionEngine, RedactionAction
+from app.services.redaction import RedactionAction, RedactionEngine
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger("llmguard.callback")
 
@@ -48,8 +51,8 @@ class LLMGuardCallback:
         self,
         mode: str = "block",
         scan_responses: bool = True,
-        on_block: Optional[Callable[[str, list[str]], None]] = None,
-        on_redact: Optional[Callable[[str, str, list[str]], None]] = None,
+        on_block: Callable[[str, list[str]], None] | None = None,
+        on_redact: Callable[[str, str, list[str]], None] | None = None,
     ) -> None:
         """Initialize the callback.
 
@@ -100,6 +103,7 @@ class LLMGuardCallback:
                 # In redact mode, force redaction even for BLOCK-category items
                 # Re-run with all rules set to REDACT
                 from app.services.redaction import RedactionRule
+
                 redact_rules = [
                     RedactionRule(cat, RedactionAction.REDACT)
                     for cat in set(f.category for f in result.findings)
@@ -113,9 +117,7 @@ class LLMGuardCallback:
                 msg["content"] = result.redacted_text
                 modified = True
                 if self._on_redact:
-                    self._on_redact(
-                        content, result.redacted_text, result.categories_found
-                    )
+                    self._on_redact(content, result.redacted_text, result.categories_found)
 
         if modified:
             logger.info(f"LLMGuard: redacted content in request to {model}")
@@ -165,6 +167,6 @@ class LLMGuardCallback:
 class LLMGuardBlockedError(Exception):
     """Raised when LLMGuard blocks a request due to sensitive data."""
 
-    def __init__(self, message: str, categories: Optional[list[str]] = None):
+    def __init__(self, message: str, categories: list[str] | None = None) -> None:
         super().__init__(message)
         self.categories = categories or []

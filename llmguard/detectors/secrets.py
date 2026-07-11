@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import ClassVar, Sequence
+from typing import TYPE_CHECKING, ClassVar
 
 from llmguard.models import Detection, Span
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 @dataclass(frozen=True)
@@ -29,19 +32,42 @@ class _Pattern:
 _PATTERNS: list[_Pattern] = [
     _Pattern("private_key", r"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----", 0.99),
     _Pattern("aws_access_key", r"(?<![A-Z0-9])AKIA[0-9A-Z]{16}(?![A-Z0-9])", 0.99),
-    _Pattern("aws_secret_key", r"[Aa][Ww][Ss][_\s]*[Ss][Ee][Cc][Rr][Ee][Tt][_\s]*[Aa][Cc][Cc][Ee][Ss][Ss][_\s]*[Kk][Ee][Yy]\s*[=:]\s*[A-Za-z0-9/+=]{40}", 0.98),
-    _Pattern("connection_string", r"(?:mongodb|postgres(?:ql)?|mysql|redis|amqp|MongoDB|Postgres(?:ql)?|MySQL|Redis|AMQP)://[^\s'\"]{10,}", 0.97),
+    _Pattern(
+        "aws_secret_key",
+        r"[Aa][Ww][Ss][_\s]*[Ss][Ee][Cc][Rr][Ee][Tt][_\s]*"
+        r"[Aa][Cc][Cc][Ee][Ss][Ss][_\s]*[Kk][Ee][Yy]\s*[=:]\s*[A-Za-z0-9/+=]{40}",
+        0.98,
+    ),
+    _Pattern(
+        "connection_string",
+        r"(?:mongodb|postgres(?:ql)?|mysql|redis|amqp|MongoDB|Postgres(?:ql)?"
+        r"|MySQL|Redis|AMQP)://[^\s'\"]{10,}",
+        0.97,
+    ),
     _Pattern("github_token", r"gh[ps]_[A-Za-z0-9_]{36,}", 0.96),
     _Pattern("github_fine_grained", r"github_pat_[A-Za-z0-9_]{22,}", 0.96),
     _Pattern("anthropic_key", r"sk-ant-[A-Za-z0-9_-]{40,}", 0.95),
     _Pattern("openai_key", r"sk-(?:proj-)?[A-Za-z0-9_-]{20,}", 0.95),
     _Pattern("slack_token", r"xox[baprs]-[0-9]{10,13}-[A-Za-z0-9-]{20,}", 0.94),
     _Pattern("jwt", r"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", 0.92),
-    _Pattern("generic_api_key", r"[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]\s*[=:]\s*['\"]?[A-Za-z0-9_\-]{20,}['\"]?", 0.88),
-    _Pattern("password_literal", r"[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]\s*[=:]\s*['\"]([^'\"]{8,})['\"]", 0.87),
+    _Pattern(
+        "generic_api_key",
+        r"[Aa][Pp][Ii][_-]?[Kk][Ee][Yy]\s*[=:]\s*['\"]?[A-Za-z0-9_\-]{20,}['\"]?",
+        0.88,
+    ),
+    _Pattern(
+        "password_literal",
+        r"[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]\s*[=:]\s*['\"]([^'\"]{8,})['\"]",
+        0.87,
+    ),
     # PII patterns
     _Pattern("us_ssn", r"\b\d{3}[- .]?\d{2}[- .]?\d{4}\b", 0.92),
-    _Pattern("credit_card", r"\b(?:4[0-9]{3}|5[1-5][0-9]{2}|3[47][0-9]{2}|6(?:011|5[0-9]{2}))[- ]?[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4}\b", 0.93),
+    _Pattern(
+        "credit_card",
+        r"\b(?:4[0-9]{3}|5[1-5][0-9]{2}|3[47][0-9]{2}|6(?:011|5[0-9]{2}))"
+        r"[- ]?[0-9]{4}[- ]?[0-9]{4}[- ]?[0-9]{4}\b",
+        0.93,
+    ),
     _Pattern("email_address", r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", 0.80),
     _Pattern("phone_number", r"\b(?:\+1[- ]?)?\(?[0-9]{3}\)?[- .]?[0-9]{3}[- .]?[0-9]{4}\b", 0.75),
 ]

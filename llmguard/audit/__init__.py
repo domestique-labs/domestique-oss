@@ -11,14 +11,14 @@ propagate to the request path.
 from __future__ import annotations
 
 import json
-import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from llmguard.models import Action, Detection
+if TYPE_CHECKING:
+    from llmguard.models import Action, Detection
 
 logger = structlog.get_logger()
 
@@ -49,7 +49,7 @@ class AuditLogger:
         """Write a single audit event. Never raises."""
         try:
             event = {
-                "ts": datetime.now(timezone.utc).isoformat(),
+                "ts": datetime.now(UTC).isoformat(),
                 "action": action.value,
                 "user": user_id,
                 "model": model,
