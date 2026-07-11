@@ -156,4 +156,17 @@ class AppConfig:
             k: v for k, v in data.items()
             if k in cls.__dataclass_fields__ and k != "detection_stack"
         }
+
+        # One-time migration: configs written by the old installer's
+        # 'legacy-cpu' preset predate the `legacy_cpu` stack flag (added
+        # alongside the fix that made the preset actually pull/use
+        # llama3.2:1b). Those configs have llm_preset == "legacy-cpu" but
+        # no `legacy_cpu` key, so it defaults False and the app silently
+        # keeps trying to use the never-pulled qwen3:1.7b model instead
+        # of the CPU fallback the user actually installed. Flip the flags
+        # to match the preset the user is already on.
+        if valid_fields.get("llm_preset") == "legacy-cpu" and not stack.legacy_cpu:
+            stack.legacy_cpu = True
+            stack.qwen3_1_7b = False
+
         return cls(detection_stack=stack, **valid_fields)

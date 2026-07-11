@@ -116,6 +116,53 @@ class TestAppConfig:
         assert config.detection_stack.qwen3_1_7b is False
         assert config.detection_stack.gemma4_e2b is False
 
+    def test_from_dict_migrates_stale_legacy_cpu_config(self):
+        """Configs written by the OLD installer have llm_preset ==
+        'legacy-cpu', detection_stack.qwen3_1_7b == True, and no
+        `legacy_cpu` key at all (it didn't exist yet). Loading them must
+        flip on legacy_cpu and turn off qwen3_1_7b so the app uses the
+        llama3.2:1b CPU fallback the user actually installed, instead of
+        silently defaulting legacy_cpu to False and trying to use the
+        never-pulled qwen3:1.7b model.
+        """
+        stale_data = {
+            "llm_preset": "legacy-cpu",
+            "detection_stack": {
+                "regex": True,
+                "qwen3_1_7b": True,
+                # no "legacy_cpu" key - predates the field entirely.
+            },
+        }
+        config = AppConfig.from_dict(stale_data)
+        assert config.llm_preset == "legacy-cpu"
+        assert config.detection_stack.legacy_cpu is True
+        assert config.detection_stack.qwen3_1_7b is False
+
+    def test_from_dict_does_not_migrate_non_legacy_preset(self):
+        """The migration must only touch legacy-cpu configs - other
+        presets keep their qwen3_1_7b value untouched."""
+        data = {
+            "llm_preset": "balanced",
+            "detection_stack": {"qwen3_1_7b": True},
+        }
+        config = AppConfig.from_dict(data)
+        assert config.detection_stack.legacy_cpu is False
+        assert config.detection_stack.qwen3_1_7b is True
+
+    def test_from_dict_legacy_cpu_migration_is_idempotent(self):
+        """A config that already has legacy_cpu=True (post-migration, or
+        freshly installed via the new installer) is left alone."""
+        data = {
+            "llm_preset": "legacy-cpu",
+            "detection_stack": {
+                "qwen3_1_7b": False,
+                "legacy_cpu": True,
+            },
+        }
+        config = AppConfig.from_dict(data)
+        assert config.detection_stack.legacy_cpu is True
+        assert config.detection_stack.qwen3_1_7b is False
+
 
 # --- Store Tests -----------------------------------------------------
 
