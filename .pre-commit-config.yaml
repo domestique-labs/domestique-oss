@@ -1,0 +1,20 @@
+# Local dev gate — mirrors CI lint-core. Install with: pre-commit install
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        name: ruff (lint, core)
+        args: [--fix]
+        files: ^llmguard/
+      - id: ruff-format
+        name: ruff (format, core)
+        files: ^llmguard/
+  - repo: local
+    hooks:
+      - id: pytest-fast
+        name: pytest (unit, fast)
+        entry: python -m pytest tests/unit -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

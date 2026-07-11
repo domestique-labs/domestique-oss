@@ -71,6 +71,7 @@ dev = [
     "httpx>=0.28,<1",
     "ruff>=0.8,<1",
     "mypy>=1.13,<2",
+    "pre-commit>=4,<5",
 ]
 
 [tool.ruff]
