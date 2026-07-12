@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -100,6 +101,10 @@ class LLMGuardAddon:
 
     MAX_LOG_ENTRIES = 500  # Keep last N entries in the request log
 
+    # Bounded hold for the request path while the background-built detector
+    # pipeline is not yet ready (see load() / _wait_for_detector_ready()).
+    DETECTOR_READY_WAIT_S = 20.0
+
     def __init__(self):
         self._detector = None
         self._data_dir = Path.home() / ".llmguard"
@@ -109,6 +114,13 @@ class LLMGuardAddon:
         self._config_file = self._data_dir / "config.json"
         self._api_base = "http://127.0.0.1:9876"
         self._data_dir.mkdir(parents=True, exist_ok=True)
+        # Ready by default: tests/tools that construct LLMGuardAddon() and
+        # assign self._detector directly (bypassing load()) get immediate,
+        # non-blocking behavior. load() clears this while the pipeline is
+        # being built on a background thread.
+        self._detector_ready = threading.Event()
+        self._detector_ready.set()
+        self._detector_init_error: Exception | None = None
 
     def _persist_stats(self):
         """Write stats to a shared file for the dashboard to read."""
@@ -215,29 +227,90 @@ class LLMGuardAddon:
         return ""
 
     def load(self, loader):
-        """Called when the addon is loaded."""
+        """Called when the addon is loaded.
+
+        mitmproxy does not accept connections on the proxy port until this
+        method returns, so building the detection pipeline (which can
+        instantiate torch/transformers/GLiNER) must NEVER happen
+        synchronously here -- doing so gates the port bind on however long
+        model construction takes, which on a cold cache or weak hardware can
+        blow past the readiness-timeout safety net and get the whole proxy
+        killed. Build it on a background thread instead; the request path
+        (``_wait_for_detector_ready`` / ``_inspect``) holds briefly for
+        intercepted LLM traffic until the pipeline is ready, and fails
+        closed if it never becomes ready.
+        """
         ctx.log.info("LLMGuard addon loaded - inspecting LLM API traffic")
-        self._init_detector()
+        self._detector_ready.clear()
+        self._detector_init_error = None
+        threading.Thread(
+            target=self._build_detector_pipeline_background,
+            daemon=True,
+            name="detector-pipeline-init",
+        ).start()
         self._warmup_llm()
-        # Pre-warm all detectors (GLiNER lazy load etc) in background
+
+    def _build_detector_pipeline_background(self):
+        """Build the detector pipeline off the mitmproxy event loop.
+
+        Runs on the thread started from ``load()``. On success, sets
+        ``_detector_ready`` and then warms the detectors (GLiNER lazy-load
+        etc) so the first real request doesn't pay that cost. On failure,
+        records the exception in ``_detector_init_error`` and still sets
+        ``_detector_ready`` so waiters stop blocking -- ``_detector`` stays
+        ``None``, and the request path treats "ready but no detector" as
+        fail-closed (block), never fail-open.
+        """
+        try:
+            self._init_detector()
+        except Exception as e:
+            self._detector_init_error = e
+            ctx.log.error(
+                f"Detector pipeline failed to build: {e} - "
+                "failing closed on intercepted requests until resolved"
+            )
+            self._detector_ready.set()
+            return
+
+        ctx.log.info("Detection pipeline ready")
+        self._detector_ready.set()
+
+        # Pre-warm all detectors (GLiNER lazy load etc) now that the
+        # pipeline exists, still off the mitmproxy event loop.
         if self._detector:
-            import threading
-            def _warmup_detectors():
-                import asyncio
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(
-                        self._detector.inspect("warmup email test@example.com SSN 123-45-6789")
-                    )
-                    ctx.log.info("All detectors warmed up")
-                except Exception as e:
-                    ctx.log.warn(f"Detector warmup: {e}")
-                finally:
-                    loop.close()
-            threading.Thread(target=_warmup_detectors, daemon=True, name="detector-warmup").start()
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(
+                    self._detector.inspect("warmup email test@example.com SSN 123-45-6789")
+                )
+                ctx.log.info("All detectors warmed up")
+            except Exception as e:
+                ctx.log.warn(f"Detector warmup: {e}")
+            finally:
+                loop.close()
+
+    async def _wait_for_detector_ready(self, timeout: float | None = None) -> bool:
+        """Bounded wait for the background-built pipeline to become ready.
+
+        Returns True once the pipeline is ready to use. Returns False if the
+        wait expires, or if the pipeline is "ready" (init finished) but
+        construction actually failed (``self._detector`` is None) -- both are
+        fail-closed conditions for the caller.
+
+        Waits via ``run_in_executor`` so the bounded hold never blocks
+        mitmproxy's event loop -- other flows keep flowing concurrently.
+        """
+        if timeout is None:
+            timeout = self.DETECTOR_READY_WAIT_S
+        if not self._detector_ready.is_set():
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._detector_ready.wait, timeout)
+        return self._detector_ready.is_set() and self._detector is not None
 
     def _init_detector(self):
-        """Build detection pipeline from config. Called once at startup.
+        """Build detection pipeline from config. Called once at startup (in
+        the background -- see ``load()``) and again whenever the on-disk
+        config changes (hot-reload path in ``_inspect()``).
 
         Uses the shared pipeline_config helper for consistent Settings
         construction between API and mitm processes.
@@ -893,8 +966,29 @@ class LLMGuardAddon:
         async scan(). For a single-user desktop proxy this is fine. For
         multi-user enterprise deployments, wrap in asyncio.to_thread() to
         avoid blocking mitmproxy's event loop on slow detectors.
+
+        Startup race: the pipeline is now built on a background thread (see
+        ``load()``), so a request can arrive before it's ready. We hold
+        briefly (bounded, see ``DETECTOR_READY_WAIT_S``) for it to finish.
+        If it never becomes ready in time -- or construction raised -- this
+        fails CLOSED (blocks) rather than letting sensitive data through
+        uninspected.
         """
         try:
+            ready = await self._wait_for_detector_ready()
+            if not ready:
+                if self._detector_init_error is not None:
+                    ctx.log.error(
+                        "Detection pipeline unavailable "
+                        f"({self._detector_init_error}) - failing closed"
+                    )
+                else:
+                    ctx.log.error(
+                        "Detection pipeline not ready after "
+                        f"{self.DETECTOR_READY_WAIT_S}s - failing closed"
+                    )
+                return {"action": "block", "reasons": ["detectors_unavailable"]}
+
             from app.services.pipeline_config import config_mtime_ns, config_hash, load_config_dict
             mtime = config_mtime_ns()
             if mtime != getattr(self, "_config_mtime", 0):
