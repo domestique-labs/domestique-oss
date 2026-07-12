@@ -371,6 +371,33 @@ def _detect_accelerator() -> dict:
     }
 
 
+def _wait_for_command(
+    name: str,
+    attempts: int = 5,
+    delay_seconds: float = 1.0,
+    which=None,
+    sleep=time.sleep,
+) -> str | None:
+    """Poll ``which(name)`` a few times, sleeping between attempts.
+
+    Windows' winget can return before the installed binary's directory is
+    fully registered/visible on ``PATH``, so a single immediate check can
+    give a false negative. This gives the OS a few seconds to catch up
+    before we declare the install a failure. Returns the resolved path (or
+    ``None`` if it never shows up).
+    """
+    import shutil as _shutil
+
+    which = which or _shutil.which
+    for attempt in range(attempts):
+        found = which(name)
+        if found:
+            return found
+        if attempt < attempts - 1:
+            sleep(delay_seconds)
+    return None
+
+
 def _ensure_ollama() -> None:
     """Ensure Ollama is installed, running optimally, and the model is warm.
 
@@ -426,7 +453,10 @@ def _ensure_ollama() -> None:
                     capture_output=True, text=True, timeout=10,
                 ).stdout.strip()
                 os.environ["PATH"] = os.environ.get("PATH", "") + ";" + user_path
-                ollama_bin = shutil.which("ollama")
+                # winget's post-install PATH registration can lag a moment
+                # behind the process returning, so poll briefly before
+                # giving up.
+                ollama_bin = _wait_for_command("ollama")
             except Exception as exc:
                 print(f"  ⚠ Ollama install failed: {exc}")
         elif sys.platform == "darwin":

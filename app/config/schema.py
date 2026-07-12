@@ -52,7 +52,7 @@ class AppConfig:
     detection_stack: DetectionStackConfig = field(default_factory=DetectionStackConfig)
     """Active detectors configuration."""
 
-    llm_preset: Literal["minimal", "balanced", "quality", "maximum", "legacy-cpu"] = "balanced"
+    llm_preset: Literal["minimal", "balanced", "quality", "legacy-cpu"] = "balanced"
     """Hardware preset controlling which models are loaded."""
 
     fail_mode: Literal["open", "closed"] = "closed"
