@@ -7,11 +7,11 @@ These are intentionally plain dataclasses for zero-overhead construction.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class Action(str, Enum):
+class Action(StrEnum):
     """Policy action to take on a request."""
 
     ALLOW = "allow"

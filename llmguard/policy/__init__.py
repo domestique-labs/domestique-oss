@@ -41,7 +41,7 @@ class PolicyEngine:
         self._rules = rules
 
     @classmethod
-    def from_yaml(cls, path: str | Path) -> "PolicyEngine":
+    def from_yaml(cls, path: str | Path) -> PolicyEngine:
         """Load rules from a YAML file. Falls back to defaults on error."""
         path = Path(path)
         if not path.exists():
@@ -103,7 +103,9 @@ class PolicyEngine:
                     continue
                 if priority[rule.action] > priority[worst]:
                     worst = rule.action
-                    reason = f"rule '{rule.name}': {det.category} (confidence {det.confidence:.0%})"
+                    reason = (
+                        f"rule '{rule.name}': {det.category} (confidence {det.confidence:.0%})"
+                    )
                 if worst is Action.BLOCK:
                     return worst, reason
 
@@ -115,9 +117,7 @@ class PolicyEngine:
             return False
         if rule.categories and det.category not in rule.categories:
             return False
-        if det.confidence < rule.min_confidence:
-            return False
-        return True
+        return not det.confidence < rule.min_confidence
 
 
 # Sensible defaults when no policy file is present.
@@ -127,9 +127,15 @@ _DEFAULT_RULES: list[Rule] = [
         detector="secret_scanner",
         action=Action.BLOCK,
         categories=[
-            "private_key", "aws_access_key", "aws_secret_key",
-            "connection_string", "github_token", "github_fine_grained",
-            "openai_key", "anthropic_key", "slack_token",
+            "private_key",
+            "aws_access_key",
+            "aws_secret_key",
+            "connection_string",
+            "github_token",
+            "github_fine_grained",
+            "openai_key",
+            "anthropic_key",
+            "slack_token",
         ],
         min_confidence=0.9,
     ),

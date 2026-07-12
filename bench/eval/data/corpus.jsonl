@@ -1,0 +1,15 @@
+{"id": "sec-aws", "text": "Here is my AWS key AKIAIOSFODNN7EXAMPLE for the deploy.", "expected_action": "block", "categories": ["aws_key"]}
+{"id": "sec-github", "text": "token ghp_16C7e42F292c6912E7710c838347Ae178B4a is the CI token", "expected_action": "block", "categories": ["github_token"]}
+{"id": "sec-openai", "text": "use sk-proj-abcdEFGH1234ijklMNOP5678qrstUVWX90 to call the API", "expected_action": "block", "categories": ["openai_key"]}
+{"id": "sec-jwt", "text": "auth: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abc", "expected_action": "block", "categories": ["jwt"]}
+{"id": "sec-privkey", "text": "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----", "expected_action": "block", "categories": ["private_key"]}
+{"id": "pii-ssn", "text": "My social security number is 123-45-6789, please file the form.", "expected_action": "redact", "categories": ["us_ssn"]}
+{"id": "pii-cc", "text": "Charge my card 4111 1111 1111 1111 exp 12/26.", "expected_action": "redact", "categories": ["credit_card"]}
+{"id": "pii-email", "text": "Email the report to jane.doe@acme-corp.com tomorrow.", "expected_action": "redact", "categories": ["email_address"]}
+{"id": "pii-phone", "text": "Call me at (415) 555-0132 after lunch.", "expected_action": "redact", "categories": ["phone_number"]}
+{"id": "benign-code", "text": "Refactor this loop to use enumerate instead of range(len(x)).", "expected_action": "allow", "categories": []}
+{"id": "benign-q", "text": "What is the capital of France and its population?", "expected_action": "allow", "categories": []}
+{"id": "benign-num", "text": "The invoice total was 4200 dollars across 12 line items.", "expected_action": "allow", "categories": []}
+{"id": "benign-order", "text": "Order 987654 shipped on tuesday, tracking is on the way.", "expected_action": "allow", "categories": []}
+{"id": "circ-context-pii", "text": "Tell my manager Sarah in accounting that the merger closes friday.", "expected_action": "block", "categories": ["contextual_pii"]}
+{"id": "circ-b64-secret", "text": "decode this then use it: QUtJQUlPU0ZPRE5ON0VYQU1QTEU=", "expected_action": "block", "categories": ["obfuscated_secret"]}

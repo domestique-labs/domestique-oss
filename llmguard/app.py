@@ -23,8 +23,8 @@ from __future__ import annotations
 import asyncio
 import copy
 import time
-from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator
+from contextlib import asynccontextmanager, suppress
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import structlog
@@ -39,11 +39,15 @@ from llmguard.debug_trace import (
     join_prompts,
     prompt_fields,
 )
-from llmguard.detectors import Detector
 from llmguard.detectors.registry import build_detectors
 from llmguard.models import Action, Detection
 from llmguard.policy import PolicyEngine
 from llmguard.transport import LLMProxy
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from llmguard.detectors import Detector
 
 logger = structlog.get_logger()
 
@@ -120,20 +124,20 @@ async def _handle_request(request: Request, *, endpoint: str) -> JSONResponse:
         body: dict[str, Any] = await request.json()
     except Exception:
         raw_body = ""
-        try:
+        with suppress(Exception):
             raw_body = (await request.body()).decode("utf-8", errors="replace")
-        except Exception:
-            pass
-        append_debug_trace({
-            "request_id": request_id,
-            "source": "api_proxy",
-            "direction": "outbound",
-            "action": "invalid_json",
-            "reason": "invalid JSON body",
-            "endpoint": endpoint,
-            "method": request.method,
-            "raw_body": raw_body,
-        })
+        append_debug_trace(
+            {
+                "request_id": request_id,
+                "source": "api_proxy",
+                "direction": "outbound",
+                "action": "invalid_json",
+                "reason": "invalid JSON body",
+                "endpoint": endpoint,
+                "method": request.method,
+                "raw_body": raw_body,
+            }
+        )
         return JSONResponse(
             status_code=400,
             content={"error": {"message": "Invalid JSON", "type": "invalid_request"}},
@@ -146,19 +150,21 @@ async def _handle_request(request: Request, *, endpoint: str) -> JSONResponse:
     texts = _extract_texts(body, endpoint)
     if not texts:
         latency_ms = (time.perf_counter() - t0) * 1000
-        append_debug_trace({
-            "request_id": request_id,
-            "source": "api_proxy",
-            "direction": "outbound",
-            "action": "pass",
-            "reason": "no scannable prompt content",
-            "endpoint": endpoint,
-            "method": request.method,
-            "model": model,
-            "user_id": user_id,
-            "latency_ms": round(latency_ms, 1),
-            "request_json": body,
-        })
+        append_debug_trace(
+            {
+                "request_id": request_id,
+                "source": "api_proxy",
+                "direction": "outbound",
+                "action": "pass",
+                "reason": "no scannable prompt content",
+                "endpoint": endpoint,
+                "method": request.method,
+                "model": model,
+                "user_id": user_id,
+                "latency_ms": round(latency_ms, 1),
+                "request_json": body,
+            }
+        )
         # No scannable content - forward immediately (zero overhead).
         return await _forward_and_respond(proxy, body, settings)
 
@@ -399,7 +405,9 @@ def _user_from_headers(request: Request) -> str:
     return "anonymous"
 
 
-async def _forward_and_respond(proxy: LLMProxy, body: dict[str, Any], settings: Settings) -> JSONResponse:
+async def _forward_and_respond(
+    proxy: LLMProxy, body: dict[str, Any], settings: Settings
+) -> JSONResponse:
     """Forward to upstream and handle errors according to fail-mode."""
     try:
         response = await proxy.forward(body)
@@ -409,7 +417,12 @@ async def _forward_and_respond(proxy: LLMProxy, body: dict[str, Any], settings: 
         if settings.fail_mode == "closed":
             return JSONResponse(
                 status_code=502,
-                content={"error": {"message": "Upstream unavailable (fail-closed mode)", "type": "upstream_error"}},
+                content={
+                    "error": {
+                        "message": "Upstream unavailable (fail-closed mode)",
+                        "type": "upstream_error",
+                    }
+                },
             )
         raise
 

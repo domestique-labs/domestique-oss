@@ -71,6 +71,7 @@ dev = [
     "httpx>=0.28,<1",
     "ruff>=0.8,<1",
     "mypy>=1.13,<2",
+    "pre-commit>=4,<5",
 ]
 
 [tool.ruff]
@@ -79,12 +80,58 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A", "SIM", "TCH"]
-ignore = ["ANN101", "ANN102", "ANN401", "S101"]
+ignore = ["ANN401", "S101"]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 warn_return_any = true
+
+[[tool.mypy.overrides]]
+# Third-party libraries used by llmguard that ship no type stubs / py.typed marker,
+# OR that live in optional extras not installed in the core `types` CI job (which
+# runs `pip install -e ".[dev]"` only). The core type gate must not depend on which
+# ML extras happen to be present in the environment.
+module = [
+    "yaml",
+    "sentence_transformers",
+    "sentence_transformers.*",
+    "gliner",
+    "gliner.*",
+    "numpy",
+    "numpy.*",
+    "spacy",
+    "spacy.*",
+    "presidio_analyzer",
+    "presidio_analyzer.*",
+    "presidio_anonymizer",
+    "presidio_anonymizer.*",
+    "torch",
+    "torch.*",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# app/ is a separate package, out of scope for this task (which covers llmguard/ only).
+# It surfaces here only because mypy follows llmguard's imports of it (llmguard/callback.py,
+# llmguard/sdk.py). Suppress errors originating in app/ itself without disabling type
+# checking of the llmguard code that uses it.
+module = ["app.*"]
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+# BASELINE: pre-existing type debt. Ratchet DOWN — never add modules here.
+# Remove a line once its module type-checks clean.
+module = [
+    "llmguard.debug_trace",
+    "llmguard.sdk",
+    "llmguard.detectors.local_llm",
+    "llmguard.audit",
+    "llmguard.transport",
+    "llmguard.detectors.pii",
+    "llmguard.detectors.registry",
+]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

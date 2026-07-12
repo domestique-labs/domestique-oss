@@ -37,10 +37,8 @@ logger = structlog.get_logger()
 def _is_apple_silicon() -> bool:
     """Detect Apple Silicon (M1/M2/M3/M4) for MLX model selection."""
     import platform
-    return (
-        platform.system() == "Darwin"
-        and platform.machine() in ("arm64", "aarch64")
-    )
+
+    return platform.system() == "Darwin" and platform.machine() in ("arm64", "aarch64")
 
 
 def _resolve_gemma_model() -> str:
@@ -97,7 +95,6 @@ Categories (pick one):
 - NONE: safe content, public knowledge, generic questions
 
 Respond with JSON: {"c":"<CATEGORY>","v":<0.0-1.0>}"""
-
 
 
 class LocalLLMClassifier:
@@ -171,7 +168,7 @@ class LocalLLMClassifier:
         all_detections: list[Detection] = []
         seen_categories: set[str] = set()
 
-        for i, chunk in enumerate(chunks):
+        for chunk in chunks:
             result = await self._classify(chunk)
             if result is None:
                 continue
@@ -264,28 +261,30 @@ class LocalLLMClassifier:
         import json
         import urllib.request
 
-        payload = json.dumps({
-            "model": self._model,
-            "messages": [
-                {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": text},
-            ],
-            "stream": False,
-            "think": False,
-            "keep_alive": "30m",
-            "options": {
-                "temperature": self._temperature,
-                "num_predict": self._max_tokens,
-                "num_ctx": 4096,
-                "top_k": 1,
-                "top_p": 0.1,
-            },
-            "stop": ["}"],
-        }).encode()
+        payload = json.dumps(
+            {
+                "model": self._model,
+                "messages": [
+                    {"role": "system", "content": self._system_prompt},
+                    {"role": "user", "content": text},
+                ],
+                "stream": False,
+                "think": False,
+                "keep_alive": "30m",
+                "options": {
+                    "temperature": self._temperature,
+                    "num_predict": self._max_tokens,
+                    "num_ctx": 4096,
+                    "top_k": 1,
+                    "top_p": 0.1,
+                },
+                "stop": ["}"],
+            }
+        ).encode()
 
         # Bypass system proxy to prevent deadlock when mitmproxy is active
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310  # trusted local base_url, not user input
             f"{self._base_url}/api/chat",
             data=payload,
             headers={"Content-Type": "application/json"},

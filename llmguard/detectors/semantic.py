@@ -136,7 +136,6 @@ class SemanticDetector:
         Uses Shannon entropy. Typical English text has entropy ~4.0 bits/char.
         Random/encrypted data has entropy ~5.5-6.0 bits/char.
         """
-        import math
 
         findings: list[Detection] = []
 
