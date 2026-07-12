@@ -403,9 +403,17 @@ class BrowserProxyService:
             **subprocess_group_kwargs(),
         )
 
-        # Wait for proxy to be ready (accept connections on the port)
+        # Wait for proxy to be ready (accept connections on the port).
+        # On a cold first-run the addon imports the full detection stack
+        # (torch/transformers/etc.), which can take well over 4s -- especially
+        # when it races the initial model warmup/GPU benchmark on a constrained
+        # machine. Poll generously (up to ~30s) and only fail if mitmdump
+        # actually dies; a slow-but-alive process must not be killed prematurely.
         import time
-        for attempt in range(20):  # Up to 4 seconds
+        readiness_timeout_s = 30
+        attempts = readiness_timeout_s * 5  # 0.2s per attempt
+        hinted = False
+        for attempt in range(attempts):
             time.sleep(0.2)
             proc = self._process  # snapshot; stop() may set _process=None concurrently
             if proc is None or proc.poll() is not None:
@@ -420,13 +428,22 @@ class BrowserProxyService:
                 raise RuntimeError(f"mitmdump exited immediately: {err}")
             if is_port_listening(self.PROXY_PORT):
                 break
+            if not hinted and attempt >= 20:  # ~4s in, still coming up
+                hinted = True
+                print(
+                    "  … browser proxy still starting "
+                    "(loading detection models, may take ~30s on first run)",
+                    flush=True,
+                )
         else:
-            # Process is alive but port not listening after 4s
+            # Alive but never bound within the timeout -- now it's a real failure.
             proc = self._process
             if proc is not None:
                 proc.terminate()
             self._process = None
-            raise RuntimeError("mitmdump started but not listening after 4s")
+            raise RuntimeError(
+                f"mitmdump started but not listening after {readiness_timeout_s}s"
+            )
 
         # Enable system proxy to route LLM traffic through us
         enable_system_proxy(port=self.PROXY_PORT)
