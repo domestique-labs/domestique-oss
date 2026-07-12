@@ -16,7 +16,18 @@ Security Model:
     - CA key is stored in ~/.llmguard/ca/ with 0600 permissions
     - CA cert is user-scoped (not system-wide unless IT deploys via MDM)
     - Proxy only binds to 127.0.0.1 (no external exposure)
-    - PAC file ensures minimal traffic routing
+    - System proxy configuration is PAC-only: we set AutoConfigURL (Windows)
+      / -setautoproxyurl (macOS) and ProxyEnable/-setautoproxystate, nothing
+      else. The PAC's FindProxyForURL only returns our proxy for domains in
+      INTERCEPTED_DOMAINS; every other host resolves to DIRECT. We do NOT
+      also configure a blanket ProxyServer / -setsecurewebproxy /
+      -setwebproxy, because that would route ALL HTTP/HTTPS traffic through
+      mitmproxy - breaking unrelated apps (IDEs, package managers, git,
+      corporate tools) whenever they don't trust our CA or mitmproxy isn't
+      running, and conflicting with any corporate proxy already configured.
+      Tools that don't evaluate the system PAC (some CLIs/daemons) are out
+      of scope for this browser-proxy path; point them at
+      http://127.0.0.1:<port> directly via the CLI-integration mode instead.
 """
 
 from __future__ import annotations
@@ -369,7 +380,28 @@ def enable_system_proxy(port: int = 8080) -> bool:
 
     success = False
     for interface in interfaces:
-        # Set PAC file - smart routing for domains
+        # PAC-only: this is the ONLY proxy setting we configure. The PAC file
+        # (generate_pac_file) routes just the domains in INTERCEPTED_DOMAINS
+        # through 127.0.0.1:{port}; every other host evaluates to DIRECT.
+        # We deliberately do NOT also call -setsecurewebproxy/-setwebproxy -
+        # those set a blanket system proxy that would route ALL HTTP/HTTPS
+        # traffic (Cursor's backend, pip, git, corporate tools, etc.) through
+        # mitmproxy, breaking those apps whenever they don't trust our CA or
+        # mitmproxy isn't running, and conflicting with any corporate proxy
+        # already configured on the machine.
+        #
+        # Tradeoff: some CLIs/daemons don't evaluate the system PAC at all
+        # (they read HTTP_PROXY/HTTPS_PROXY env vars or nothing). Those are
+        # intentionally NOT covered by this browser-proxy path - they should
+        # instead be pointed at our explicit local endpoint
+        # (http://127.0.0.1:{port}) via the CLI-integration mode. We do not
+        # add a blanket fallback to "catch" them.
+        #
+        # Note: some browsers may keep reusing already-open HTTP/2 connections
+        # made before the PAC took effect, appearing to bypass interception
+        # briefly. The existing guidance to restart the browser after
+        # enabling interception addresses this; it is a browser-side caching
+        # behavior, not something a blanket proxy is needed to fix.
         subprocess.run(
             ["networksetup", "-setautoproxyurl", interface, pac_url],
             capture_output=True,
@@ -378,30 +410,17 @@ def enable_system_proxy(port: int = 8080) -> bool:
             ["networksetup", "-setautoproxystate", interface, "on"],
             capture_output=True,
         )
-        # ALSO set explicit HTTPS proxy - ensures Safari can't bypass via
-        # connection pooling or HTTP/2 multiplexing on existing connections.
-        # mitmproxy passes non-LLM traffic through transparently.
-        subprocess.run(
-            ["networksetup", "-setsecurewebproxy", interface,
-             "127.0.0.1", str(port)],
-            capture_output=True,
-        )
-        subprocess.run(
-            ["networksetup", "-setwebproxy", interface,
-             "127.0.0.1", str(port)],
-            capture_output=True,
-        )
 
-    # Flush DNS cache and reset socket pool to force reconnection through proxy
+    # Flush DNS cache to force fresh lookups (PAC host resolution, etc.)
     subprocess.run(["dscacheutil", "-flushcache"], capture_output=True)
 
-    # Verify at least one interface has the proxy enabled
+    # Verify at least one interface has the PAC enabled
     for interface in interfaces:
         check = subprocess.run(
-            ["networksetup", "-getsecurewebproxy", interface],
+            ["networksetup", "-getautoproxyurl", interface],
             capture_output=True, text=True,
         )
-        if "Enabled: Yes" in check.stdout:
+        if pac_url in check.stdout and "Enabled: Yes" in check.stdout:
             success = True
             break
 
@@ -428,6 +447,10 @@ def disable_system_proxy() -> bool:
         return False
 
     for interface in interfaces:
+        # We only ever turn the PAC (autoproxy) on, so that's all we need to
+        # turn off. The securewebproxy/webproxy -off calls are kept as
+        # defensive no-ops in case an older LLMGuard version left one of
+        # those set on this machine (pre PAC-only fix).
         subprocess.run(
             ["networksetup", "-setsecurewebproxystate", interface, "off"],
             capture_output=True,

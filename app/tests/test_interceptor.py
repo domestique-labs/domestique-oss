@@ -11,7 +11,7 @@ Tests cover:
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 
@@ -20,6 +20,8 @@ from app.services.interceptor import (
     generate_pac_file,
     get_intercepted_domains,
     add_custom_domain,
+    enable_system_proxy,
+    disable_system_proxy,
     INTERCEPTED_DOMAINS,
 )
 from app.services.mitm_addon import (
@@ -238,3 +240,73 @@ class TestBrowserProxyService:
             results = svc.setup()
             assert results["ca_generated"] is True
             assert results["pac_generated"] is True
+
+
+# --- System Proxy Tests: PAC-only scoping (no blanket proxy) ---------
+#
+# These tests verify the fix for collateral damage caused by ALSO setting a
+# blanket system proxy (ProxyServer on Windows / -setsecurewebproxy and
+# -setwebproxy on macOS) in addition to the scoped PAC. Only the PAC-driven
+# AutoConfigURL / -setautoproxyurl path should be configured; non-AI traffic
+# must never be forced through mitmproxy.
+
+
+class TestMacOSSystemProxyPACOnly:
+    """macOS: enable/disable must be PAC-only (no blanket web proxy)."""
+
+    def _patch_platform(self, monkeypatch):
+        monkeypatch.setattr("app.services.interceptor.is_windows", lambda: False)
+        monkeypatch.setattr("app.services.interceptor.is_macos", lambda: True)
+        monkeypatch.setattr(
+            "app.services.interceptor._get_all_active_interfaces", lambda: ["Wi-Fi"]
+        )
+
+    def test_enable_sets_autoproxy_only_no_blanket_webproxy(
+        self, tmp_path, monkeypatch
+    ):
+        self._patch_platform(monkeypatch)
+        monkeypatch.setattr("app.services.interceptor.PAC_PATH", tmp_path / "proxy.pac")
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            if "-getautoproxyurl" in cmd:
+                result.stdout = (
+                    "URL: http://127.0.0.1:9876/proxy.pac\nEnabled: Yes\n"
+                )
+            else:
+                result.stdout = ""
+            return result
+
+        with patch("app.services.interceptor.subprocess.run", side_effect=fake_run):
+            result = enable_system_proxy(port=8080)
+
+        assert result is True
+        joined = [" ".join(c) for c in calls]
+        assert any("-setautoproxyurl" in c for c in joined)
+        assert any("-setautoproxystate" in c for c in joined)
+        # PAC-only: the blanket web proxy calls must never be issued.
+        assert not any("-setsecurewebproxy" in c for c in joined)
+        assert not any("-setwebproxy" in c for c in joined)
+
+    def test_disable_turns_off_autoproxy(self, monkeypatch):
+        self._patch_platform(monkeypatch)
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            result.stdout = ""
+            return result
+
+        with patch("app.services.interceptor.subprocess.run", side_effect=fake_run):
+            result = disable_system_proxy()
+
+        assert result is True
+        joined = [" ".join(c) for c in calls]
+        assert any("-setautoproxystate" in c and " off" in c for c in joined)
