@@ -166,6 +166,18 @@
     display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.65rem;
     font-weight: 600; background: rgba(239,68,68,0.12); color: var(--red); margin-right: 4px;
   }
+  .log-group-header { border-left: 3px solid var(--accent); }
+  .log-group-chevron { display: inline-block; margin-left: 6px; font-size: 0.65rem; color: var(--text-muted); transition: transform 0.2s ease; }
+  .log-group-header.open .log-group-chevron { transform: rotate(90deg); }
+  .log-group-count {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px;
+    font-size: 0.65rem; font-weight: 700; background: var(--surface2); color: var(--text-muted);
+  }
+  .log-group-children {
+    max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+    margin: 0 4px 0 18px; border-left: 2px solid var(--surface2); padding-left: 6px;
+  }
+  .log-group-children.open { max-height: 4000px; }
   .log-filter-bar { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
   .log-filter {
     font-size: 0.72rem !important; padding: 5px 12px !important; border-radius: 20px !important;
@@ -1495,11 +1507,44 @@ async function refreshLog() {
     if (newHash !== logArea.dataset.hash) {
       logArea.dataset.hash = newHash;
       logData = data.entries;
-      logArea.innerHTML = data.entries.map((e, i) => renderLogEntry(e, i)).join('');
+      const groups = groupLogEntries(data.entries);
+      logArea.innerHTML = groups.map((g, gi) => renderLogGroup(g, gi)).join('');
     }
   } catch (err) {
     logArea.innerHTML = emptyState('Cannot reach API server');
   }
+}
+
+// One user action in the browser (sending a chat message) fans out into
+// several proxied requests - the message itself plus background
+// autocomplete/title-generation calls. Rather than showing each as its own
+// row, consecutive log entries to the same host within a short window are
+// grouped into a single expandable row. This is purely presentational -
+// it does not change what gets logged server-side.
+const LOG_GROUP_WINDOW_MS = 10000;
+
+function groupLogEntries(entries) {
+  // `entries` is most-recent-first (see _handle_request_log in api.py).
+  const groups = [];
+  for (const entry of entries) {
+    const host = entry.host || '—';
+    const current = groups[groups.length - 1];
+    const prevEntry = current ? current.entries[current.entries.length - 1] : null;
+    if (current && current.host === host && withinGroupWindow(prevEntry, entry)) {
+      current.entries.push(entry);
+    } else {
+      groups.push({ host, entries: [entry] });
+    }
+  }
+  return groups;
+}
+
+function withinGroupWindow(a, b) {
+  if (!a || !b) return false;
+  const ta = Date.parse(a.ts || '');
+  const tb = Date.parse(b.ts || '');
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return false;
+  return Math.abs(ta - tb) <= LOG_GROUP_WINDOW_MS;
 }
 
 function emptyState(msg) {
@@ -1546,7 +1591,7 @@ function renderLogEntry(entry, idx) {
   }
 
   return `
-    <div class="log-entry${entryCls}" onclick="toggleLogDetail(${idx})">
+    <div class="log-entry${entryCls}" onclick="toggleLogDetail('${idx}')">
       <div class="log-icon">${icon}</div>
       <div class="log-main">
         <div class="log-host">${host} ${reasons}</div>
@@ -1574,6 +1619,53 @@ function toggleLogDetail(idx) {
     // Close all others
     document.querySelectorAll('.log-details.open').forEach(d => d.classList.remove('open'));
     if (!isOpen) el.classList.add('open');
+  }
+}
+
+// Renders one grouped-entry row. Groups of size 1 render exactly like a
+// normal (ungrouped) log entry - no behavior change for the common case.
+function renderLogGroup(group, gi) {
+  if (group.entries.length === 1) {
+    return renderLogEntry(group.entries[0], `${gi}-0`);
+  }
+
+  const counts = {};
+  group.entries.forEach(e => { counts[e.action] = (counts[e.action] || 0) + 1; });
+  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅' };
+  const anyBlocked = !!counts.blocked;
+  const icon = anyBlocked ? icons.blocked : (counts.redacted ? icons.redacted : (icons[group.entries[0].action] || '•'));
+  const summary = Object.entries(counts)
+    .map(([action, n]) => `${n} ${action}`)
+    .join(', ');
+  const time = group.entries[0].ts ? group.entries[0].ts.split('T')[1] || '' : '';
+  const groupCls = anyBlocked ? ' log-blocked' : '';
+  const badge = anyBlocked ? 'log-badge-blocked' : (counts.redacted ? 'log-badge-redacted' : 'log-badge-pass');
+  const groupId = `log-group-${gi}`;
+  const children = group.entries.map((e, ei) => renderLogEntry(e, `${gi}-${ei}`)).join('');
+
+  return `
+    <div class="log-entry log-group-header${groupCls}" id="log-group-header-${gi}" onclick="toggleLogGroup(${gi})">
+      <div class="log-icon">${icon}</div>
+      <div class="log-main">
+        <div class="log-host">${group.host}<span class="log-group-count">${group.entries.length} requests</span><span class="log-group-chevron">▶</span></div>
+        <div class="log-path">${summary}</div>
+      </div>
+      <div class="log-meta">
+        <span class="log-badge ${badge}">grouped</span>
+        <span class="log-time">${time}</span>
+      </div>
+    </div>
+    <div class="log-group-children" id="${groupId}">
+      ${children}
+    </div>`;
+}
+
+function toggleLogGroup(gi) {
+  const el = document.getElementById(`log-group-${gi}`);
+  const header = document.getElementById(`log-group-header-${gi}`);
+  if (el) {
+    el.classList.toggle('open');
+    if (header) header.classList.toggle('open');
   }
 }
 

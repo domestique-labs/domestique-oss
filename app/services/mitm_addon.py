@@ -519,6 +519,11 @@ class LLMGuardAddon:
                 {"Content-Type": "application/json"},
             )
             ctx.log.warn(f"BLOCKED request to {host}: {reasons}")
+            try:
+                from app.services.notifications import notify_block
+                notify_block(host)
+            except Exception:
+                logger.debug("Desktop notification failed", exc_info=True)
 
         elif result["action"] == "redact":
             self._stats["redacted"] += 1
