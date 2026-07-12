@@ -170,6 +170,8 @@ class AppDelegate(NSObject):
                 models_to_warm.append("gemma4:e2b-mlx" if _apple else "gemma4:e2b")
             if stack.get("qwen3_1_7b", False):
                 models_to_warm.append("qwen3:1.7b")
+            if stack.get("legacy_cpu", False):
+                models_to_warm.append("llama3.2:1b")
 
             for model in models_to_warm:
                 # Check if already loaded

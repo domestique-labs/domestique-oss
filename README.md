@@ -46,8 +46,18 @@ run.bat                                 # opens dashboard at http://127.0.0.1:98
 ```bash
 git clone https://github.com/majercakdavid/llmguard.git
 cd llmguard
-python3 scripts/install.py              # interactive: picks features + preset
-python3 -m app                          # opens dashboard at http://127.0.0.1:9876
+python3 scripts/install.py              # creates .venv, then picks features + preset
+./run.sh                                # opens dashboard at http://127.0.0.1:9876
+```
+
+`scripts/install.py` auto-creates a `.venv` and re-launches itself inside it
+before installing anything, so `pip install -e` never runs against the
+system Python (this avoids the `externally-managed-environment` error on
+PEP 668 distros like Debian 12+/Ubuntu 23.10+). `./run.sh` then picks up
+that same `.venv` automatically. If venv creation ever fails (e.g. the
+`python3-venv` package isn't installed), create one manually first:
+```bash
+python3 -m venv .venv && source .venv/bin/activate
 ```
 
 **Non-interactive (CI / headless):**
@@ -55,7 +65,10 @@ python3 -m app                          # opens dashboard at http://127.0.0.1:98
 python scripts/install.py --yes --features all --preset balanced
 ```
 
-Re-run the installer any time to add features or change presets.
+Re-run the installer any time to add features or switch to a different
+preset. It only *adds* — deselecting a previously-installed feature or
+preset on a later run does not uninstall it; remove it manually (e.g.
+`pip uninstall gliner`) if you want it gone.
 
 ### What gets installed
 
@@ -73,7 +86,8 @@ Re-run the installer any time to add features or change presets.
 |---|---|---|---|---|---|
 | `minimal` | Regex only | 0 | <1ms | 14% | Pattern matching, no LLM |
 | `balanced` | Regex + Qwen3 1.7B | 1.8 GB | ~164ms | 92% | Recommended - fits 16GB laptops |
-| `maximum` | Regex + GLiNER + Qwen3 | 1.8 GB | ~209ms | 91% recall | Highest recall, more false positives |
+| `quality` | Regex + GLiNER + Qwen3 | 1.8 GB | ~209ms | 91% recall | Highest recall, more false positives |
+| `legacy-cpu` | Regex + Llama 3.2 1B | 0 (CPU) | not yet benchmarked | not yet benchmarked | CPU-only fallback when no GPU is usable |
 
 Gemma 4 E2B is available as a manual toggle in the dashboard for 32GB+ machines.
 
@@ -81,7 +95,7 @@ Gemma 4 E2B is available as a manual toggle in the dashboard for 32GB+ machines.
 
 Once running, the dashboard is at **http://127.0.0.1:9876/** with:
 - Real-time request log (blocked / allowed / redacted)
-- Detection preset selector (Minimal / Balanced / Quality / Max Recall)
+- Detection preset selector (Minimal / Balanced / Quality / Legacy CPU)
 - Per-detector toggles (Regex, GLiNER, Gemma 4 E2B, Qwen3)
 - GLiNER entity label and confidence configuration
 - Benchmark runner (70-sample test suite)

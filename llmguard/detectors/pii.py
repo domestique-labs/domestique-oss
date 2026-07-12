@@ -38,7 +38,9 @@ class PIIDetector:
     minimal deployments.
     """
 
-    def __init__(self, *, confidence_threshold: float = 0.7, spacy_model: str = "en_core_web_lg") -> None:
+    def __init__(
+        self, *, confidence_threshold: float = 0.7, spacy_model: str = "en_core_web_lg"
+    ) -> None:
         self._threshold = confidence_threshold
         self._spacy_model = spacy_model
         self._analyzer: object | None = None

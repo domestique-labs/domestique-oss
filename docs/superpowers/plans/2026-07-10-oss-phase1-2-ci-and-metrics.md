@@ -255,6 +255,18 @@ git commit -m "ci: baseline-ratchet mypy and make it blocking on core"
 
 # PART B — Phase 2: Deterministic Metrics Harness (`bench/eval/`)
 
+> **Scope — what's real vs. substituted (read before implementing):**
+> The harness drives the **real** production code path — `create_app`, the real detector
+> pipeline, the real policy engine, the real `LLMProxy`/litellm transport, over a **real**
+> uvicorn socket. The **only** thing substituted is the **upstream LLM provider**, and that is
+> done by env-redirect (`OPENAI_API_BASE`), *not* by monkeypatching any internal function.
+> Two deliberate scope limits: **(1)** heavy detector tiers are *configured off* via real config
+> flags (regex-only gate) — real code, reduced profile, not a mock; **(2)** this exercises the
+> **API-proxy entry point only** (`llmguard/app.py`). The browser-MITM path, system-proxy
+> registration, CA trust, real traffic interception, and the desktop app are **out of scope here**
+> — they are covered by Phase 3's two-ring VM E2E, not this plan.
+
+
 **File structure (all new):**
 - `bench/eval/__init__.py` — package marker + public exports
 - `bench/eval/corpus.py` — `CorpusRow`, `load_corpus`, `corpus_checksum`

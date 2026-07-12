@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -24,7 +24,7 @@ def append_debug_trace(entry: dict[str, Any], *, path: Path | None = None) -> No
         trace_path = path or TRACE_PATH
         trace_path.parent.mkdir(parents=True, exist_ok=True)
         event = {
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             **entry,
             "raw_prompt_logged": True,
         }
@@ -68,8 +68,7 @@ def read_debug_trace(
 def prompt_fields(texts: list[tuple[str, str]]) -> list[dict[str, Any]]:
     """Convert extracted text tuples into trace-friendly prompt fields."""
     return [
-        {"field_path": field_path, "text": text, "length": len(text)}
-        for field_path, text in texts
+        {"field_path": field_path, "text": text, "length": len(text)} for field_path, text in texts
     ]
 
 
@@ -83,16 +82,18 @@ def detection_fields(detections: list[Any]) -> list[dict[str, Any]]:
     fields: list[dict[str, Any]] = []
     for detection in detections:
         span = getattr(detection, "span", None)
-        fields.append({
-            "detector": getattr(detection, "detector", ""),
-            "category": getattr(detection, "category", ""),
-            "confidence": getattr(detection, "confidence", None),
-            "field_path": getattr(detection, "field_path", ""),
-            "span": {
-                "start": getattr(span, "start", None),
-                "end": getattr(span, "end", None),
-            },
-        })
+        fields.append(
+            {
+                "detector": getattr(detection, "detector", ""),
+                "category": getattr(detection, "category", ""),
+                "confidence": getattr(detection, "confidence", None),
+                "field_path": getattr(detection, "field_path", ""),
+                "span": {
+                    "start": getattr(span, "start", None),
+                    "end": getattr(span, "end", None),
+                },
+            }
+        )
     return fields
 
 

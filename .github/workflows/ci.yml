@@ -34,10 +34,42 @@ jobs:
       - name: Run tests
         run: pytest -q
 
-  lint:
-    # Informational for now: the repo carries pre-existing lint/type debt.
-    # Burn it down, then flip continue-on-error to false to make these blocking.
-    name: Lint & types (informational)
+  lint-core:
+    name: Lint & format (core, blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (core + dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Ruff (lint, core)
+        run: ruff check llmguard
+      - name: Ruff (format check, core)
+        run: ruff format --check llmguard
+
+  types:
+    name: Types (core, blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install (core + dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Mypy (core, baseline-ratcheted)
+        run: mypy llmguard
+
+  lint-app:
+    name: Lint (app, informational)
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
@@ -50,9 +82,5 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-      - name: Ruff (lint)
-        run: ruff check llmguard app
-      - name: Ruff (format check)
-        run: ruff format --check llmguard app
-      - name: Mypy (core package)
-        run: mypy llmguard
+      - name: Ruff (lint, app)
+        run: ruff check app
