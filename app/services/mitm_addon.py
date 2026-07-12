@@ -47,6 +47,78 @@ if str(PROJECT_ROOT) not in sys.path:
 logger = logging.getLogger("llmguard.mitm")
 
 
+# --- Hardware-aware detection profile ---------------------------------------
+#
+# Weak hardware (no usable GPU and/or low RAM) must never be asked to build
+# the heavy in-process tiers (GLiNER, semantic embeddings, local-LLM warmup)
+# synchronously at startup -- that's exactly what makes cold binds slow and
+# risks OOM on the addon process. Below that threshold we fall back to a
+# light, regex-only profile (SecretDetector is pure regex: <1ms, zero model
+# load) unless the user explicitly opted into a heavier tier.
+
+_LOW_RAM_THRESHOLD_GB = 8.0
+_MIN_USABLE_VRAM_GB = 2.0
+
+# Mirrors app.config.schema.DetectionStackConfig's own field defaults. Used
+# to distinguish "the user explicitly turned this on" from "this is just the
+# dataclass default that got serialized to config.json" -- the same
+# ambiguity already documented on AppConfig.browser_interception_configured
+# (to_dict() always serializes every field, so key *presence* in config.json
+# proves nothing about intent; only a value that *differs* from the safe
+# default is real signal).
+_STACK_SAFE_DEFAULTS = {
+    "regex": True,
+    "gliner_pii": False,
+    "openai_privacy_filter": False,
+    "gemma4_e2b": False,
+    "qwen3_1_7b": True,
+    "legacy_cpu": False,
+}
+
+
+def _detect_low_resource_hardware() -> bool:
+    """True if this machine is weak enough to warrant the light profile.
+
+    Reuses the existing stdlib/ctypes RAM probe and nvidia-smi/Apple-Silicon
+    VRAM probe from ``scripts/install.py`` instead of re-implementing
+    hardware detection. Fails toward "capable" (False) on any detection
+    error -- a detection glitch must never silently narrow security
+    coverage; the light profile is an intentional, logged trade-off, not
+    something that should kick in by accident.
+    """
+    try:
+        from scripts.install import detect_gpu, detect_total_ram_gb
+
+        ram_gb = detect_total_ram_gb()
+        _gpu_name, vram_gb = detect_gpu()
+    except Exception:
+        return False
+
+    low_ram = ram_gb > 0 and ram_gb < _LOW_RAM_THRESHOLD_GB
+    no_gpu = vram_gb < _MIN_USABLE_VRAM_GB
+    return bool(low_ram or no_gpu)
+
+
+def _light_profile_stack(stack: dict) -> dict:
+    """Down-convert a raw ``detection_stack`` dict to regex-only, preserving
+    any field the user explicitly opted into (value True, differing from
+    that field's safe default -- see ``_STACK_SAFE_DEFAULTS``).
+
+    ``qwen3_1_7b`` defaults True in the dataclass, so a True value there
+    never counts as "explicit" (it's indistinguishable from having never
+    touched the dashboard) -- on low-resource hardware it is switched off
+    along with the other heavy tiers unless the user separately enabled a
+    different heavy detector.
+    """
+    light = {"regex": bool(stack.get("regex", _STACK_SAFE_DEFAULTS["regex"]))}
+    for key, default in _STACK_SAFE_DEFAULTS.items():
+        if key == "regex":
+            continue
+        value = stack.get(key, default)
+        light[key] = bool(value is True and default is False)
+    return light
+
+
 class _InspectResult:
     """Result from running the detection pipeline on a text."""
 
@@ -121,6 +193,7 @@ class LLMGuardAddon:
         self._detector_ready = threading.Event()
         self._detector_ready.set()
         self._detector_init_error: Exception | None = None
+        self._light_profile_active = False
 
     def _persist_stats(self):
         """Write stats to a shared file for the dashboard to read."""
@@ -313,7 +386,12 @@ class LLMGuardAddon:
         config changes (hot-reload path in ``_inspect()``).
 
         Uses the shared pipeline_config helper for consistent Settings
-        construction between API and mitm processes.
+        construction between API and mitm processes. On low-resource
+        hardware (no usable GPU and/or low RAM), gates the heavy in-process
+        tiers (GLiNER, local LLM) down to a light, regex-only profile so the
+        pipeline builds near-instantly and never OOMs -- see
+        ``_resolve_hardware_profile``. The user's explicit choices are never
+        silently overridden; an auto-selected light profile is logged.
         """
         import os
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -321,13 +399,61 @@ class LLMGuardAddon:
         from app.services.pipeline_config import settings_from_config, config_hash, load_config_dict
         from llmguard.detectors.registry import create_detector_pipeline
 
-        config = load_config_dict()
-        settings = settings_from_config(config)
+        raw_config = load_config_dict()
+        effective_config, profile_note = self._resolve_hardware_profile(raw_config)
+
+        settings = settings_from_config(effective_config)
         self._detector = create_detector_pipeline(settings)
-        self._config_hash = config_hash(config)
+        # Hash the RAW config, not the hardware-adjusted one: _inspect()'s
+        # hot-reload check always hashes a fresh load_config_dict(), so
+        # comparing against a hash of the adjusted config would spuriously
+        # detect a "change" (and rebuild) on every single request.
+        self._config_hash = config_hash(raw_config)
 
         names = [d.name for d in self._detector._detectors]
         ctx.log.info(f"Detection pipeline: {', '.join(names)}")
+        self._light_profile_active = profile_note is not None
+        if profile_note:
+            ctx.log.warn(profile_note)
+
+    def _hardware_is_low_resource(self) -> bool:
+        """Cache the hardware-resource determination for this process's
+        lifetime -- hardware doesn't change at runtime, and GPU probing can
+        shell out to nvidia-smi, so there's no need to repeat that work on
+        every config hot-reload."""
+        if not hasattr(self, "_low_resource_cache"):
+            self._low_resource_cache = _detect_low_resource_hardware()
+        return self._low_resource_cache
+
+    def _resolve_hardware_profile(self, config: dict) -> tuple[dict, str | None]:
+        """Return ``(effective_config, profile_note)``.
+
+        On capable hardware, returns *config* unchanged (full/config-
+        respecting stack) and ``profile_note`` is ``None``.
+
+        On low-resource hardware, returns a copy of *config* with
+        ``detection_stack`` down-converted to regex-only (see
+        ``_light_profile_stack``) plus a human-readable note to log -- unless
+        the resulting stack is identical to what was already configured (a
+        user who already runs regex-only sees no note), in which case
+        ``profile_note`` is ``None`` too.
+        """
+        if not self._hardware_is_low_resource():
+            return config, None
+
+        stack = dict(config.get("detection_stack", {}))
+        light_stack = _light_profile_stack(stack)
+        if light_stack == stack:
+            return config, None
+
+        effective = dict(config)
+        effective["detection_stack"] = light_stack
+        note = (
+            "interceptor running light profile: regex-only - low-resource "
+            "machine detected (no usable GPU and/or low RAM); enable heavier "
+            "detection tiers (GLiNER / local LLM) in the dashboard if desired"
+        )
+        return effective, note
 
     def _warmup_llm(self):
         """Pre-load Ollama model so first request doesn't block."""
