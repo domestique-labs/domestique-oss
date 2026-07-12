@@ -178,12 +178,17 @@ def _launch_macos(*, api_port: int) -> None:
 
 
 def _ensure_cert_generated_portable() -> None:
-    """Generate the CA (if missing) before the portable dashboard opens.
+    """Generate + trust the CA before the portable dashboard opens.
 
     Portable mode (Windows/Linux) has no equivalent of the macOS
     ``AppDelegate._ensure_cert_trusted()`` bootstrap step, so a fresh
     install's CA was never generated and the dashboard's cert-install gate
-    had nothing to install (see audit finding C1).
+    had nothing to install (audit finding C1). Fixing generation alone
+    left a twin gap (audit finding C7): the CA was created but never
+    installed into the OS trust store, so every intercepted HTTPS site
+    threw ``ERR_CERT_AUTHORITY_INVALID``. This function now mirrors
+    ``AppDelegate._ensure_cert_trusted()`` end-to-end: generate, then
+    trust.
 
     ``BrowserProxyService.setup()`` -> ``interceptor.generate_ca()`` is
     idempotent: it returns immediately without touching the files if a CA
@@ -191,6 +196,25 @@ def _ensure_cert_generated_portable() -> None:
     ``CA_CERT_PATH``/``CA_KEY_PATH`` are both present), so calling this
     unconditionally on every launch never regenerates or overwrites an
     existing CA.
+
+    Trust is likewise gated on ``cert_manager.is_cert_trusted()`` so an
+    already-trusted CA is never redundantly reinstalled. On Windows this
+    is ``certutil -user -addstore Root`` -- scoped to
+    ``HKCU\\Software\\Microsoft\\SystemCertificates``, so no admin
+    privileges are needed, exactly like macOS's user-keychain trust
+    import. Trust failures are logged but never fatal: startup must keep
+    going, and the dashboard's own "Install Certificate" button /
+    ``fix-cert.ps1``/``fix-cert.sh`` remain available as a fallback.
+
+    Linux has no automatic trust-store implementation at all yet (that's
+    audit finding C2, out of scope here): ``cert_manager.install_and_trust()``
+    only handles ``darwin``/``win32`` and returns ``False`` for anything
+    else without attempting anything, and ``cert_manager.is_cert_trusted()``
+    hardcodes ``True`` for Linux as a "best effort" stand-in rather than a
+    real check. Left alone, that combination would make this function look
+    like a no-op success on Linux while nothing was actually trusted. We
+    special-case Linux below to print an honest "trust not verified /
+    manual step needed" message instead of silently claiming success.
     """
     try:
         from app.server.api import get_browser_proxy_service
@@ -201,6 +225,37 @@ def _ensure_cert_generated_portable() -> None:
             svc.setup()
     except Exception as exc:
         print(f"  ⚠ Certificate setup failed: {exc}")
+        return
+
+    try:
+        from app.services import cert_manager
+
+        if not cert_manager.is_cert_trusted():
+            print(
+                "▶ Trusting certificate authority "
+                "(adds to OS trust store; no admin needed on Windows)..."
+            )
+            if cert_manager.install_and_trust():
+                print("  ✓ Certificate trusted — HTTPS interception will work without browser warnings.")
+            elif sys.platform.startswith("linux"):
+                print("  ⚠ Automatic trust isn't implemented on Linux yet (manual trust needed).")
+                print("    Browsers will show cert warnings for intercepted sites until you run")
+                print("    fix-cert.sh, or install the CA into your browser/NSS store manually.")
+            else:
+                print("  ⚠ Certificate trust did not complete automatically.")
+                print("    Use the dashboard's 'Install Certificate' button, or run")
+                print("    fix-cert.ps1 / fix-cert.sh, to finish setup manually.")
+        elif sys.platform.startswith("linux"):
+            # is_cert_trusted() is a hardcoded best-effort True on Linux --
+            # it does not actually check any trust store (audit C2). Make
+            # that limitation visible instead of silently implying the CA
+            # is verified-trusted the same way it is on Windows/macOS.
+            print("  i Certificate generated. Linux trust verification is best-effort only;")
+            print("    if browsers show cert warnings, run fix-cert.sh (manual trust needed).")
+    except Exception as exc:
+        # Trust failures must never crash startup -- the dashboard's own
+        # cert gate / Install Certificate button remains a working fallback.
+        print(f"  ⚠ Certificate trust step failed: {exc}")
 
 
 def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
