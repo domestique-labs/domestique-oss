@@ -67,6 +67,24 @@ class AppConfig:
     browser_interception: bool = False
     """Whether to intercept browser/native app traffic to LLM endpoints."""
 
+    browser_interception_configured: bool = False
+    """Whether `browser_interception` has ever been explicitly set (by the
+    user, via the dashboard/tray, or by portable's own first-run
+    bootstrap) rather than left at its dataclass default.
+
+    `to_dict()`/`ConfigStore._write()` always serialize every field,
+    including defaults, so `browser_interception: false` is written to
+    disk on the very first save -- there is no way to tell "never touched"
+    from "explicitly turned off" just by reading `browser_interception`
+    itself. This flag makes that distinction so portable mode can
+    auto-enable interception exactly once on a fresh install (audit C6)
+    without ever overriding a user who later turns it off on purpose.
+
+    Native (macOS) mode ignores this flag entirely -- it starts browser
+    protection unconditionally on every launch instead of treating
+    `browser_interception` as a persisted user preference.
+    """
+
     browser_proxy_port: int = 8080
     """Port for the HTTPS interception proxy (mitmproxy)."""
 
@@ -168,5 +186,18 @@ class AppConfig:
         if valid_fields.get("llm_preset") == "legacy-cpu" and not stack.legacy_cpu:
             stack.legacy_cpu = True
             stack.qwen3_1_7b = False
+
+        # Migration: any config.json written before `browser_interception_configured`
+        # existed has no such key. ConfigStore.load() only ever calls
+        # from_dict() when a config.json already exists on disk -- a
+        # brand-new install builds AppConfig() directly (see
+        # ConfigStore.load()), so reaching this branch without the key
+        # means "pre-existing config file, not a fresh install." Treat
+        # those as already configured so portable's C6 first-run
+        # auto-enable (app/main.py::_auto_start_proxies) never overrides
+        # whatever `browser_interception` value is already on disk --
+        # including a user's explicit choice to turn it off.
+        if "browser_interception_configured" not in data:
+            valid_fields["browser_interception_configured"] = True
 
         return cls(detection_stack=stack, **valid_fields)

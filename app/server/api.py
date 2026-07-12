@@ -691,6 +691,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 _browser_proxy_service.start()
                 config = ConfigStore.current()
                 config.browser_interception = True
+                config.browser_interception_configured = True
                 ConfigStore.save(config)
                 self._send_json({"ok": True})
             except RuntimeError as e:
@@ -700,6 +701,7 @@ class APIHandler(BaseHTTPRequestHandler):
             _browser_proxy_service.stop()
             config = ConfigStore.current()
             config.browser_interception = False
+            config.browser_interception_configured = True
             ConfigStore.save(config)
             self._send_json({"ok": True})
 

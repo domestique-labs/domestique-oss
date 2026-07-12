@@ -628,7 +628,8 @@
       <h2><span class="icon">🌐</span> Browser Protection</h2>
       <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px">
         Intercepts HTTPS traffic to LLM services and scans for sensitive data in real-time.
-        Protection is always-on when LLMGuard is running.
+        Starts automatically on first launch. Status below reflects whether it's
+        actually running right now, not a fixed claim.
       </p>
       <div class="detector-list">
         <li class="detector-item">
@@ -1070,7 +1071,9 @@ async function toggleProxy() {
   }
 }
 
-// Browser protection is always-on — no manual toggle needed
+// Browser protection auto-starts on first launch (portable) or app start
+// (macOS); there is still no manual UI toggle here, but the status poll
+// above reflects real running/trust state rather than asserting "always-on".
 
 // Toggle event listeners — only save config, don't restart proxy yet
 document.querySelectorAll('[data-detector]').forEach(toggle => {
@@ -1241,14 +1244,30 @@ setInterval(async () => {
       sbToggle.textContent = isActive ? 'Disable' : 'Enable';
       sbToggle.parentElement.style.background = isActive ? 'var(--red)' : 'var(--green)';
 
-      // Update browser protection card if it exists
+      // Update browser protection card if it exists. This reflects the
+      // real :8080 interceptor + cert-trust state (status.browser_proxy_running,
+      // status.cert_trusted) rather than the combined SDK+browser `isActive`
+      // flag above, so the card can't claim "always-on" while the browser
+      // interceptor is actually stopped or its CA is untrusted (audit C6).
       const bStatus = document.getElementById('browserStatus');
       const indicator = document.getElementById('protectionIndicator');
+      const browserActive = !!status.browser_proxy_running;
+      const browserTrusted = !!status.cert_trusted;
       if (bStatus) {
-        bStatus.textContent = isActive ? 'Active — intercepting LLM traffic' : 'Disabled';
-        bStatus.style.color = isActive ? 'var(--green)' : 'var(--red)';
+        if (browserActive && browserTrusted) {
+          bStatus.textContent = 'Active — intercepting LLM traffic';
+          bStatus.style.color = 'var(--green)';
+        } else if (browserActive && !browserTrusted) {
+          bStatus.textContent = 'Running, but CA not trusted — browsers will show cert warnings';
+          bStatus.style.color = 'var(--yellow)';
+        } else {
+          bStatus.textContent = 'Disabled';
+          bStatus.style.color = 'var(--red)';
+        }
       }
-      if (indicator) indicator.textContent = isActive ? '🟢' : '🔴';
+      if (indicator) {
+        indicator.textContent = browserActive ? (browserTrusted ? '🟢' : '🟡') : '🔴';
+      }
     }
     // Fetch browser proxy stats
     const bpRes = await fetch(`${API}/api/browser-proxy`);

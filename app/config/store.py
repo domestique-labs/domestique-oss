@@ -92,6 +92,15 @@ class ConfigStore:
             else:
                 current_dict[key] = value
 
+        # Any explicit write of `browser_interception` through this generic
+        # endpoint counts as the user configuring it -- see
+        # AppConfig.browser_interception_configured (audit C6). Without
+        # this, a future UI toggle that goes through /api/config instead
+        # of /api/browser-proxy/start|stop could get silently re-flipped
+        # by portable's first-run auto-enable on the next launch.
+        if "browser_interception" in data:
+            current_dict["browser_interception_configured"] = True
+
         config = AppConfig.from_dict(current_dict)
         cls.save(config)
         return config

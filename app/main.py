@@ -738,6 +738,7 @@ def _start_system_tray(api_port: int):
                 bp.stop()
             config.proxy_enabled = False
             config.browser_interception = False
+            config.browser_interception_configured = True
             ConfigStore.save(config)
         else:
             try:
@@ -795,6 +796,23 @@ def _auto_start_proxies() -> None:
                 print("▶ Firewall proxy auto-started (port %d)" % config.proxy_port)
             except Exception as exc:
                 print(f"  ⚠ Firewall proxy auto-start failed: {exc}")
+
+    # First-run: browser interception has never been explicitly configured
+    # (see AppConfig.browser_interception_configured). Auto-enable it once
+    # so the "paste a secret -> see it blocked" browser demo actually
+    # works out of the box on portable mode, matching macOS's always-on
+    # default (audit C6). This relies on the CA already being generated
+    # and trusted by _ensure_cert_generated_portable() -- which
+    # _launch_portable calls synchronously, before this function's thread
+    # is even started -- otherwise the user would just trade "nothing
+    # happens" for ERR_CERT_AUTHORITY_INVALID on every intercepted site.
+    # Once a user (or this bootstrap) has explicitly set the flag, it is
+    # marked configured and this block never fires again -- an explicit
+    # "off" is always respected on subsequent launches.
+    if not config.browser_interception_configured:
+        config.browser_interception = True
+        config.browser_interception_configured = True
+        ConfigStore.save(config)
 
     if config.browser_interception:
         bp = get_browser_proxy_service()
