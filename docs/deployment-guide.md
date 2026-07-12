@@ -211,7 +211,7 @@ tail -f logs/audit.jsonl | jq .
 - [ ] DNS-over-HTTPS disabled on managed devices
 - [ ] Proxy API keys stored in secrets manager (Vault, etc.)
 - [ ] Audit logs forwarded to SIEM
-- [ ] Fail-closed mode enabled (`LLM_FIREWALL_FAIL_MODE=closed`)
+- [ ] Fail-closed mode enabled (`LLMGUARD_FAIL_MODE=closed`)
 - [ ] Regular policy reviews scheduled
 - [ ] Proxy containers scanned for vulnerabilities
 - [ ] Access to proxy admin API restricted to security team

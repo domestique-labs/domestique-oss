@@ -45,8 +45,28 @@ def launch(
     _launch_portable(api_port=api_port, open_dashboard=open_dashboard)
 
 
+def _configure_console_utf8() -> None:
+    """Make console output UTF-8 safe on every platform.
+
+    Windows consoles default to cp1252 and raise UnicodeEncodeError on the status
+    glyphs LLMGuard prints (e.g. the certificate-setup messages). The macOS launch
+    path already did this; doing it here in ``main()`` also covers the portable
+    Windows/Linux path, which otherwise crashes on first-run output.
+    """
+    import os
+
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point used by ``python -m app``."""
+    _configure_console_utf8()
     parser = argparse.ArgumentParser(description="Launch LLMGuard")
     parser.add_argument(
         "--mode",
@@ -157,6 +177,32 @@ def _launch_macos(*, api_port: int) -> None:
     ns_app.run()
 
 
+def _ensure_cert_generated_portable() -> None:
+    """Generate the CA (if missing) before the portable dashboard opens.
+
+    Portable mode (Windows/Linux) has no equivalent of the macOS
+    ``AppDelegate._ensure_cert_trusted()`` bootstrap step, so a fresh
+    install's CA was never generated and the dashboard's cert-install gate
+    had nothing to install (see audit finding C1).
+
+    ``BrowserProxyService.setup()`` -> ``interceptor.generate_ca()`` is
+    idempotent: it returns immediately without touching the files if a CA
+    already exists (see ``generate_ca()``'s early-return when
+    ``CA_CERT_PATH``/``CA_KEY_PATH`` are both present), so calling this
+    unconditionally on every launch never regenerates or overwrites an
+    existing CA.
+    """
+    try:
+        from app.server.api import get_browser_proxy_service
+
+        svc = get_browser_proxy_service()
+        if not svc.is_setup:
+            print("▶ First-time setup: generating certificate authority...")
+            svc.setup()
+    except Exception as exc:
+        print(f"  ⚠ Certificate setup failed: {exc}")
+
+
 def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     """Launch the portable browser-dashboard experience."""
     ConfigStore.load()
@@ -168,6 +214,13 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     import app.server.api as _api
     _api._startup_state["phase"] = "ready"
     _api._startup_state["detail"] = ""
+
+    # First-time setup: generate the CA (BEFORE opening the browser). This
+    # mirrors AppDelegate._ensure_cert_trusted() on macOS. Without this,
+    # portable mode (Windows/Linux) never generates a CA on a fresh install,
+    # so the dashboard's cert-install gate has nothing to install and the
+    # user is stuck at the gate forever.
+    _ensure_cert_generated_portable()
 
     # Ensure Ollama is available and the configured model is ready.
     import threading
