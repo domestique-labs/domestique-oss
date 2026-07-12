@@ -267,6 +267,8 @@ class LLMGuardAddon:
             model = _resolve_gemma_model()
         elif stack.get("qwen3_1_7b", True):
             model = "qwen3:1.7b"
+        elif stack.get("legacy_cpu", False):
+            model = "llama3.2:1b"
         if not model:
             return
 

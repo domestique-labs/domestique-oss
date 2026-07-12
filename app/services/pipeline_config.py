@@ -66,6 +66,7 @@ def settings_from_config(config: dict | None = None):
     llm_on = (
         stack.get("gemma4_e2b", False)
         or stack.get("qwen3_1_7b", False)
+        or stack.get("legacy_cpu", False)
     )
     settings.enable_local_llm = llm_on
     if stack.get("gemma4_e2b"):
@@ -73,6 +74,8 @@ def settings_from_config(config: dict | None = None):
         settings.local_llm_model = _resolve_gemma_model()
     elif stack.get("qwen3_1_7b"):
         settings.local_llm_model = "qwen3:1.7b"
+    elif stack.get("legacy_cpu"):
+        settings.local_llm_model = "llama3.2:1b"
 
     if config.get("classifier_prompt"):
         settings.local_llm_system_prompt = config["classifier_prompt"]

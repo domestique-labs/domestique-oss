@@ -145,6 +145,27 @@ class TestProxyService:
         env = mock_popen.call_args[1]["env"]
         assert env["LLMGUARD_ENABLE_LOCAL_LLM"] == "false"
 
+    @patch("subprocess.Popen")
+    def test_build_env_legacy_cpu(self, mock_popen):
+        """The legacy-cpu stack flag must resolve to the model the installer
+        actually pulls (llama3.2:1b), not qwen3:1.7b (C4)."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+
+        config = AppConfig()
+        config.detection_stack.qwen3_1_7b = False
+        config.detection_stack.gemma4_e2b = False
+        config.detection_stack.legacy_cpu = True
+
+        svc = ProxyService()
+        with patch("builtins.open", mock_open()):
+            svc.start(config)
+
+        env = mock_popen.call_args[1]["env"]
+        assert env["LLMGUARD_LOCAL_LLM_MODEL"] == "llama3.2:1b"
+        assert env["LLMGUARD_ENABLE_LOCAL_LLM"] == "true"
+
 
 # --- Benchmark Service Tests -----------------------------------------
 

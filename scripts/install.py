@@ -33,9 +33,9 @@ PRESET_TO_STACK_KEY: dict[str, str] = {
     "minimal": "qwen3_1_7b",
     "balanced": "gemma4_e2b",
     "quality": "gemma4_e2b",
-    "legacy-cpu": "qwen3_1_7b",
+    "legacy-cpu": "legacy_cpu",
 }
-ALL_LLM_STACK_KEYS = ("gemma4_e2b", "qwen3_1_7b")
+ALL_LLM_STACK_KEYS = ("gemma4_e2b", "qwen3_1_7b", "legacy_cpu")
 
 FEATURE_EXTRAS: dict[str, dict[str, object]] = {
     "pii": {
@@ -311,7 +311,7 @@ def align_dashboard_config(preset: str) -> tuple[bool, str]:
         data = {}
 
     changed = False
-    valid_literals = {"minimal", "balanced", "quality"}
+    valid_literals = {"minimal", "balanced", "quality", "legacy-cpu"}
     if preset in valid_literals and data.get("llm_preset") != preset:
         data["llm_preset"] = preset
         changed = True

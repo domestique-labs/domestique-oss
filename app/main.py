@@ -398,6 +398,8 @@ def _ensure_ollama() -> None:
         model = _resolve_gemma_model()
     elif stack.qwen3_1_7b:
         model = "qwen3:1.7b"
+    elif stack.legacy_cpu:
+        model = "llama3.2:1b"
     if not model:
         return
 

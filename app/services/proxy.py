@@ -150,7 +150,7 @@ class ProxyService:
         env["LLMGUARD_FAIL_MODE"] = config.fail_mode
 
         stack = config.detection_stack
-        has_llm = stack.qwen3_1_7b or stack.gemma4_e2b
+        has_llm = stack.qwen3_1_7b or stack.gemma4_e2b or stack.legacy_cpu
         env["LLMGUARD_ENABLE_LOCAL_LLM"] = str(has_llm).lower()
         env["LLMGUARD_ENABLE_SECRET_DETECTION"] = str(stack.regex).lower()
 
@@ -160,6 +160,8 @@ class ProxyService:
             env["LLMGUARD_LOCAL_LLM_MODEL"] = _resolve_gemma_model()
         elif stack.qwen3_1_7b:
             env["LLMGUARD_LOCAL_LLM_MODEL"] = "qwen3:1.7b"
+        elif stack.legacy_cpu:
+            env["LLMGUARD_LOCAL_LLM_MODEL"] = "llama3.2:1b"
 
         return env
 
