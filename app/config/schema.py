@@ -29,6 +29,10 @@ class DetectionStackConfig:
     qwen3_1_7b: bool = True
     """Tier 3: Qwen3 1.7B via Ollama. ~163ms. 1.8GB VRAM. Default - fits 16GB laptops."""
 
+    legacy_cpu: bool = False
+    """Tier 3: Llama 3.2 1B via Ollama. CPU-only fallback, ~2GB RAM. Used by the
+    installer's 'legacy-cpu' preset for machines with no usable GPU."""
+
 
 
 @dataclass
@@ -48,7 +52,7 @@ class AppConfig:
     detection_stack: DetectionStackConfig = field(default_factory=DetectionStackConfig)
     """Active detectors configuration."""
 
-    llm_preset: Literal["minimal", "balanced", "quality", "maximum"] = "balanced"
+    llm_preset: Literal["minimal", "balanced", "quality", "legacy-cpu"] = "balanced"
     """Hardware preset controlling which models are loaded."""
 
     fail_mode: Literal["open", "closed"] = "closed"
@@ -152,4 +156,17 @@ class AppConfig:
             k: v for k, v in data.items()
             if k in cls.__dataclass_fields__ and k != "detection_stack"
         }
+
+        # One-time migration: configs written by the old installer's
+        # 'legacy-cpu' preset predate the `legacy_cpu` stack flag (added
+        # alongside the fix that made the preset actually pull/use
+        # llama3.2:1b). Those configs have llm_preset == "legacy-cpu" but
+        # no `legacy_cpu` key, so it defaults False and the app silently
+        # keeps trying to use the never-pulled qwen3:1.7b model instead
+        # of the CPU fallback the user actually installed. Flip the flags
+        # to match the preset the user is already on.
+        if valid_fields.get("llm_preset") == "legacy-cpu" and not stack.legacy_cpu:
+            stack.legacy_cpu = True
+            stack.qwen3_1_7b = False
+
         return cls(detection_stack=stack, **valid_fields)

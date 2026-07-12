@@ -147,6 +147,13 @@ _DEFAULT_RULES: list[Rule] = [
         min_confidence=0.85,
     ),
     Rule(
+        name="block-detector-failures",
+        detector="*",
+        action=Action.BLOCK,
+        categories=["detector_error", "gliner_not_cached"],
+        min_confidence=0.99,
+    ),
+    Rule(
         name="redact-pii-ids",
         detector="pii_detector",
         action=Action.REDACT,

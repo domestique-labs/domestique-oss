@@ -267,6 +267,8 @@ class LLMGuardAddon:
             model = _resolve_gemma_model()
         elif stack.get("qwen3_1_7b", True):
             model = "qwen3:1.7b"
+        elif stack.get("legacy_cpu", False):
+            model = "llama3.2:1b"
         if not model:
             return
 
@@ -517,6 +519,11 @@ class LLMGuardAddon:
                 {"Content-Type": "application/json"},
             )
             ctx.log.warn(f"BLOCKED request to {host}: {reasons}")
+            try:
+                from app.services.notifications import notify_block
+                notify_block(host)
+            except Exception:
+                logger.debug("Desktop notification failed", exc_info=True)
 
         elif result["action"] == "redact":
             self._stats["redacted"] += 1
