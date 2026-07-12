@@ -45,8 +45,28 @@ def launch(
     _launch_portable(api_port=api_port, open_dashboard=open_dashboard)
 
 
+def _configure_console_utf8() -> None:
+    """Make console output UTF-8 safe on every platform.
+
+    Windows consoles default to cp1252 and raise UnicodeEncodeError on the status
+    glyphs LLMGuard prints (e.g. the certificate-setup messages). The macOS launch
+    path already did this; doing it here in ``main()`` also covers the portable
+    Windows/Linux path, which otherwise crashes on first-run output.
+    """
+    import os
+
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point used by ``python -m app``."""
+    _configure_console_utf8()
     parser = argparse.ArgumentParser(description="Launch LLMGuard")
     parser.add_argument(
         "--mode",
@@ -157,6 +177,32 @@ def _launch_macos(*, api_port: int) -> None:
     ns_app.run()
 
 
+def _ensure_cert_generated_portable() -> None:
+    """Generate the CA (if missing) before the portable dashboard opens.
+
+    Portable mode (Windows/Linux) has no equivalent of the macOS
+    ``AppDelegate._ensure_cert_trusted()`` bootstrap step, so a fresh
+    install's CA was never generated and the dashboard's cert-install gate
+    had nothing to install (see audit finding C1).
+
+    ``BrowserProxyService.setup()`` -> ``interceptor.generate_ca()`` is
+    idempotent: it returns immediately without touching the files if a CA
+    already exists (see ``generate_ca()``'s early-return when
+    ``CA_CERT_PATH``/``CA_KEY_PATH`` are both present), so calling this
+    unconditionally on every launch never regenerates or overwrites an
+    existing CA.
+    """
+    try:
+        from app.server.api import get_browser_proxy_service
+
+        svc = get_browser_proxy_service()
+        if not svc.is_setup:
+            print("▶ First-time setup: generating certificate authority...")
+            svc.setup()
+    except Exception as exc:
+        print(f"  ⚠ Certificate setup failed: {exc}")
+
+
 def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     """Launch the portable browser-dashboard experience."""
     ConfigStore.load()
@@ -168,6 +214,13 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     import app.server.api as _api
     _api._startup_state["phase"] = "ready"
     _api._startup_state["detail"] = ""
+
+    # First-time setup: generate the CA (BEFORE opening the browser). This
+    # mirrors AppDelegate._ensure_cert_trusted() on macOS. Without this,
+    # portable mode (Windows/Linux) never generates a CA on a fresh install,
+    # so the dashboard's cert-install gate has nothing to install and the
+    # user is stuck at the gate forever.
+    _ensure_cert_generated_portable()
 
     # Ensure Ollama is available and the configured model is ready.
     import threading
@@ -318,6 +371,33 @@ def _detect_accelerator() -> dict:
     }
 
 
+def _wait_for_command(
+    name: str,
+    attempts: int = 5,
+    delay_seconds: float = 1.0,
+    which=None,
+    sleep=time.sleep,
+) -> str | None:
+    """Poll ``which(name)`` a few times, sleeping between attempts.
+
+    Windows' winget can return before the installed binary's directory is
+    fully registered/visible on ``PATH``, so a single immediate check can
+    give a false negative. This gives the OS a few seconds to catch up
+    before we declare the install a failure. Returns the resolved path (or
+    ``None`` if it never shows up).
+    """
+    import shutil as _shutil
+
+    which = which or _shutil.which
+    for attempt in range(attempts):
+        found = which(name)
+        if found:
+            return found
+        if attempt < attempts - 1:
+            sleep(delay_seconds)
+    return None
+
+
 def _ensure_ollama() -> None:
     """Ensure Ollama is installed, running optimally, and the model is warm.
 
@@ -345,6 +425,8 @@ def _ensure_ollama() -> None:
         model = _resolve_gemma_model()
     elif stack.qwen3_1_7b:
         model = "qwen3:1.7b"
+    elif stack.legacy_cpu:
+        model = "llama3.2:1b"
     if not model:
         return
 
@@ -371,7 +453,10 @@ def _ensure_ollama() -> None:
                     capture_output=True, text=True, timeout=10,
                 ).stdout.strip()
                 os.environ["PATH"] = os.environ.get("PATH", "") + ";" + user_path
-                ollama_bin = shutil.which("ollama")
+                # winget's post-install PATH registration can lag a moment
+                # behind the process returning, so poll briefly before
+                # giving up.
+                ollama_bin = _wait_for_command("ollama")
             except Exception as exc:
                 print(f"  ⚠ Ollama install failed: {exc}")
         elif sys.platform == "darwin":

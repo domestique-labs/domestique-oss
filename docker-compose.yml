@@ -4,12 +4,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - LLM_FIREWALL_OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LLM_FIREWALL_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - LLM_FIREWALL_AZURE_API_KEY=${AZURE_API_KEY:-}
-      - LLM_FIREWALL_AZURE_API_BASE=${AZURE_API_BASE:-}
-      - LLM_FIREWALL_FAIL_MODE=closed
-      - LLM_FIREWALL_POLICY_PATH=llmguard/policy/rules.yaml
+      - LLMGUARD_OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LLMGUARD_ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - LLMGUARD_AZURE_API_KEY=${AZURE_API_KEY:-}
+      - LLMGUARD_AZURE_API_BASE=${AZURE_API_BASE:-}
+      - LLMGUARD_FAIL_MODE=closed
+      - LLMGUARD_POLICY_PATH=llmguard/policy/rules.yaml
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped

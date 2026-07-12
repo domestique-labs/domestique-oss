@@ -85,7 +85,7 @@ def _make_flow(
 class TestResponseScanning:
     """Test the response() hook for detecting leaked sensitive data."""
 
-    def test_alerts_on_ssn_in_response(self, addon):
+    async def test_alerts_on_ssn_in_response(self, addon):
         """SSN in LLM response should trigger alert."""
         body = {
             "choices": [{
@@ -97,13 +97,13 @@ class TestResponseScanning:
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
-        addon.response(flow)
+        await addon.response(flow)
 
         # Should add alert header (not block)
         assert "X-LLMGuard-Alert" in flow.response.headers
         assert "ssn" in flow.response.headers["X-LLMGuard-Alert"].lower()
 
-    def test_no_alert_on_clean_response(self, addon):
+    async def test_no_alert_on_clean_response(self, addon):
         """Clean response should pass without alert."""
         body = {
             "choices": [{
@@ -115,12 +115,12 @@ class TestResponseScanning:
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
-        addon.response(flow)
+        await addon.response(flow)
 
         # No alert header should be set
         assert "X-LLMGuard-Alert" not in flow.response.headers
 
-    def test_alerts_on_api_key_in_response(self, addon):
+    async def test_alerts_on_api_key_in_response(self, addon):
         """API key leak in response should trigger alert."""
         body = {
             "choices": [{
@@ -132,11 +132,11 @@ class TestResponseScanning:
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
-        addon.response(flow)
+        await addon.response(flow)
 
         assert "X-LLMGuard-Alert" in flow.response.headers
 
-    def test_alerts_on_private_key_in_response(self, addon):
+    async def test_alerts_on_private_key_in_response(self, addon):
         """Private key leak should trigger alert."""
         body = {
             "choices": [{
@@ -148,11 +148,11 @@ class TestResponseScanning:
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
-        addon.response(flow)
+        await addon.response(flow)
 
         assert "X-LLMGuard-Alert" in flow.response.headers
 
-    def test_ignores_non_llm_responses(self, addon):
+    async def test_ignores_non_llm_responses(self, addon):
         """Responses from non-LLM hosts should be ignored."""
         body = {"data": "SSN: 123-45-6789"}
         flow = _make_flow(
@@ -160,20 +160,20 @@ class TestResponseScanning:
             response_body=json.dumps(body).encode(),
         )
 
-        addon.response(flow)
+        await addon.response(flow)
 
         assert "X-LLMGuard-Alert" not in flow.response.headers
 
-    def test_ignores_empty_responses(self, addon):
+    async def test_ignores_empty_responses(self, addon):
         """Empty responses should be ignored."""
         flow = _make_flow(response_body=b"")
-        addon.response(flow)
+        await addon.response(flow)
         assert "X-LLMGuard-Alert" not in flow.response.headers
 
-    def test_ignores_small_responses(self, addon):
+    async def test_ignores_small_responses(self, addon):
         """Very small responses should be ignored."""
         flow = _make_flow(response_body=b"ok")
-        addon.response(flow)
+        await addon.response(flow)
         assert "X-LLMGuard-Alert" not in flow.response.headers
 
 
@@ -263,14 +263,14 @@ class TestResponseAuditIntegration:
     """Test that response alerts create audit events."""
 
     @patch("app.services.mitm_addon.LLMGuardAddon._emit_audit_event")
-    def test_audit_event_emitted_on_alert(self, mock_emit, addon):
+    async def test_audit_event_emitted_on_alert(self, mock_emit, addon):
         body = {
             "choices": [{
                 "message": {"content": "SSN is 123-45-6789"}
             }]
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
-        addon.response(flow)
+        await addon.response(flow)
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args[1]

@@ -59,6 +59,22 @@ class TestPipelineConfig:
         assert s.enable_pii_detection is False
         assert s.enable_local_llm is False
 
+    def test_settings_from_config_legacy_cpu(self):
+        """legacy-cpu must resolve to llama3.2:1b — the model the installer
+        actually pulls for this preset (C4 regression guard)."""
+        from app.services.pipeline_config import settings_from_config
+
+        cfg = {
+            "detection_stack": {
+                "regex": True, "gliner_pii": False,
+                "qwen3_1_7b": False, "gemma4_e2b": False,
+                "legacy_cpu": True,
+            },
+        }
+        s = settings_from_config(cfg)
+        assert s.enable_local_llm is True
+        assert s.local_llm_model == "llama3.2:1b"
+
     def test_settings_custom_prompt(self):
         from app.services.pipeline_config import settings_from_config
 

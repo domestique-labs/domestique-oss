@@ -22,6 +22,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -33,9 +34,9 @@ PRESET_TO_STACK_KEY: dict[str, str] = {
     "minimal": "qwen3_1_7b",
     "balanced": "gemma4_e2b",
     "quality": "gemma4_e2b",
-    "legacy-cpu": "qwen3_1_7b",
+    "legacy-cpu": "legacy_cpu",
 }
-ALL_LLM_STACK_KEYS = ("gemma4_e2b", "qwen3_1_7b")
+ALL_LLM_STACK_KEYS = ("gemma4_e2b", "qwen3_1_7b", "legacy_cpu")
 
 FEATURE_EXTRAS: dict[str, dict[str, object]] = {
     "pii": {
@@ -311,7 +312,7 @@ def align_dashboard_config(preset: str) -> tuple[bool, str]:
         data = {}
 
     changed = False
-    valid_literals = {"minimal", "balanced", "quality"}
+    valid_literals = {"minimal", "balanced", "quality", "legacy-cpu"}
     if preset in valid_literals and data.get("llm_preset") != preset:
         data["llm_preset"] = preset
         changed = True
@@ -415,6 +416,9 @@ def pick_features(args: argparse.Namespace) -> set[str]:
             print(f"  [{mark}] {FEATURE_EXTRAS[key]['label']} (default)")
         return chosen
 
+    print("  note: this installer only ADDS features. Answering 'no' below (or")
+    print("        omitting a feature from --features on a later run) will not")
+    print("        uninstall anything already installed for that feature.")
     chosen: set[str] = set()
     for key, info in FEATURE_EXTRAS.items():
         size = f" (~{info['extra_download_mb']} MB)"
@@ -478,6 +482,30 @@ def confirm_plan(extras: set[str], preset: str | None) -> bool:
     return prompt_yes_no("\n  proceed?", default=True)
 
 
+def _wait_for_command(
+    name: str,
+    attempts: int = 5,
+    delay_seconds: float = 1.0,
+    which=shutil.which,
+    sleep=time.sleep,
+) -> str | None:
+    """Poll ``which(name)`` a few times, sleeping between attempts.
+
+    Windows' winget can return before the installed binary's directory is
+    fully registered/visible on ``PATH``, so a single immediate check can
+    give a false negative. This gives the OS a few seconds to catch up
+    before we declare the install a failure. Returns the resolved path (or
+    ``None`` if it never shows up).
+    """
+    for attempt in range(attempts):
+        found = which(name)
+        if found:
+            return found
+        if attempt < attempts - 1:
+            sleep(delay_seconds)
+    return None
+
+
 def _auto_install_ollama() -> bool:
     """Attempt to install Ollama automatically.
 
@@ -505,7 +533,9 @@ def _auto_install_ollama() -> bool:
                 capture_output=True, text=True, timeout=10,
             )
             os.environ["PATH"] = result.stdout.strip()
-            if shutil.which("ollama"):
+            # winget's post-install PATH registration can lag a moment
+            # behind the process returning, so poll briefly before giving up.
+            if _wait_for_command("ollama"):
                 print("  ✓ Ollama installed")
                 return True
         except Exception as exc:
@@ -530,7 +560,52 @@ def _auto_install_ollama() -> bool:
     return False
 
 
+def _ensure_linux_venv() -> None:
+    """On Linux, auto-create and re-exec into a `.venv` before doing anything else.
+
+    Mirrors install.ps1 (Windows) and scripts/install.sh (macOS), which both
+    create/use a venv before running pip. Without this, `pip install -e` runs
+    against the system Python and fails outright on PEP 668
+    ("externally-managed-environment") distros like Debian 12+/Ubuntu 23.10+.
+    No-op if we're already running inside `.venv` (or not on Linux).
+    """
+    if platform.system() != "Linux":
+        return
+
+    venv_python = ROOT / ".venv" / "bin" / "python"
+    try:
+        already_in_venv = Path(sys.executable).resolve() == venv_python.resolve()
+    except OSError:
+        already_in_venv = False
+    if already_in_venv:
+        return
+
+    if not venv_python.exists():
+        print("▶ creating .venv ...")
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "venv", str(ROOT / ".venv")], check=True
+            )
+            subprocess.run(
+                [str(venv_python), "-m", "pip", "install", "--upgrade", "pip",
+                 "--quiet"],
+                check=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as exc:
+            print(f"  ⚠ could not create .venv automatically: {exc}")
+            print("  ⚠ continuing with the current Python interpreter — if the")
+            print("    next step fails with 'externally-managed-environment',")
+            print("    create a venv yourself:")
+            print("      python3 -m venv .venv && source .venv/bin/activate")
+            return
+
+    print("▶ re-launching installer inside .venv ...")
+    os.execv(str(venv_python), [str(venv_python), str(Path(__file__).resolve()),
+                                 *sys.argv[1:]])
+
+
 def main() -> int:
+    _ensure_linux_venv()
     args = parse_args()
     banner()
 
@@ -584,6 +659,12 @@ def main() -> int:
     else:
         print("    ./run.sh                 start the desktop app")
     print("    open http://127.0.0.1:9876/   dashboard")
+    print()
+    print("  note: re-running this installer only ADDS features/presets you")
+    print("        select — it never uninstalls a feature you deselect on a")
+    print("        later run. To remove one, uninstall its pip extra manually")
+    print("        (e.g. `pip uninstall gliner`) and clear the matching")
+    print("        detection_stack toggle in the dashboard.")
     if config_changed:
         print()
         print("  ⚠  the dashboard config was updated. If the app is currently")

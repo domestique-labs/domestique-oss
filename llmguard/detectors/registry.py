@@ -60,19 +60,64 @@ def build_detectors(settings: Settings) -> list[Detector]:
             _gliner_threshold = settings.gliner_threshold
 
             class _GLiNERDetector:
-                """Lightweight wrapper for GLiNER PII model (lazy-loaded)."""
+                """Lightweight wrapper for GLiNER PII model (lazy-loaded).
+
+                The model is loaded on first ``scan()`` call rather than at
+                construction time so the proxy starts instantly even when
+                GLiNER is enabled. If the ``gliner`` package is not
+                installed, or the model has never been cached locally (we
+                force ``HF_HUB_OFFLINE=1`` so a cold cache fails fast instead
+                of hanging on a network fetch), that is a distinct, known,
+                actionable failure mode -- not a generic detector bug -- so
+                it is surfaced as its own detection category
+                (``gliner_not_cached``) instead of the opaque
+                ``detector_error`` every other unexpected exception collapses
+                into. This is still fail-closed: the request is still
+                flagged as a suspect Detection for the policy engine to
+                evaluate exactly as before, only the label changes.
+                """
 
                 def __init__(self, labels: list[str], threshold: float) -> None:
                     self._model = None
                     self._labels = labels
                     self._threshold = threshold
+                    self._unavailable = False
+                    self._warned = False
 
                 def _ensure_model(self) -> None:
-                    if self._model is None:
+                    if self._model is not None or self._unavailable:
+                        return
+                    try:
                         from gliner import GLiNER
 
                         self._model = GLiNER.from_pretrained("knowledgator/gliner-pii-base-v1.0")
                         self._model.predict_entities("warmup", self._labels)
+                    except (ModuleNotFoundError, ImportError, OSError) as exc:
+                        # ModuleNotFoundError/ImportError: the `gliner` package
+                        # (the "ner" extra) was never installed.
+                        # OSError (covers huggingface_hub's
+                        # LocalEntryNotFoundError, a FileNotFoundError/OSError
+                        # subclass): the package is present but the model was
+                        # never downloaded/cached, and HF_HUB_OFFLINE=1 above
+                        # forbids fetching it now.
+                        self._unavailable = True
+                        if not self._warned:
+                            self._warned = True
+                            logger.warning(
+                                "gliner_not_cached",
+                                error=str(exc),
+                                error_type=type(exc).__name__,
+                                hint=(
+                                    "GLiNER PII detection is enabled "
+                                    "(detection_stack.gliner_pii) but the model "
+                                    "is not available: install the 'ner' extra "
+                                    "(pip install -e '.[ner]') and warm the "
+                                    "model cache, or disable gliner_pii in the "
+                                    "dashboard. Every request will be flagged "
+                                    "as 'gliner_not_cached' until this is "
+                                    "resolved."
+                                ),
+                            )
 
                 @property
                 def name(self) -> str:
@@ -82,6 +127,20 @@ def build_detectors(settings: Settings) -> list[Detector]:
                     if len(text) < 10:
                         return []
                     self._ensure_model()
+                    if self._unavailable:
+                        # Distinct, actionable category -- see _ensure_model.
+                        # Deliberately NOT re-raised: an unavailable model is
+                        # a known, diagnosable state, not an unexpected bug,
+                        # so it must not fall through to the pipeline's
+                        # generic detector_error catch-all.
+                        return [
+                            Detection(
+                                detector=self.name,
+                                category="gliner_not_cached",
+                                confidence=1.0,
+                                span=Span(start=0, end=0),
+                            )
+                        ]
                     entities = self._model.predict_entities(text[:2000], self._labels)
                     findings = []
                     for e in entities:
