@@ -116,6 +116,35 @@ class TestLightProfileStack:
         light = _light_profile_stack({"regex": False})
         assert light["regex"] is False
 
+    def test_configured_stack_honors_default_valued_qwen3(self):
+        """Once the user has explicitly changed the detection stack at
+        least once (``stack_configured=True``, mirrors
+        ``AppConfig.detection_stack_configured``), a bare ``qwen3_1_7b:
+        True`` is no longer ambiguous with the untouched default -- it must
+        be honored on low-resource hardware instead of forced off. This is
+        the low-resource user's supported way to keep (or re-enable) the
+        shipped-default heavy detector."""
+        light = _light_profile_stack(
+            {"regex": True, "qwen3_1_7b": True}, stack_configured=True
+        )
+        assert light["qwen3_1_7b"] is True
+
+    def test_unconfigured_stack_still_forces_off_default_qwen3(self):
+        """Sanity check: leaving stack_configured at its default (False)
+        preserves the pre-fix behavior exactly."""
+        light = _light_profile_stack(
+            {"regex": True, "qwen3_1_7b": True}, stack_configured=False
+        )
+        assert light["qwen3_1_7b"] is False
+
+    def test_configured_stack_also_honors_explicit_false(self):
+        light = _light_profile_stack(
+            {"regex": True, "qwen3_1_7b": False, "gliner_pii": True},
+            stack_configured=True,
+        )
+        assert light["qwen3_1_7b"] is False
+        assert light["gliner_pii"] is True
+
 
 # --- LLMGuardAddon wiring ------------------------------------------------
 
@@ -242,3 +271,67 @@ class TestAddonHardwareProfileWiring:
             addon._hardware_is_low_resource()
 
         assert len(calls) == 1
+
+    def test_low_resource_machine_honors_explicit_stack_configured_qwen3(self, tmp_path):
+        """Fix for the permanent-downgrade bug: a low-resource user who has
+        explicitly changed the detection stack via the dashboard/API at
+        least once (``detection_stack_configured: True`` on disk) must have
+        their ``qwen3_1_7b`` honored, not force-disabled -- previously there
+        was NO supported way back from the auto-light downgrade for this
+        specific field, since re-toggling it just writes ``True`` again."""
+        addon = LLMGuardAddon()
+        addon._hardware_is_low_resource = lambda: True
+        settings_seen: list = []
+
+        with patch(
+            "app.services.pipeline_config.load_config_dict",
+            return_value={
+                # A real on-disk config always serializes every
+                # DetectionStackConfig field (AppConfig.to_dict()) -- here
+                # every field is already at its safe default (including the
+                # qwen3_1_7b default of True), so an honored/configured
+                # stack is identical to the raw stack: no forced change, no
+                # light-profile note.
+                "detection_stack": {
+                    "regex": True,
+                    "gliner_pii": False,
+                    "openai_privacy_filter": False,
+                    "gemma4_e2b": False,
+                    "qwen3_1_7b": True,
+                    "legacy_cpu": False,
+                },
+                "detection_stack_configured": True,
+            },
+        ), patch(
+            "llmguard.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
+        ):
+            addon._init_detector()
+
+        assert settings_seen[0].enable_local_llm is True, (
+            "explicit detection_stack_configured must let a low-resource "
+            "user keep the shipped-default heavy detector"
+        )
+        assert addon._light_profile_active is False, (
+            "configured+unchanged-from-safe-defaults stack must not be "
+            "reported as an active downgrade -- nothing was actually forced"
+        )
+
+    def test_low_resource_machine_without_configured_flag_still_downgrades_qwen3(self):
+        """Sanity check: absent the configured flag, the pre-fix behavior
+        (force-off the default-valued qwen3_1_7b) is unchanged."""
+        addon = LLMGuardAddon()
+        addon._hardware_is_low_resource = lambda: True
+        settings_seen: list = []
+
+        with patch(
+            "app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "llmguard.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
+        ):
+            addon._init_detector()
+
+        assert settings_seen[0].enable_local_llm is False
+        assert addon._light_profile_active is True

@@ -99,17 +99,31 @@ def _detect_low_resource_hardware() -> bool:
     return bool(low_ram or no_gpu)
 
 
-def _light_profile_stack(stack: dict) -> dict:
+def _light_profile_stack(stack: dict, stack_configured: bool = False) -> dict:
     """Down-convert a raw ``detection_stack`` dict to regex-only, preserving
     any field the user explicitly opted into (value True, differing from
     that field's safe default -- see ``_STACK_SAFE_DEFAULTS``).
 
-    ``qwen3_1_7b`` defaults True in the dataclass, so a True value there
-    never counts as "explicit" (it's indistinguishable from having never
-    touched the dashboard) -- on low-resource hardware it is switched off
-    along with the other heavy tiers unless the user separately enabled a
-    different heavy detector.
+    ``qwen3_1_7b`` defaults True in the dataclass, so a bare True value there
+    is normally indistinguishable from having never touched the dashboard --
+    on low-resource hardware it is switched off along with the other heavy
+    tiers unless the user separately enabled a different heavy detector.
+
+    ``stack_configured`` (mirrors ``AppConfig.detection_stack_configured``)
+    breaks that ambiguity: once the user has explicitly changed the
+    detection stack at least once, the entire on-disk stack is honored as-is
+    -- including a default-valued ``qwen3_1_7b: True`` -- instead of being
+    down-converted. Without this, a low-resource user had NO supported way
+    to keep (or re-enable) the shipped-default heavy detector: re-toggling
+    it in the dashboard just writes ``True`` again, identical to the
+    never-configured default.
     """
+    if stack_configured:
+        return {
+            key: bool(stack.get(key, default))
+            for key, default in _STACK_SAFE_DEFAULTS.items()
+        }
+
     light = {"regex": bool(stack.get("regex", _STACK_SAFE_DEFAULTS["regex"]))}
     for key, default in _STACK_SAFE_DEFAULTS.items():
         if key == "regex":
@@ -450,12 +464,20 @@ class LLMGuardAddon:
         the resulting stack is identical to what was already configured (a
         user who already runs regex-only sees no note), in which case
         ``profile_note`` is ``None`` too.
+
+        If ``detection_stack_configured`` is set on *config* (the user has
+        explicitly changed the detection stack via the dashboard/API at
+        least once -- see ``AppConfig.detection_stack_configured``), the
+        on-disk stack is honored as-is instead of being down-converted --
+        this is what lets a low-resource user keep or re-enable a
+        default-valued heavy detector like ``qwen3_1_7b``.
         """
         if not self._hardware_is_low_resource():
             return config, None
 
         stack = dict(config.get("detection_stack", {}))
-        light_stack = _light_profile_stack(stack)
+        stack_configured = bool(config.get("detection_stack_configured", False))
+        light_stack = _light_profile_stack(stack, stack_configured)
         if light_stack == stack:
             return config, None
 

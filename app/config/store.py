@@ -124,6 +124,30 @@ class ConfigStore:
                 data["browser_interception_configured"]
             )
 
+        # Same reasoning as browser_interception_configured just above,
+        # applied to detection_stack -- see
+        # AppConfig.detection_stack_configured. The dashboard's full-object
+        # POST includes `detection_stack` on every save (e.g. an unrelated
+        # proxy_port change round-trips the whole config), so mere key
+        # presence proves nothing about intent; only a field that actually
+        # differs from what's currently stored is real signal that the user
+        # touched the detection stack. Once set, low-resource hardware's
+        # light profile (mitm_addon.py::_light_profile_stack) trusts the
+        # on-disk stack as-is instead of down-converting a default-valued
+        # heavy tier -- this is what gives a low-resource user a real,
+        # supported way to keep (or re-enable) a heavy detector like
+        # `qwen3_1_7b`.
+        if "detection_stack" in data and isinstance(data["detection_stack"], dict):
+            current_stack = current.to_dict().get("detection_stack", {})
+            for key, value in data["detection_stack"].items():
+                if key not in current_stack or bool(value) != bool(current_stack[key]):
+                    current_dict["detection_stack_configured"] = True
+                    break
+        if "detection_stack_configured" in data:
+            current_dict["detection_stack_configured"] = bool(
+                data["detection_stack_configured"]
+            )
+
         config = AppConfig.from_dict(current_dict)
         cls.save(config)
         return config

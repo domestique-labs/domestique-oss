@@ -52,6 +52,24 @@ class AppConfig:
     detection_stack: DetectionStackConfig = field(default_factory=DetectionStackConfig)
     """Active detectors configuration."""
 
+    detection_stack_configured: bool = False
+    """Whether `detection_stack` has ever been explicitly changed (by the
+    user, via the dashboard/API) rather than left at its dataclass defaults.
+
+    Mirrors `browser_interception_configured` for exactly the same reason:
+    `to_dict()`/`ConfigStore._write()` always serialize every field, so
+    `qwen3_1_7b: true` is written to disk on the very first save purely
+    because it's the dataclass default -- there is no way to tell "user
+    explicitly kept the default heavy detector on" from "never touched the
+    dashboard" just by reading `detection_stack.qwen3_1_7b` itself. On a
+    low-resource machine that ambiguity used to mean `qwen3_1_7b` was force-
+    disabled by the hardware-aware light profile (see
+    `app/services/mitm_addon.py::_light_profile_stack`) with no supported way
+    back, since re-toggling it just writes `True` again. This flag makes the
+    distinction: once set, the light profile honors the on-disk stack as-is,
+    including a default-valued heavy tier, instead of down-converting it.
+    """
+
     llm_preset: Literal["minimal", "balanced", "quality", "legacy-cpu"] = "balanced"
     """Hardware preset controlling which models are loaded."""
 
@@ -199,5 +217,16 @@ class AppConfig:
         # including a user's explicit choice to turn it off.
         if "browser_interception_configured" not in data:
             valid_fields["browser_interception_configured"] = True
+
+        # Migration: same reasoning as browser_interception_configured above,
+        # applied to detection_stack_configured -- any config.json written
+        # before this field existed predates the flag entirely. Treat it as
+        # already configured so the hardware-aware light profile never
+        # retroactively downgrades (or un-downgrades) a pre-existing
+        # install's stack; only NEW configs (which start from a plain
+        # AppConfig(), not from_dict()) get the "never touched" False
+        # default that lets the light profile auto-select on first run.
+        if "detection_stack_configured" not in data:
+            valid_fields["detection_stack_configured"] = True
 
         return cls(detection_stack=stack, **valid_fields)

@@ -164,6 +164,115 @@ class TestAppConfig:
         assert config.detection_stack.qwen3_1_7b is False
 
 
+class TestDetectionStackConfiguredMigration:
+    """AppConfig.from_dict()'s handling of `detection_stack_configured` for
+    pre-existing configs (mirrors browser_interception_configured -- see
+    app/tests/test_main_browser_interception_firstrun.py).
+
+    Fix for the permanent-downgrade bug: a config.json written before this
+    field existed must be treated as already configured, so the
+    hardware-aware light profile (mitm_addon.py) never retroactively
+    down-converts (or un-down-converts) a pre-existing install's detection
+    stack; only a genuinely fresh install starts unconfigured.
+    """
+
+    def test_missing_key_on_preexisting_config_is_treated_as_configured(self):
+        stale_data = {"detection_stack": {"regex": True, "qwen3_1_7b": True}}
+        config = AppConfig.from_dict(stale_data)
+        assert config.detection_stack_configured is True
+
+    def test_present_key_is_left_alone(self):
+        data = {
+            "detection_stack": {"regex": True},
+            "detection_stack_configured": False,
+        }
+        config = AppConfig.from_dict(data)
+        assert config.detection_stack_configured is False
+
+    def test_brand_new_appconfig_defaults_unconfigured(self):
+        """A truly fresh install (ConfigStore.load() with no config.json on
+        disk) builds AppConfig() directly, bypassing from_dict() entirely --
+        confirm the plain dataclass default is what the light-profile
+        default-downgrade logic expects."""
+        config = AppConfig()
+        assert config.detection_stack_configured is False
+
+
+class TestConfigStoreDetectionStackSaveDict:
+    """save_dict()'s configured-flag heuristic for detection_stack (Fix for
+    the permanent-downgrade Important finding). Mirrors
+    TestConfigStoreBrowserInterceptionSaveDict in
+    test_main_browser_interception_firstrun.py: only a real value change (or
+    an explicit `detection_stack_configured` override) marks the flag, since
+    the dashboard's full-object POST includes `detection_stack` on every
+    save regardless of whether the user touched it.
+    """
+
+    def setup_method(self):
+        ConfigStore.reset()
+
+    def test_unrelated_save_resending_same_stack_does_not_mark_configured(self, tmp_path):
+        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()  # fresh: unconfigured, qwen3_1_7b default True
+            result = ConfigStore.save_dict({
+                "detection_stack": {"regex": True, "qwen3_1_7b": True},  # unchanged
+                "proxy_port": 9001,  # the field actually being changed
+            })
+            assert result.proxy_port == 9001
+            assert result.detection_stack_configured is False
+
+    def test_save_dict_marks_configured_on_stack_value_change(self, tmp_path):
+        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()  # fresh: gliner_pii defaults False
+            result = ConfigStore.save_dict({
+                "detection_stack": {"gliner_pii": True},
+            })
+            assert result.detection_stack.gliner_pii is True
+            assert result.detection_stack_configured is True
+
+    def test_save_dict_marks_configured_when_qwen3_resaved_true_to_true_is_unrelated(self, tmp_path):
+        """A bare re-save of qwen3_1_7b: True (no actual change) must NOT
+        mark configured on its own -- only an actual value change does."""
+        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()
+            result = ConfigStore.save_dict({
+                "detection_stack": {"qwen3_1_7b": True},
+            })
+            assert result.detection_stack_configured is False
+
+    def test_save_dict_marks_configured_when_qwen3_toggled_off_then_on(self, tmp_path):
+        """The real-world re-enable path: a low-resource user whose qwen3
+        was auto-downgraded explicitly flips it off then back on in the
+        dashboard -- each actual value change marks configured."""
+        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()
+            ConfigStore.save_dict({"detection_stack": {"qwen3_1_7b": False}})
+            result = ConfigStore.save_dict({"detection_stack": {"qwen3_1_7b": True}})
+            assert result.detection_stack.qwen3_1_7b is True
+            assert result.detection_stack_configured is True
+
+    def test_save_dict_honors_explicit_configured_flag_in_payload(self, tmp_path):
+        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()
+            result = ConfigStore.save_dict({
+                "detection_stack": {"qwen3_1_7b": True},  # unchanged value
+                "detection_stack_configured": True,  # explicit intent
+            })
+            assert result.detection_stack_configured is True
+
+    def test_save_dict_leaves_configured_alone_when_key_absent(self, tmp_path):
+        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
+             patch("app.config.store.APP_DATA_DIR", tmp_path):
+            ConfigStore.load()
+            result = ConfigStore.save_dict({"proxy_port": 9001})
+            assert result.detection_stack_configured is False
+
+
 # --- Store Tests -----------------------------------------------------
 
 
