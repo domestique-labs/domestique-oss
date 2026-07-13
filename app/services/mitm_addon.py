@@ -177,6 +177,14 @@ class LLMGuardAddon:
     # pipeline is not yet ready (see load() / _wait_for_detector_ready()).
     DETECTOR_READY_WAIT_S = 20.0
 
+    # Minimum interval between automatic re-init attempts after a
+    # background pipeline-construction failure (see
+    # _maybe_retry_detector_init()). Bounds how often a storm of blocked
+    # requests can hammer a still-broken dependency (e.g. a locked policy
+    # file or an Ollama outage) -- a detected config change bypasses this
+    # backoff and retries immediately regardless.
+    DETECTOR_RETRY_BACKOFF_S = 5.0
+
     def __init__(self):
         self._detector = None
         self._data_dir = Path.home() / ".llmguard"
@@ -194,6 +202,11 @@ class LLMGuardAddon:
         self._detector_ready.set()
         self._detector_init_error: Exception | None = None
         self._light_profile_active = False
+        # Self-heal state for _maybe_retry_detector_init(): guards against
+        # more than one concurrent background retry attempt, and gates how
+        # often an automatic retry is attempted absent a config change.
+        self._detector_retry_lock = threading.Lock()
+        self._last_detector_retry_ts = 0.0
 
     def _persist_stats(self):
         """Write stats to a shared file for the dashboard to read."""
@@ -1082,6 +1095,91 @@ class LLMGuardAddon:
 
         return "\n".join(extracted_parts) if extracted_parts else None
 
+    def _config_changed_since_last_check(self) -> bool:
+        """True once per actual on-disk config change (mtime-gated hash
+        compare, avoids a JSON parse on the common no-change hot path).
+
+        Shared by the hot-reload check below (ready path) and
+        ``_maybe_retry_detector_init`` (not-ready path) so that fixing a
+        broken policy file and re-saving config rebuilds the pipeline either
+        way -- whether or not the previous background build already failed.
+        """
+        from app.services.pipeline_config import config_mtime_ns, config_hash, load_config_dict
+        mtime = config_mtime_ns()
+        if mtime == getattr(self, "_config_mtime", 0):
+            return False
+        self._config_mtime = mtime
+        return config_hash(load_config_dict()) != getattr(self, "_config_hash", "")
+
+    def _maybe_retry_detector_init(self) -> None:
+        """Self-heal after a transient detector-construction failure.
+
+        Called from ``_inspect()``'s not-ready branch whenever
+        ``self._detector_init_error`` is set (a previous background build
+        failed). Without this, ``_wait_for_detector_ready()`` would never
+        return True again -- it requires ``self._detector is not None`` --
+        and nothing else ever re-triggered ``_init_detector()`` once
+        ``_detector_ready`` was set on failure, so a TRANSIENT problem
+        (locked/missing policy file, an Ollama blip while resolving a model,
+        a disk hiccup) would block 100% of LLM traffic PERMANENTLY until a
+        full mitmdump restart.
+
+        Retries in the background (never on the request coroutine --
+        rebuilding can be slow) and at most once per
+        ``DETECTOR_RETRY_BACKOFF_S`` seconds unless the on-disk config has
+        actually changed, so a storm of blocked requests doesn't hammer a
+        still-broken dependency. At most one retry runs at a time (guarded
+        by ``_detector_retry_lock``).
+
+        Fail-closed holds throughout: this never sets ``self._detector``
+        itself and never touches ``_detector_ready`` (already set) -- the
+        CURRENT request that triggered this call has already decided to
+        fail closed (see the caller) regardless of how this retry turns
+        out. Only a LATER request can benefit, once (if) the retry lands.
+        """
+        try:
+            config_changed = self._config_changed_since_last_check()
+        except Exception:
+            config_changed = False
+
+        now = time.time()
+        if not config_changed and (now - self._last_detector_retry_ts) < self.DETECTOR_RETRY_BACKOFF_S:
+            return
+        if not self._detector_retry_lock.acquire(blocking=False):
+            return  # a retry attempt is already in flight
+        self._last_detector_retry_ts = now
+        threading.Thread(
+            target=self._retry_detector_init_background,
+            daemon=True,
+            name="detector-pipeline-retry",
+        ).start()
+
+    def _retry_detector_init_background(self) -> None:
+        """Background retry of ``_init_detector()`` after a prior failure.
+
+        Runs on the thread started by ``_maybe_retry_detector_init``. On
+        success, clears ``self._detector_init_error`` so subsequent requests
+        resume normal inspection. On (repeat) failure, records the new
+        exception and logs it -- traffic keeps failing closed exactly as
+        before, no different from the original failure.
+        """
+        try:
+            try:
+                self._init_detector()
+            except Exception as e:
+                self._detector_init_error = e
+                ctx.log.error(
+                    f"Detector pipeline retry failed: {e} - still failing closed"
+                )
+                return
+            self._detector_init_error = None
+            ctx.log.info(
+                "Detector pipeline recovered after previous failure - "
+                "inspection resumed"
+            )
+        finally:
+            self._detector_retry_lock.release()
+
     async def _inspect(self, content: str) -> dict:
         """Run content through the detection pipeline.
 
@@ -1098,7 +1196,10 @@ class LLMGuardAddon:
         briefly (bounded, see ``DETECTOR_READY_WAIT_S``) for it to finish.
         If it never becomes ready in time -- or construction raised -- this
         fails CLOSED (blocks) rather than letting sensitive data through
-        uninspected.
+        uninspected. A construction failure also triggers a background
+        self-heal retry (see ``_maybe_retry_detector_init``) so the lockout
+        isn't permanent -- but THIS request still fails closed regardless of
+        how that retry turns out.
         """
         try:
             ready = await self._wait_for_detector_ready()
@@ -1108,6 +1209,7 @@ class LLMGuardAddon:
                         "Detection pipeline unavailable "
                         f"({self._detector_init_error}) - failing closed"
                     )
+                    self._maybe_retry_detector_init()
                 else:
                     ctx.log.error(
                         "Detection pipeline not ready after "
@@ -1115,14 +1217,9 @@ class LLMGuardAddon:
                     )
                 return {"action": "block", "reasons": ["detectors_unavailable"]}
 
-            from app.services.pipeline_config import config_mtime_ns, config_hash, load_config_dict
-            mtime = config_mtime_ns()
-            if mtime != getattr(self, "_config_mtime", 0):
-                self._config_mtime = mtime
-                h = config_hash(load_config_dict())
-                if h != getattr(self, "_config_hash", ""):
-                    ctx.log.info("Config changed, rebuilding pipeline")
-                    self._init_detector()
+            if self._config_changed_since_last_check():
+                ctx.log.info("Config changed, rebuilding pipeline")
+                self._init_detector()
 
             result = await self._detector.inspect(content)
 
