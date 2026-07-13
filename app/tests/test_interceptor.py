@@ -374,6 +374,50 @@ class TestWindowsSystemProxyPACOnly:
         assert "ProxyEnable" not in store
         assert "ProxyServer" not in store
 
+    def test_enable_clears_stale_blanket_proxy_from_prior_install(
+        self, tmp_path, monkeypatch
+    ):
+        """Regression test for the merge-blocking bug: a machine that already
+        has a blanket proxy configured (e.g. left over from a pre-PAC-only
+        LLMGuard install, especially one whose process was killed before its
+        normal disable/atexit cleanup ran) must have that blanket proxy
+        cleared when enable_system_proxy() runs - not just left in place
+        alongside the new PAC. Previously only disable_system_proxy() (on
+        explicit stop/atexit) cleared ProxyServer/ProxyOverride, so a user
+        who upgraded and relaunched without a clean prior shutdown kept the
+        stale blanket proxy active indefinitely.
+        """
+        store = _install_fake_winreg(monkeypatch)
+        self._patch_platform(monkeypatch, tmp_path)
+
+        # Simulate the stale state left by an old blanket-era install.
+        store["ProxyServer"] = {"value": "127.0.0.1:8080", "kind": 1}
+        store["ProxyOverride"] = {"value": "<local>", "kind": 1}
+
+        result = enable_system_proxy(port=8080)
+
+        assert result is True
+        assert store["AutoConfigURL"]["value"] == "http://127.0.0.1:9876/proxy.pac"
+        assert store["ProxyEnable"]["value"] == 1
+        # The stale blanket proxy must be gone after enable, not merely
+        # left in place until an eventual disable.
+        assert "ProxyServer" not in store
+        assert "ProxyOverride" not in store
+
+    def test_enable_clears_stale_blanket_is_noop_on_fresh_install(
+        self, tmp_path, monkeypatch
+    ):
+        """Fresh install (ProxyServer/ProxyOverride never set) must not
+        error and must not introduce them - the delete is a pure no-op."""
+        store = _install_fake_winreg(monkeypatch)
+        self._patch_platform(monkeypatch, tmp_path)
+
+        result = enable_system_proxy(port=8080)
+
+        assert result is True
+        assert "ProxyServer" not in store
+        assert "ProxyOverride" not in store
+
 
 class TestMacOSSystemProxyPACOnly:
     """macOS: enable/disable must be PAC-only (no blanket web proxy)."""
@@ -411,10 +455,18 @@ class TestMacOSSystemProxyPACOnly:
         assert result is True
         joined = [" ".join(c) for c in calls]
         assert any("-setautoproxyurl" in c for c in joined)
-        assert any("-setautoproxystate" in c for c in joined)
-        # PAC-only: the blanket web proxy calls must never be issued.
-        assert not any("-setsecurewebproxy" in c for c in joined)
-        assert not any("-setwebproxy" in c for c in joined)
+        assert any("-setautoproxystate" in c and c.endswith(" on") for c in joined)
+        # PAC-only: the blanket web proxy must never be turned ON, and the
+        # value-setting commands (-setsecurewebproxy/-setwebproxy, which take
+        # a host+port, as opposed to ...state which takes on/off) must never
+        # be issued at all. Defensively turning the *state* OFF (to clear
+        # stale config from an old blanket-era install) is fine and is
+        # covered by a dedicated test below.
+        assert not any(cmd[1] in ("-setsecurewebproxy", "-setwebproxy") for cmd in calls)
+        assert not any(
+            cmd[1] in ("-setsecurewebproxystate", "-setwebproxystate") and cmd[-1] == "on"
+            for cmd in calls
+        )
 
     def test_disable_turns_off_autoproxy(self, monkeypatch):
         self._patch_platform(monkeypatch)
@@ -434,3 +486,39 @@ class TestMacOSSystemProxyPACOnly:
         assert result is True
         joined = [" ".join(c) for c in calls]
         assert any("-setautoproxystate" in c and " off" in c for c in joined)
+
+    def test_enable_clears_stale_blanket_webproxy_from_prior_install(
+        self, monkeypatch
+    ):
+        """Regression test for the merge-blocking bug: a machine that already
+        has a blanket web proxy configured (e.g. left over from a pre-PAC-only
+        LLMGuard install, especially one whose process was killed before its
+        normal disable/atexit cleanup ran) must have it turned off by
+        enable_system_proxy() - not just left active until an eventual
+        disable. Previously only disable_system_proxy() (on explicit
+        stop/atexit) cleared it.
+        """
+        self._patch_platform(monkeypatch)
+
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            result = MagicMock()
+            result.returncode = 0
+            if "-getautoproxyurl" in cmd:
+                result.stdout = (
+                    "URL: http://127.0.0.1:9876/proxy.pac\nEnabled: Yes\n"
+                )
+            else:
+                result.stdout = ""
+            return result
+
+        with patch("app.services.interceptor.subprocess.run", side_effect=fake_run):
+            result = enable_system_proxy(port=8080)
+
+        assert result is True
+        # The active interface(s) must have the stale blanket web proxy
+        # explicitly turned off as part of enable, for every active interface.
+        assert ["networksetup", "-setsecurewebproxystate", "Wi-Fi", "off"] in calls
+        assert ["networksetup", "-setwebproxystate", "Wi-Fi", "off"] in calls
