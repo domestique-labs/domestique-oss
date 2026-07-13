@@ -335,3 +335,54 @@ class TestAddonHardwareProfileWiring:
 
         assert settings_seen[0].enable_local_llm is False
         assert addon._light_profile_active is True
+
+
+# --- Fix 3: surfacing the light-profile downgrade to the dashboard ----------
+
+
+class TestLightProfileSurfacedInStats:
+    """The auto-selected light profile used to be logged only to
+    browser_proxy.log -- an ordinary user had no way to discover that
+    detection was silently narrowed on their machine (and thus no reason to
+    go use Fix 2's re-enable path). ``_init_detector`` now also persists
+    ``light_profile_active`` to browser_stats.json, which the existing
+    ``/api/browser-proxy`` status endpoint already reads and returns.
+    """
+
+    def test_light_profile_active_is_persisted_to_stats_file(self, tmp_path):
+        addon = LLMGuardAddon()
+        addon._data_dir = tmp_path
+        addon._stats_file = tmp_path / "browser_stats.json"
+        addon._hardware_is_low_resource = lambda: True
+
+        with patch(
+            "app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "llmguard.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline([]),
+        ):
+            addon._init_detector()
+
+        import json as _json
+        persisted = _json.loads(addon._stats_file.read_text())
+        assert persisted["light_profile_active"] is True
+
+    def test_capable_machine_persists_light_profile_active_false(self, tmp_path):
+        addon = LLMGuardAddon()
+        addon._data_dir = tmp_path
+        addon._stats_file = tmp_path / "browser_stats.json"
+        addon._hardware_is_low_resource = lambda: False
+
+        with patch(
+            "app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "llmguard.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline([]),
+        ):
+            addon._init_detector()
+
+        import json as _json
+        persisted = _json.loads(addon._stats_file.read_text())
+        assert persisted["light_profile_active"] is False

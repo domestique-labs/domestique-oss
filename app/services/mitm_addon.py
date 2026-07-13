@@ -223,9 +223,19 @@ class LLMGuardAddon:
         self._last_detector_retry_ts = 0.0
 
     def _persist_stats(self):
-        """Write stats to a shared file for the dashboard to read."""
+        """Write stats to a shared file for the dashboard to read.
+
+        Includes ``light_profile_active`` (see ``_init_detector`` /
+        ``_resolve_hardware_profile``) alongside the request counters so an
+        auto-selected regex-only downgrade is visible to the dashboard/API
+        (``/api/browser-proxy``), not just logged to ``browser_proxy.log``
+        -- an ordinary user has no other way to discover that detection was
+        silently narrowed on their machine.
+        """
         try:
-            self._stats_file.write_text(json.dumps(self._stats))
+            payload = dict(self._stats)
+            payload["light_profile_active"] = self._light_profile_active
+            self._stats_file.write_text(json.dumps(payload))
         except OSError:
             pass
 
@@ -442,6 +452,11 @@ class LLMGuardAddon:
         self._light_profile_active = profile_note is not None
         if profile_note:
             ctx.log.warn(profile_note)
+        # Surface the (possibly just-changed) light-profile state to
+        # browser_stats.json immediately -- don't wait for the first
+        # inspected request to write it, so the dashboard can show it right
+        # after startup / a hot-reload rebuild.
+        self._persist_stats()
 
     def _hardware_is_low_resource(self) -> bool:
         """Cache the hardware-resource determination for this process's
