@@ -1,0 +1,60 @@
+# LLMGuard OSS CLI Wedge - redact-first policy.
+#
+# The wedge protects a solo developer's outbound prompts WITHOUT breaking their
+# flow: detected secrets/PII are REDACTED in place and the (sanitized) request
+# still reaches the model. Only the crown-jewel categories BLOCK outright.
+#
+# Evaluated top-to-bottom; most restrictive matching action wins (block > redact).
+
+rules:
+  # ── Fail closed: a detector crashed → block, never leak unscanned ───────
+  - name: block-on-detector-error
+    detector: pipeline
+    action: block
+    categories:
+      - detector_error
+    min_confidence: 0.9
+
+  # ── Block: crown-jewel secrets (redaction is not enough) ────────────────
+  - name: block-crown-jewels
+    detector: secret_scanner
+    action: block
+    categories:
+      - private_key
+      - aws_secret_key
+      - connection_string
+    min_confidence: 0.9
+
+  # ── Redact: everything else sensitive ──────────────────────────────────
+  - name: redact-secrets
+    detector: secret_scanner
+    action: redact
+    categories:
+      - aws_access_key
+      - github_token
+      - github_fine_grained
+      - openai_key
+      - anthropic_key
+      - slack_token
+      - jwt
+      - generic_api_key
+      - password_literal
+    min_confidence: 0.85
+
+  - name: redact-pii
+    detector: "*"
+    action: redact
+    categories:
+      - us_ssn
+      - social_security_number
+      - "pii:social_security_number"
+      - credit_card
+      - "pii:credit_card"
+      - email_address
+      - "pii:email"
+      - phone_number
+      - "pii:phone_number"
+      - address
+      - "pii:address"
+      - "pii:password"
+    min_confidence: 0.7
