@@ -199,6 +199,59 @@ class LLMGuardAddon:
     # backoff and retries immediately regardless.
     DETECTOR_RETRY_BACKOFF_S = 5.0
 
+    # Path fragments that identify a genuine conversation/completion
+    # endpoint -- one that carries user-authored prompt content (outbound)
+    # or assistant-authored reply content (inbound). Shared by the
+    # request-side prompt-DLP filter and the response-side leak-scan
+    # filter (see ``_is_conversation_path``) so both directions apply the
+    # identical scope. Internal endpoints (sentinel, telemetry,
+    # autocompletions, connectors, static assets) are noise and cause
+    # false positives / false "inspected" counts with none of the DLP
+    # value.
+    _CONVERSATION_PATH_FRAGMENTS = (
+        # ChatGPT web
+        "/conversation",          # /backend-api/f/conversation
+        "/backend-anon/",         # guest conversations
+        # OpenAI API
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/responses",          # 2025 Responses API
+        # Anthropic
+        "/v1/messages",
+        "/v1/complete",           # legacy
+        "/completion",            # Claude web: /api/.../completion
+        "/append_message",        # Claude web
+        # Google Gemini
+        "/batchexecute",          # Gemini web (BardChatUi)
+        "/StreamGenerate",        # Gemini web streaming
+        ":generateContent",       # Gemini API
+        ":streamGenerateContent", # Gemini API streaming
+        # Microsoft Copilot
+        "/c/api/chat",
+        "/c/api/conversations",
+        "/c/api/messages",
+        "/turing/conversation",
+        # Cohere
+        "/v2/chat",
+        "/v1/chat",
+        # Generic (covers most OpenAI-compatible APIs: Groq, xAI,
+        # DeepSeek, Together, Fireworks, Cursor, etc.)
+        "/chat/completions",
+        "/generate",
+        "/predictions",           # Replicate
+        # HuggingFace
+        "/models/",               # api-inference: /models/{model}
+        # Cursor / Windsurf (gRPC-web)
+        "/aiserver.v1.",          # Cursor: /aiserver.v1.ChatService/
+    )
+    _SKIP_PATH_SUBSTRINGS = (
+        "/sentinel/", "/autocompletions", "/connectors/",
+        "/telemetry", "/rgstr", "/library",
+        "/cdn-cgi/", "/ces/", "/cdn/", "/_next/",
+        "/assets/", "/static/", "/favicon",
+        "/init",
+    )
+
     def __init__(self):
         self._detector = None
         self._data_dir = Path.home() / ".llmguard"
@@ -584,61 +637,10 @@ class LLMGuardAddon:
         # Skip non-conversation paths. Only inspect endpoints that carry
         # user-authored content (chat messages, completions). Internal
         # endpoints (sentinel, telemetry, autocompletions, connectors,
-        # static assets) are noise and cause false positives.
-        _CONVERSATION_PATH_FRAGMENTS = (
-            # ChatGPT web
-            "/conversation",          # /backend-api/f/conversation
-            "/backend-anon/",         # guest conversations
-            # OpenAI API
-            "/v1/chat/completions",
-            "/v1/completions",
-            "/v1/responses",          # 2025 Responses API
-            # Anthropic
-            "/v1/messages",
-            "/v1/complete",           # legacy
-            "/completion",            # Claude web: /api/.../completion
-            "/append_message",        # Claude web
-            # Google Gemini
-            "/batchexecute",          # Gemini web (BardChatUi)
-            "/StreamGenerate",        # Gemini web streaming
-            ":generateContent",       # Gemini API
-            ":streamGenerateContent", # Gemini API streaming
-            # Microsoft Copilot
-            "/c/api/chat",
-            "/c/api/conversations",
-            "/c/api/messages",
-            "/turing/conversation",
-            # Cohere
-            "/v2/chat",
-            "/v1/chat",
-            # Generic (covers most OpenAI-compatible APIs: Groq, xAI,
-            # DeepSeek, Together, Fireworks, Cursor, etc.)
-            "/chat/completions",
-            "/generate",
-            "/predictions",           # Replicate
-            # HuggingFace
-            "/models/",               # api-inference: /models/{model}
-            # Cursor / Windsurf (gRPC-web)
-            "/aiserver.v1.",          # Cursor: /aiserver.v1.ChatService/
-        )
-        _SKIP_PATH_SUBSTRINGS = (
-            "/sentinel/", "/autocompletions", "/connectors/",
-            "/telemetry", "/rgstr", "/library",
-            "/cdn-cgi/", "/ces/", "/cdn/", "/_next/",
-            "/assets/", "/static/", "/favicon",
-            "/init",
-        )
-        if any(s in path for s in _SKIP_PATH_SUBSTRINGS):
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "pass",
-                "reason": "non-conversation path",
-            })
-            return
-        if not any(f in path for f in _CONVERSATION_PATH_FRAGMENTS):
+        # static assets) are noise and cause false positives. (See
+        # ``_is_conversation_path`` -- shared with the response-side scan
+        # filter in ``responseheaders()``/``response()``.)
+        if not self._is_conversation_path(path):
             self._log_request({
                 "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
                 "host": host,
@@ -832,6 +834,24 @@ class LLMGuardAddon:
         """Check if a host is a known LLM API endpoint."""
         from app.services.interceptor import INTERCEPTED_DOMAINS
         return any(host.endswith(d) or host == d for d in INTERCEPTED_DOMAINS)
+
+    def _is_conversation_path(self, path: str) -> bool:
+        """True if *path* is a genuine LLM conversation/completion
+        endpoint (see ``_CONVERSATION_PATH_FRAGMENTS`` /
+        ``_SKIP_PATH_SUBSTRINGS``).
+
+        Shared by ``request()`` (outbound prompt DLP) and
+        ``responseheaders()`` / the ``response()`` fallback path (inbound
+        response-leak scanning) so both directions apply the identical
+        scope. Internal endpoints on an LLM host -- telemetry, sentinel,
+        autocompletions, connectors, polling, static assets -- are
+        excluded: scanning/logging them is pure noise (dozens of extra
+        "inspected" entries per real user interaction) with none of the
+        DLP value.
+        """
+        if any(s in path for s in self._SKIP_PATH_SUBSTRINGS):
+            return False
+        return any(f in path for f in self._CONVERSATION_PATH_FRAGMENTS)
 
     def _emit_audit_event(
         self,
@@ -1346,14 +1366,21 @@ class LLMGuardAddon:
         can hand a COPY of the full body to a background scan once
         streaming completes, without ever delaying delivery.
 
-        Only touches known LLM-host, JSON/SSE API responses -- everything
-        else (static assets, other hosts) is left at mitmproxy's default
-        (non-streamed) handling, unchanged from before this change.
+        Only touches known LLM-host, conversation-path, JSON/SSE API
+        responses -- everything else (static assets, other hosts,
+        telemetry/polling on an LLM host -- see ``_is_conversation_path``,
+        the same filter ``request()`` uses) is left at mitmproxy's default
+        (non-streamed) handling, unchanged from before this change. This
+        also means non-conversation responses are never logged as
+        "inspected", cutting the noise a single chat interaction used to
+        generate from background polling/telemetry calls.
         """
         host = flow.request.pretty_host
         if not self._is_llm_endpoint(host):
             return
         if flow.response is None:
+            return
+        if not self._is_conversation_path(flow.request.path):
             return
 
         # Skip static assets — only tee API responses (JSON / SSE)
@@ -1426,6 +1453,8 @@ class LLMGuardAddon:
                 )
             return
 
+        if not self._is_conversation_path(flow.request.path):
+            return
         if not flow.response or not flow.response.content:
             return
         if len(flow.response.content) < 20:

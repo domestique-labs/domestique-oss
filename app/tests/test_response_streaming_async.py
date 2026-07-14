@@ -249,3 +249,52 @@ class TestRequestDlpUnchanged:
         await addon.request(flow)
 
         assert flow.response is None
+
+
+class TestResponseScanScopedToConversationEndpoints:
+    """responseheaders()/response() must apply the SAME conversation-path
+    filter request() uses, so telemetry/polling/asset responses on an LLM
+    host are neither streamed-and-teed nor logged as inspected -- this is
+    what cuts the ~99-entries-per-interaction noise a real ChatGPT session
+    used to generate."""
+
+    async def test_telemetry_endpoint_not_teed_for_scanning(self):
+        addon = _addon()
+        flow = _flow(path="/backend-api/telemetry/event", content_type="application/json")
+
+        await addon.responseheaders(flow)
+
+        assert flow.response.stream is False
+        assert "llmguard_streamed" not in flow.metadata
+
+    async def test_sentinel_endpoint_not_teed_for_scanning(self):
+        addon = _addon()
+        flow = _flow(path="/sentinel/chat-requirements", content_type="application/json")
+
+        await addon.responseheaders(flow)
+
+        assert flow.response.stream is False
+
+    async def test_conversation_endpoint_still_teed(self):
+        """Sanity check: the scoping filter doesn't over-exclude --
+        genuine conversation endpoints are still streamed and scanned."""
+        addon = _addon()
+        flow = _flow(path="/backend-api/f/conversation", content_type="text/event-stream")
+
+        await addon.responseheaders(flow)
+
+        assert callable(flow.response.stream)
+
+    async def test_fallback_path_skips_non_conversation_response(self):
+        """A response responseheaders() never teed (e.g. a caller that
+        attaches content directly, mirroring the non-streamed fallback)
+        on a non-conversation path must not be scanned or logged."""
+        addon = _addon()
+        flow = _flow(path="/telemetry/event", content_type="application/json")
+        body = json.dumps({"choices": [{"message": {"content": "SSN 123-45-6789"}}]}).encode()
+        flow.response.content = body
+
+        await addon.response(flow)
+
+        assert addon._stats["response_alerts"] == 0
+        assert "X-LLMGuard-Alert" not in flow.response.headers
