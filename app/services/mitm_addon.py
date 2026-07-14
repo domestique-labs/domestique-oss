@@ -30,6 +30,7 @@ from urllib.request import Request
 from urllib.error import URLError
 
 from mitmproxy import http, ctx
+from mitmproxy.net import encoding as mitm_encoding
 
 # Direct HTTP opener that bypasses any system proxy settings.
 # This is critical because the mitmdump process runs inside the proxy chain -
@@ -263,6 +264,14 @@ class LLMGuardAddon:
             # never block/redact; it only surfaces a leak after the bytes
             # already reached the browser.
             "response_alerts": 0,
+            # A teed response body whose Content-Encoding could not be
+            # decoded (unknown encoding, or corrupt/truncated compressed
+            # bytes) -- the background scan could NOT inspect it for a
+            # leak. Tracked separately from response_alerts so "0 alerts"
+            # can't be misread as "everything was scanned and clean" when
+            # some responses were actually un-scannable. See
+            # _report_unscannable_response().
+            "response_scan_errors": 0,
         }
         self._stats_file = self._data_dir / "browser_stats.json"
         self._log_file = self._data_dir / "request_log.jsonl"
@@ -1395,6 +1404,15 @@ class LLMGuardAddon:
         buf = bytearray()
         flow.metadata["llmguard_streamed"] = True
         flow.metadata["llmguard_response_buf"] = buf
+        # The teed bytes are captured off the wire, BEFORE mitmproxy's
+        # normal auto-decompression (which only happens when something
+        # reads flow.response.content/.text -- never touched on this
+        # streamed path, by design). Content-Encoding is known now, at
+        # header time, so stash it for the background scan to decode with
+        # (see _scan_response_bytes_async / _decode_response_body).
+        flow.metadata["llmguard_response_encoding"] = flow.response.headers.get(
+            "content-encoding", ""
+        )
 
         def _tee(chunk: bytes) -> bytes:
             # Called synchronously by mitmproxy for every body chunk as it
@@ -1440,6 +1458,7 @@ class LLMGuardAddon:
                     flow.response.headers.get("content-type", "")
                     if flow.response else ""
                 )
+                content_encoding = metadata.get("llmguard_response_encoding", "")
                 # Fire-and-forget: never await the scan here. The bytes
                 # are already gone to the browser, so there is nothing
                 # for this hook to block on.
@@ -1448,6 +1467,7 @@ class LLMGuardAddon:
                         host=host,
                         path=flow.request.path,
                         content_type=content_type,
+                        content_encoding=content_encoding,
                         data=data,
                     )
                 )
@@ -1497,6 +1517,7 @@ class LLMGuardAddon:
 
     async def _scan_response_bytes_async(
         self, *, host: str, path: str, content_type: str, data: bytes,
+        content_encoding: str = "",
     ) -> None:
         """Background scan of a teed response copy.
 
@@ -1510,14 +1531,41 @@ class LLMGuardAddon:
         response direction; the request/prompt DLP path is unaffected and
         still blocks synchronously before forwarding (see ``request()``).
 
+        ``data`` is the RAW wire bytes teed off ``flow.response.stream``
+        -- still Content-Encoding'd (gzip/br/zstd/deflate) if the upstream
+        sent it that way, because the streaming tee runs before
+        mitmproxy's normal auto-decompression would ever kick in (that
+        only happens on ``.content``/``.text`` access, which this path
+        never does, by design -- see ``responseheaders()``). Decode it
+        the same way mitmproxy's own ``Message.content`` would before
+        attempting to parse JSON/SSE, or a compressed conversation
+        response silently scans as garbage bytes and no leak is ever
+        detected -- see ``_decode_response_body``.
+
         Any failure here is swallowed (logged at debug level only) -- a
         background scan must never surface as an error on the proxied
         flow, which has already completed from the browser's perspective.
+        A body that fails to decode is the one exception to "swallow and
+        move on": that must be recorded as un-scannable (not silently
+        treated as "scanned, clean"), see ``_report_unscannable_response``.
         """
         try:
-            if len(data) < 20:
+            if not data:
                 return
-            response_text = self._extract_text_from_body(content_type, data)
+            try:
+                decoded = self._decode_response_body(data, content_encoding)
+            except ValueError as exc:
+                self._report_unscannable_response(
+                    host=host,
+                    path=path,
+                    content_encoding=content_encoding,
+                    error=str(exc),
+                )
+                return
+
+            if len(decoded) < 20:
+                return
+            response_text = self._extract_text_from_body(content_type, decoded)
             if not response_text:
                 return
 
@@ -1530,10 +1578,67 @@ class LLMGuardAddon:
                     path=path,
                     reasons=reasons,
                     preview=preview,
-                    content_length=len(data),
+                    content_length=len(decoded),
                 )
         except Exception:
             logger.debug("Background response scan failed", exc_info=True)
+
+    def _decode_response_body(self, raw: bytes, content_encoding: str) -> bytes:
+        """Decode a raw (possibly Content-Encoding'd) response body the
+        same way mitmproxy's own ``Message.content``/``get_content()``
+        would (see ``mitmproxy/http.py``), using mitmproxy's own
+        ``mitmproxy.net.encoding.decode`` helper -- so the background scan
+        of a teed streamed copy sees the identical decompressed bytes the
+        pre-streaming code got for free from ``flow.response.content``.
+
+        No/identity/unrecognized-but-blank encoding -> bytes returned
+        unchanged (nothing to decode). A real, non-identity encoding that
+        fails to decode (corrupt/truncated body, or a server advertising
+        an encoding it didn't actually use) raises ``ValueError`` -- the
+        caller must treat that as "could not be scanned," never as
+        "scanned, nothing found."
+        """
+        encoding = (content_encoding or "").strip().lower()
+        if not encoding or encoding == "identity":
+            return raw
+        decoded = mitm_encoding.decode(raw, encoding)
+        if isinstance(decoded, str):
+            # A server may illegally specify a byte->str codec name (e.g.
+            # "utf-8") in Content-Encoding -- mitmproxy's own get_content()
+            # treats this as invalid too.
+            raise ValueError(f"Invalid Content-Encoding: {encoding!r}")
+        return decoded
+
+    def _report_unscannable_response(
+        self, *, host: str, path: str, content_encoding: str, error: str,
+    ) -> None:
+        """A teed response body could not be decoded, so the background
+        scan never got to inspect it for a leak -- do NOT let this pass
+        silently (that would be indistinguishable from "scanned, clean").
+        Records a dedicated stats counter (kept separate from
+        ``response_alerts`` -- see ``__init__``), a request-log entry, and
+        a proxy-log warning, mirroring how a detected leak is surfaced via
+        ``_report_response_leak`` so both are equally visible to the
+        dashboard/debug log/audit trail.
+        """
+        self._stats["response_scan_errors"] = (
+            self._stats.get("response_scan_errors", 0) + 1
+        )
+        self._persist_stats()
+        self._log_request({
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "host": host,
+            "method": "RESPONSE",
+            "path": path[:100],
+            "action": "response_undecodable",
+            "reasons": [f"content-encoding={content_encoding!r}: {error}"],
+            "direction": "inbound",
+        })
+        ctx.log.warn(
+            f"RESPONSE UNSCANNABLE from {host}: could not decode "
+            f"Content-Encoding={content_encoding!r} ({error}) -- this "
+            f"response body was NOT scanned for a data leak"
+        )
 
     def _report_response_leak(
         self,

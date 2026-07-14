@@ -30,6 +30,8 @@ import pytest
 from mitmproxy import http as mitm_http
 from mitmproxy.test import tflow, tutils
 
+from mitmproxy.net import encoding as mitm_encoding
+
 from app.services.mitm_addon import LLMGuardAddon
 from llmguard.detectors.registry import Finding, InspectionResult
 from llmguard.models import Action
@@ -65,6 +67,7 @@ def _flow(
     path: str = "/v1/chat/completions",
     content_type: str = "text/event-stream",
     host: str = "api.openai.com",
+    content_encoding: str | None = None,
 ):
     """A real mitmproxy flow (not a MagicMock) so responseheaders()'s
     ``flow.response.stream = ...`` assignment and mitmproxy's own
@@ -78,8 +81,11 @@ def _flow(
         content=b'{"messages":[{"role":"user","content":"hi"}]}',
     )
     flow = tflow.tflow(req=req)
+    resp_headers = [(b"content-type", content_type.encode())]
+    if content_encoding:
+        resp_headers.append((b"content-encoding", content_encoding.encode()))
     flow.response = tutils.tresp(
-        headers=mitm_http.Headers(((b"content-type", content_type.encode()),)),
+        headers=mitm_http.Headers(tuple(resp_headers)),
         content=b"",
     )
     return flow
@@ -298,3 +304,164 @@ class TestResponseScanScopedToConversationEndpoints:
 
         assert addon._stats["response_alerts"] == 0
         assert "X-LLMGuard-Alert" not in flow.response.headers
+
+
+class TestCompressedResponseIsDecodedBeforeScanning:
+    """CRITICAL regression coverage: the async tee captures RAW wire bytes
+    off ``flow.response.stream`` -- BEFORE mitmproxy's normal
+    auto-decompression, which only fires on ``.content``/``.text`` access
+    (never touched on this path, by design, to keep streaming intact). A
+    real upstream behind Cloudflare/nginx routinely sends
+    Content-Encoding: gzip (or br). Without decoding the teed copy first,
+    ``_extract_text_from_body`` hands JSON parsing (and the SSE parser)
+    compressed bytes -> JSON parse fails -> falls back to
+    ``raw.decode("utf-8", errors="replace")`` -> garbage -> detectors match
+    nothing -> a genuine leak reaches the browser with NO log/stats/alert.
+    These tests build REAL gzip/br compressed bodies (not mocks) and
+    assert the leak is still detected."""
+
+    async def test_gzip_encoded_json_leak_is_detected(self):
+        """A gzip Content-Encoding JSON response containing an SSN must
+        still be detected by the background scan."""
+        addon = _addon()
+        flow = _flow(
+            path="/backend-api/f/conversation",
+            content_type="application/json",
+            content_encoding="gzip",
+        )
+        await addon.responseheaders(flow)
+
+        plaintext = json.dumps(
+            {"choices": [{"message": {"content": "Your SSN is 123-45-6789"}}]}
+        ).encode()
+        gzip_bytes = mitm_encoding.encode(plaintext, "gzip")
+        flow.response.stream(gzip_bytes)
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 1
+        assert addon._stats["response_scan_errors"] == 0
+
+    async def test_gzip_encoded_sse_leak_is_detected(self):
+        """Same as above but SSE (the real ChatGPT streaming shape),
+        gzip-compressed."""
+        addon = _addon()
+        flow = _flow(content_type="text/event-stream", content_encoding="gzip")
+        await addon.responseheaders(flow)
+
+        plaintext = (
+            b'data: {"choices":[{"delta":{"content":"SSN 123-45-6789"}}]}\n\n'
+            b"data: [DONE]\n\n"
+        )
+        gzip_bytes = mitm_encoding.encode(plaintext, "gzip")
+        flow.response.stream(gzip_bytes)
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 1
+
+    async def test_brotli_encoded_json_leak_is_detected(self):
+        """Same regression, brotli (the other very common web encoding)."""
+        addon = _addon()
+        flow = _flow(
+            path="/backend-api/f/conversation",
+            content_type="application/json",
+            content_encoding="br",
+        )
+        await addon.responseheaders(flow)
+
+        plaintext = json.dumps(
+            {"choices": [{"message": {"content": "SSN on file: 123-45-6789"}}]}
+        ).encode()
+        br_bytes = mitm_encoding.encode(plaintext, "br")
+        flow.response.stream(br_bytes)
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 1
+
+    async def test_gzip_encoded_clean_response_records_no_alert(self):
+        addon = _addon()
+        flow = _flow(content_type="application/json", content_encoding="gzip")
+        await addon.responseheaders(flow)
+
+        plaintext = json.dumps(
+            {"choices": [{"message": {"content": "hello, nice to meet you"}}]}
+        ).encode()
+        flow.response.stream(mitm_encoding.encode(plaintext, "gzip"))
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 0
+        assert addon._stats["response_scan_errors"] == 0
+
+    async def test_identity_uncompressed_body_still_scanned(self):
+        """No Content-Encoding header (or 'identity') -- the common case
+        -- must keep working exactly as before: raw bytes used as-is."""
+        addon = _addon()
+        flow = _flow(content_type="application/json")  # no content_encoding
+        await addon.responseheaders(flow)
+
+        plaintext = json.dumps(
+            {"choices": [{"message": {"content": "SSN 123-45-6789"}}]}
+        ).encode()
+        flow.response.stream(plaintext)
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 1
+
+    async def test_explicit_identity_encoding_header_still_scanned(self):
+        addon = _addon()
+        flow = _flow(content_type="application/json", content_encoding="identity")
+        await addon.responseheaders(flow)
+
+        plaintext = json.dumps(
+            {"choices": [{"message": {"content": "SSN 123-45-6789"}}]}
+        ).encode()
+        flow.response.stream(plaintext)
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 1
+
+    async def test_undecodable_body_is_recorded_not_silently_allowed(self):
+        """Content-Encoding says gzip but the bytes are NOT valid gzip
+        (corrupt/truncated, or a server lying about the encoding). This
+        must be recorded as un-scannable -- never silently treated as
+        'scanned, clean' -- and must NOT raise into the proxied flow."""
+        addon = _addon()
+        flow = _flow(content_type="application/json", content_encoding="gzip")
+        await addon.responseheaders(flow)
+
+        not_actually_gzip = b'{"choices":[{"message":{"content":"SSN 123-45-6789"}}]}'
+        flow.response.stream(not_actually_gzip)
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 0
+        assert addon._stats["response_scan_errors"] == 1
+
+    async def test_unknown_encoding_is_recorded_not_silently_allowed(self):
+        """An encoding mitmproxy/stdlib codecs don't know how to decode at
+        all must also be recorded as un-scannable, not silently dropped."""
+        addon = _addon()
+        flow = _flow(
+            content_type="application/json", content_encoding="x-unknown-codec",
+        )
+        await addon.responseheaders(flow)
+
+        flow.response.stream(b'{"choices":[{"message":{"content":"hello"}}]}')
+
+        await addon.response(flow)
+        await _drain_background_tasks()
+
+        assert addon._stats["response_alerts"] == 0
+        assert addon._stats["response_scan_errors"] == 1
