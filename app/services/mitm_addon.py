@@ -202,7 +202,15 @@ class LLMGuardAddon:
     def __init__(self):
         self._detector = None
         self._data_dir = Path.home() / ".llmguard"
-        self._stats = {"inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0}
+        self._stats = {
+            "inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0,
+            # Response-side leak alerts (async, non-blocking scan -- see
+            # responseheaders()/response()). Counted separately from the
+            # request-side counters above because a response alert can
+            # never block/redact; it only surfaces a leak after the bytes
+            # already reached the browser.
+            "response_alerts": 0,
+        }
         self._stats_file = self._data_dir / "browser_stats.json"
         self._log_file = self._data_dir / "request_log.jsonl"
         self._config_file = self._data_dir / "config.json"
@@ -1322,20 +1330,100 @@ class LLMGuardAddon:
         except (json.JSONDecodeError, KeyError):
             pass
 
-    # --- Response Scanning (Bidirectional DLP) -----------------------
+    # --- Response Scanning (Bidirectional DLP, async / non-blocking) -
 
-    async def response(self, flow: http.HTTPFlow) -> None:
-        """Inspect LLM responses for leaked sensitive data.
+    async def responseheaders(self, flow: http.HTTPFlow) -> None:
+        """Decide whether to stream this response straight through to the
+        browser while teeing a copy off for background scanning.
 
-        Detects training data extraction attacks where LLMs leak PII,
-        credentials, or internal data in their responses. Operates in
-        alert mode: logs and flags but does not block responses.
+        This fires once response headers arrive, before any body bytes do.
+        Setting ``flow.response.stream`` to a callable here is what keeps
+        ChatGPT-style token streaming intact: mitmproxy forwards each body
+        chunk to the browser AS IT ARRIVES from upstream (the callable's
+        return value), instead of buffering the entire response before
+        ``response()`` runs -- the old, blocking behavior. The callable
+        also appends each chunk to an in-memory buffer so ``response()``
+        can hand a COPY of the full body to a background scan once
+        streaming completes, without ever delaying delivery.
 
-        Only scans actual LLM API responses (JSON/SSE), not static
-        assets like JS bundles, CSS, images, or HTML pages.
+        Only touches known LLM-host, JSON/SSE API responses -- everything
+        else (static assets, other hosts) is left at mitmproxy's default
+        (non-streamed) handling, unchanged from before this change.
         """
         host = flow.request.pretty_host
         if not self._is_llm_endpoint(host):
+            return
+        if flow.response is None:
+            return
+
+        # Skip static assets — only tee API responses (JSON / SSE)
+        content_type = flow.response.headers.get("content-type", "")
+        is_api_response = (
+            "application/json" in content_type
+            or "text/event-stream" in content_type
+        )
+        if not is_api_response:
+            return
+
+        buf = bytearray()
+        flow.metadata["llmguard_streamed"] = True
+        flow.metadata["llmguard_response_buf"] = buf
+
+        def _tee(chunk: bytes) -> bytes:
+            # Called synchronously by mitmproxy for every body chunk as it
+            # arrives from upstream (and once more with b"" at end of
+            # body). Must stay cheap and must never block -- the return
+            # value is forwarded to the browser immediately.
+            if chunk:
+                buf.extend(chunk)
+            return chunk
+
+        flow.response.stream = _tee
+
+    async def response(self, flow: http.HTTPFlow) -> None:
+        """Handle a completed response.
+
+        Two paths:
+
+        1. Streamed (the normal case for real traffic -- see
+           ``responseheaders()``): the body already reached the browser
+           chunk-by-chunk, untouched. ``flow.response.content`` is
+           unavailable (mitmproxy never buffered it, by design). Kick off
+           a background scan of the teed COPY and return immediately --
+           this hook must never block, because for a streamed response
+           there is nothing left it could usefully delay.
+
+        2. Fallback / non-streamed: a response ``responseheaders()``
+           chose not to tee (e.g. non-LLM host, or content-type wasn't
+           known to be scannable at header time), or a caller that builds
+           a flow with content already attached directly (some tests do
+           this). Scans synchronously against ``flow.response.content``,
+           same as the original alert-mode behavior.
+        """
+        host = flow.request.pretty_host
+        if not self._is_llm_endpoint(host):
+            return
+
+        metadata = getattr(flow, "metadata", None)
+        if isinstance(metadata, dict) and metadata.get("llmguard_streamed") is True:
+            buf = metadata.get("llmguard_response_buf")
+            if buf:
+                data = bytes(buf)
+                content_type = (
+                    flow.response.headers.get("content-type", "")
+                    if flow.response else ""
+                )
+                # Fire-and-forget: never await the scan here. The bytes
+                # are already gone to the browser, so there is nothing
+                # for this hook to block on.
+                asyncio.create_task(
+                    self._scan_response_bytes_async(
+                        host=host,
+                        path=flow.request.path,
+                        content_type=content_type,
+                        data=data,
+                    )
+                )
             return
 
         if not flow.response or not flow.response.content:
@@ -1363,51 +1451,123 @@ class LLMGuardAddon:
         if result["action"] in ("block", "redact"):
             reasons = result.get("reasons", [])
             preview = response_text[:200]
-
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": "RESPONSE",
-                "path": flow.request.path[:100],
-                "action": "response_alert",
-                "reasons": reasons,
-                "content_preview": preview,
-                "direction": "inbound",
-            })
-
-            # Emit audit event for response leak
-            self._emit_audit_event(
-                action="response_alert",
+            self._report_response_leak(
                 host=host,
-                method="RESPONSE",
                 path=flow.request.path,
                 reasons=reasons,
-                latency_ms=0,
+                preview=preview,
                 content_length=len(flow.response.content),
-                content_preview=preview,
             )
 
-            ctx.log.warn(
-                f"RESPONSE ALERT from {host}: "
-                f"sensitive data in response - {reasons}"
-            )
-
-            # Add warning header (doesn't block - alert mode)
+            # Add warning header (doesn't block - alert mode). Only
+            # possible on this fallback path: headers haven't reached
+            # the client yet, unlike the streamed path above.
             flow.response.headers["X-LLMGuard-Alert"] = (
                 f"Sensitive data detected in response: {','.join(reasons)}"
             )
 
-    def _extract_response_content(self, flow: http.HTTPFlow) -> Optional[str]:
-        """Extract text content from an LLM response body.
+    async def _scan_response_bytes_async(
+        self, *, host: str, path: str, content_type: str, data: bytes,
+    ) -> None:
+        """Background scan of a teed response copy.
 
-        Handles streaming (SSE) and JSON response formats.
+        Runs as a fire-and-forget ``asyncio.create_task`` kicked off from
+        ``response()``. By the time this executes, the real response
+        bytes have already reached the browser via the streaming tee
+        installed in ``responseheaders()``. A detected leak can only be
+        logged/alerted (dashboard stats, debug/request log, audit trail)
+        -- it can never block or modify a response that was already
+        delivered. This is "detect + surface, don't block" for the
+        response direction; the request/prompt DLP path is unaffected and
+        still blocks synchronously before forwarding (see ``request()``).
+
+        Any failure here is swallowed (logged at debug level only) -- a
+        background scan must never surface as an error on the proxied
+        flow, which has already completed from the browser's perspective.
+        """
+        try:
+            if len(data) < 20:
+                return
+            response_text = self._extract_text_from_body(content_type, data)
+            if not response_text:
+                return
+
+            result = await self._inspect(response_text)
+            if result["action"] in ("block", "redact"):
+                reasons = result.get("reasons", [])
+                preview = response_text[:200]
+                self._report_response_leak(
+                    host=host,
+                    path=path,
+                    reasons=reasons,
+                    preview=preview,
+                    content_length=len(data),
+                )
+        except Exception:
+            logger.debug("Background response scan failed", exc_info=True)
+
+    def _report_response_leak(
+        self,
+        *,
+        host: str,
+        path: str,
+        reasons: list[str],
+        preview: str,
+        content_length: int,
+    ) -> None:
+        """Record a detected response-side leak: stats counter, request
+        log entry, audit event, and a proxy-log warning. Shared by the
+        synchronous fallback scan and the async background scan
+        (``response()`` / ``_scan_response_bytes_async()``) so both
+        surface leaks identically to the dashboard and debug log.
+        """
+        self._stats["response_alerts"] += 1
+        self._persist_stats()
+        self._log_request({
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "host": host,
+            "method": "RESPONSE",
+            "path": path[:100],
+            "action": "response_alert",
+            "reasons": reasons,
+            "content_preview": preview,
+            "direction": "inbound",
+        })
+        self._emit_audit_event(
+            action="response_alert",
+            host=host,
+            method="RESPONSE",
+            path=path,
+            reasons=reasons,
+            latency_ms=0,
+            content_length=content_length,
+            content_preview=preview,
+        )
+        ctx.log.warn(
+            f"RESPONSE ALERT from {host}: "
+            f"sensitive data in response - {reasons}"
+        )
+
+    def _extract_response_content(self, flow: http.HTTPFlow) -> Optional[str]:
+        """Extract text content from an LLM response body attached to a
+        flow (the non-streamed / fallback path -- ``flow.response.content``
+        is available). Delegates to ``_extract_text_from_body`` so the
+        streamed async-scan path (which only has raw bytes, no flow) uses
+        the identical extraction logic.
         """
         if not flow.response or not flow.response.content:
             return None
-
         content_type = flow.response.headers.get("content-type", "")
-        raw = flow.response.content
+        return self._extract_text_from_body(content_type, flow.response.content)
 
+    def _extract_text_from_body(self, content_type: str, raw: bytes) -> Optional[str]:
+        """Extract text content from a raw response body + content-type.
+
+        Handles streaming (SSE) and JSON response formats. Shared by the
+        flow-based fallback path (``_extract_response_content``) and the
+        background async-scan path (``_scan_response_bytes_async``, which
+        only has a teed byte copy, not a live flow).
+        """
         # Handle Server-Sent Events (streaming responses)
         if "text/event-stream" in content_type:
             return self._extract_sse_content(raw)
