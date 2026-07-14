@@ -1540,7 +1540,17 @@ async function refreshLog() {
 // row, consecutive log entries to the same host within a short window are
 // grouped into a single expandable row. This is purely presentational -
 // it does not change what gets logged server-side.
-const LOG_GROUP_WINDOW_MS = 10000;
+//
+// 25s (not the original 10s): a real ChatGPT reply can take well over
+// 10s to finish streaming for a long answer, and the title-generation /
+// follow-up calls for that same turn land shortly *after* the reply
+// finishes -- with a 10s window those trailing calls fell outside it and
+// splintered one interaction into several groups. The comparison below
+// is pairwise (gap since the *previous* entry added to the group, not
+// since the group's first entry), so a longer window still doesn't merge
+// genuinely separate, far-apart interactions -- it just tolerates a
+// slower reply/trailing-call gap within one interaction.
+const LOG_GROUP_WINDOW_MS = 25000;
 
 function groupLogEntries(entries) {
   // `entries` is most-recent-first (see _handle_request_log in api.py).
