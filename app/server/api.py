@@ -519,6 +519,12 @@ class APIHandler(BaseHTTPRequestHandler):
             # it's only ever logged to browser_proxy.log.
             stats = {
                 "inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0,
+                # Response-side leak alerts (async, non-blocking scan of the
+                # LLM's *reply* -- see mitm_addon.py::_report_response_leak).
+                # Counted separately from the request-side counters because a
+                # response alert can never block/redact; it surfaces a leak
+                # after the reply already streamed to the browser.
+                "response_alerts": 0,
                 "light_profile_active": False,
             }
             try:
