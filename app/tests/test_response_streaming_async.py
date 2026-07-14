@@ -465,3 +465,46 @@ class TestCompressedResponseIsDecodedBeforeScanning:
 
         assert addon._stats["response_alerts"] == 0
         assert addon._stats["response_scan_errors"] == 1
+
+
+class TestBackgroundTaskRetention:
+    """IMPORTANT regression coverage: response() must keep a strong
+    reference to the background scan task it creates. Per the asyncio
+    docs, "the event loop only keeps weak references to tasks... without
+    a reference held ... a task can disappear mid-execution." A
+    fire-and-forget ``asyncio.create_task(...)`` whose return value is
+    discarded is exactly that bug -- on the DLP path it means a scan can
+    be silently GC'd before it ever runs."""
+
+    async def test_task_is_retained_in_registry_while_running_and_evicted_after(self):
+        addon = _addon()
+        flow = _flow()
+        await addon.responseheaders(flow)
+        flow.response.stream(b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n')
+
+        assert addon._background_tasks == set()
+        await addon.response(flow)
+        # response() returned already, but the task it created must be
+        # held live in the registry -- not just floating, unreferenced.
+        assert len(addon._background_tasks) == 1
+        task = next(iter(addon._background_tasks))
+        assert isinstance(task, asyncio.Task)
+
+        await _drain_background_tasks()
+
+        # Once the task completes, the done callback must evict it --
+        # the registry isn't allowed to grow unbounded over a long-lived
+        # proxy session.
+        assert addon._background_tasks == set()
+
+    async def test_multiple_concurrent_scans_are_all_retained(self):
+        addon = _addon()
+        for _ in range(3):
+            flow = _flow()
+            await addon.responseheaders(flow)
+            flow.response.stream(b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n')
+            await addon.response(flow)
+
+        assert len(addon._background_tasks) == 3
+        await _drain_background_tasks()
+        assert addon._background_tasks == set()

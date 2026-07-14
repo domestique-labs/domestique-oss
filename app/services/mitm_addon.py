@@ -291,6 +291,13 @@ class LLMGuardAddon:
         # often an automatic retry is attempted absent a config change.
         self._detector_retry_lock = threading.Lock()
         self._last_detector_retry_ts = 0.0
+        # Strong references to fire-and-forget background response-scan
+        # tasks (asyncio.create_task(...) in response()). Per the asyncio
+        # docs, a Task with no other referent can be garbage-collected
+        # before it completes, silently dropping the scan -- this set
+        # keeps each task alive until it finishes, then self-evicts via
+        # the done callback. See response() / _scan_response_bytes_async().
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _persist_stats(self):
         """Write stats to a shared file for the dashboard to read.
@@ -1461,8 +1468,12 @@ class LLMGuardAddon:
                 content_encoding = metadata.get("llmguard_response_encoding", "")
                 # Fire-and-forget: never await the scan here. The bytes
                 # are already gone to the browser, so there is nothing
-                # for this hook to block on.
-                asyncio.create_task(
+                # for this hook to block on. The task is kept alive via
+                # self._background_tasks (added, then evicted by the done
+                # callback) -- an unreferenced asyncio.Task can otherwise
+                # be garbage-collected mid-run, silently dropping the
+                # scan.
+                t = asyncio.create_task(
                     self._scan_response_bytes_async(
                         host=host,
                         path=flow.request.path,
@@ -1471,6 +1482,8 @@ class LLMGuardAddon:
                         data=data,
                     )
                 )
+                self._background_tasks.add(t)
+                t.add_done_callback(self._background_tasks.discard)
             return
 
         if not self._is_conversation_path(flow.request.path):
