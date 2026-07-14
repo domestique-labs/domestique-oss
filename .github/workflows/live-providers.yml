@@ -3,11 +3,19 @@ name: Live providers (real API smoke)
 # Runs the gated live integration tests (tests/integration) against the REAL
 # OpenAI and Anthropic APIs to catch provider drift or redaction regressions.
 #
+# WHEN IT RUNS:
+#   - On push to `main` that touches redaction-relevant code (path filter below)
+#     -> catch a redaction/transport regression at integration time.
+#   - Weekly (Monday 06:00 UTC) -> catch provider-side drift with no code change.
+#   - On demand (workflow_dispatch) -> maintainers, any time.
+#   It deliberately does NOT run on every push/PR — only these three.
+#
 # SECURITY (public repo):
-#   - Triggers are workflow_dispatch (maintainers only) and schedule (runs on
-#     the default branch = trusted code). NEVER pull_request / pull_request_target,
-#     so a fork PR can never reach these secrets. Fork PRs simply skip these
-#     tests (no keys -> pytest skipif).
+#   - Triggers are push-to-main, schedule, and workflow_dispatch — all run on the
+#     trusted default branch or by maintainers. NEVER pull_request /
+#     pull_request_target, so a fork PR can never reach these secrets. (A fork PR
+#     touching redaction still runs the normal unit suite in ci.yml, where these
+#     live tests skip for lack of keys.)
 #   - The job is pinned to this repo (`if: github.repository == ...`) so forks
 #     that copy the workflow don't attempt (and fail) it.
 #   - Keys are spend-capped at the provider (OpenAI project budget + gpt-4o-mini
@@ -21,6 +29,17 @@ on:
         type: choice
         default: both
         options: [both, openai, anthropic]
+  push:
+    branches: [main]
+    paths:
+      - "llmguard/gateway.py"
+      - "llmguard/extract.py"
+      - "llmguard/redact.py"
+      - "llmguard/models.py"
+      - "llmguard/detectors/**"
+      - "llmguard/policy/**"
+      - "tests/integration/**"
+      - ".github/workflows/live-providers.yml"
   schedule:
     # Weekly, Monday 06:00 UTC. Cheap (sub-cent) drift check.
     - cron: "0 6 * * 1"
