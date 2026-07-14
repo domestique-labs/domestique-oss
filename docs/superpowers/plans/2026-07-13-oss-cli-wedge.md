@@ -595,7 +595,7 @@ Add the proxy handler: for each routed path, scan+redact the body per field, blo
 **Files:**
 - Modify: `llmguard/gateway.py`
 - Create: `tests/unit/test_gateway_proxy.py`
-- Create: `tests/support/mock_provider.py` (test mock: echo + streaming, OpenAI + Anthropic paths)
+- Create: `tests/unit/conftest.py` (test mock `MockProvider` + `mock_openai` fixture — echo + streaming, OpenAI + Anthropic paths). Placed in conftest (not a `tests.support` package) because `tests/` has no `__init__.py`; a conftest is auto-discovered with zero import risk.
 
 **Interfaces:**
 - Consumes: `ROUTES`, `upstream_base`, `create_gateway` (Task 4); `extract_texts` (Task 1); `apply_field_redactions` (Task 2); `DetectorPipeline.inspect` → `InspectionResult(action, reason, redacted_text)` (existing, `llmguard/detectors/registry.py`); `llmguard.models.Action`.
