@@ -19,7 +19,7 @@ Bedrock-openai-compat) instead:
     LLMGUARD_LIVE_OPENAI_MODEL=llama-3.1-8b-instant \
       python -m pytest tests/integration/test_live_providers.py -k openai -v
 
-Run the Anthropic door (api.anthropic.com / claude-3-5-haiku):
+Run the Anthropic door (api.anthropic.com / claude-haiku-4-5):
 
     LLMGUARD_LIVE_ANTHROPIC_KEY=sk-ant-... \
       python -m pytest tests/integration/test_live_providers.py -k anthropic -v
@@ -47,7 +47,7 @@ _ECHO_PROMPT = f"Echo the following line back verbatim, output nothing else:\nto
 _OPENAI_KEY = os.environ.get("LLMGUARD_LIVE_OPENAI_KEY")
 _ANTHROPIC_KEY = os.environ.get("LLMGUARD_LIVE_ANTHROPIC_KEY")
 _OPENAI_MODEL = os.environ.get("LLMGUARD_LIVE_OPENAI_MODEL", "gpt-4o-mini")
-_ANTHROPIC_MODEL = os.environ.get("LLMGUARD_LIVE_ANTHROPIC_MODEL", "claude-3-5-haiku-latest")
+_ANTHROPIC_MODEL = os.environ.get("LLMGUARD_LIVE_ANTHROPIC_MODEL", "claude-haiku-4-5")
 
 _TIMEOUT = 30.0
 
