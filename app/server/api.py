@@ -525,6 +525,12 @@ class APIHandler(BaseHTTPRequestHandler):
                 # response alert can never block/redact; it surfaces a leak
                 # after the reply already streamed to the browser.
                 "response_alerts": 0,
+                # Response bodies that could not be decoded (e.g. an
+                # unsupported Content-Encoding) so the background scan never
+                # inspected them -- a silent-DLP-gap indicator, surfaced so
+                # it's never mistaken for "scanned, clean". See
+                # mitm_addon.py::_report_unscannable_response.
+                "response_scan_errors": 0,
                 "light_profile_active": False,
             }
             try:

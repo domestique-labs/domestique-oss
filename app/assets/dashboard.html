@@ -439,6 +439,10 @@
           <div class="stat-value" id="responseAlertsCount" style="color:var(--purple,#8b5cf6)">0</div>
           <div class="stat-label">Response Leaks</div>
         </div>
+        <div class="stat-box" title="Response bodies that could not be decoded (e.g. an unsupported Content-Encoding), so they were NOT scanned for a leak. A non-zero value means a possible silent DLP gap worth investigating.">
+          <div class="stat-value" id="responseScanErrorsCount" style="color:var(--yellow,#f59e0b)">0</div>
+          <div class="stat-label">Scan Errors</div>
+        </div>
       </div>
     </div>
 
@@ -1286,6 +1290,7 @@ setInterval(async () => {
         document.getElementById('redactedCount').textContent = bp.stats.redacted || 0;
         document.getElementById('allowedCount').textContent = bp.stats.allowed || 0;
         document.getElementById('responseAlertsCount').textContent = bp.stats.response_alerts || 0;
+        document.getElementById('responseScanErrorsCount').textContent = bp.stats.response_scan_errors || 0;
         // Status bar
         document.getElementById('sbInspected').textContent = bp.stats.inspected || 0;
         document.getElementById('sbBlocked').textContent = bp.stats.blocked || 0;
@@ -1596,10 +1601,10 @@ function escapeHtml(value) {
 }
 
 function renderLogEntry(entry, idx) {
-  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅', response_alert: '🔎' };
-  const badgeCls = { blocked: 'log-badge-blocked', redacted: 'log-badge-redacted', allowed: 'log-badge-allowed', pass: 'log-badge-pass', approved: 'log-badge-approved', response_alert: 'log-badge-response_alert' };
+  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅', response_alert: '🔎', response_undecodable: '⚠️' };
+  const badgeCls = { blocked: 'log-badge-blocked', redacted: 'log-badge-redacted', allowed: 'log-badge-allowed', pass: 'log-badge-pass', approved: 'log-badge-approved', response_alert: 'log-badge-response_alert', response_undecodable: 'log-badge-redacted' };
   // Friendlier badge text than the raw action key.
-  const badgeLabels = { response_alert: 'leak' };
+  const badgeLabels = { response_alert: 'leak', response_undecodable: 'unscanned' };
   const entryCls = entry.action === 'blocked' ? ' log-blocked' : (entry.action === 'response_alert' ? ' log-alert' : '');
   const icon = icons[entry.action] || '•';
   const badge = badgeCls[entry.action] || 'log-badge-pass';
