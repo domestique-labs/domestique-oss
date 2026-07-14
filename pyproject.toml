@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "llmguard"
 version = "0.1.0"
@@ -17,6 +21,9 @@ dependencies = [
     "python-dotenv>=1,<2",
     "prometheus-client>=0.21,<1",
 ]
+
+[project.scripts]
+llmguard = "llmguard.cli:main"
 
 [project.optional-dependencies]
 pii = [
@@ -73,6 +80,12 @@ dev = [
     "mypy>=1.13,<2",
     "pre-commit>=4,<5",
 ]
+
+[tool.setuptools.packages.find]
+include = ["llmguard*"]
+
+[tool.setuptools.package-data]
+"llmguard.policy" = ["*.yaml"]
 
 [tool.ruff]
 line-length = 99
