@@ -1,115 +1,78 @@
 # LLMGuard
 
-An enterprise-grade LLM firewall that prevents sensitive data leakage to
-external AI providers. Intercepts traffic to ChatGPT, Claude, Gemini, Copilot,
-and 15+ other LLM services. Deploys company-wide with zero per-app
-configuration.
+**A local AI firewall for developers.** Point your agent or app at LLMGuard and it
+redacts secrets and PII out of your prompts *before* they reach OpenAI, Anthropic, or
+any LLM — with zero system changes. No CA to install, no system proxy, cross-platform.
 
-## Design Principles
+## Quick start
 
-- **Near-zero latency** - parallel async detection; regex fast-path skips NLP
-  when content is clean.
-- **Modular** - detectors, policy, and transport are independent packages with
-  protocol-based contracts.
-- **Fail-safe** - configurable fail-open/closed; never silently drops requests.
-- **Cross-platform** - runs on macOS (native app), Windows, and Linux.
-
-## Quick Start
-
-### Prerequisites
-
-- **Python 3.11+** - [python.org/downloads](https://www.python.org/downloads/)
-- **Ollama** (optional, for LLM classifier) - [ollama.com/download](https://ollama.com/download)
-
-### Install
-
-The installer detects your hardware (RAM/GPU/VRAM), recommends a detection
-preset that fits, and downloads only what you confirm.
-
-**macOS:**
 ```bash
-git clone https://github.com/majercakdavid/llmguard.git
-cd llmguard
-./scripts/install.sh                    # creates .venv, installs deps, builds .app
-open dist/LLMGuard.app                  # launches native app + dashboard
+pipx install llmguard            # or: pip install llmguard
+llmguard start                   # launches the redacting proxy on http://127.0.0.1:8000
 ```
 
-**Windows:**
-```powershell
-git clone https://github.com/majercakdavid/llmguard.git
-cd llmguard
-install.bat                             # or: .\install.ps1 -Yes -Preset balanced
-run.bat                                 # opens dashboard at http://127.0.0.1:9876
-```
+Point your tool at it and keep using your own API key:
 
-**Linux:**
 ```bash
-git clone https://github.com/majercakdavid/llmguard.git
-cd llmguard
-python3 scripts/install.py              # creates .venv, then picks features + preset
-./run.sh                                # opens dashboard at http://127.0.0.1:9876
+export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8000
+# now run Claude Code / aider / Cline / your app as usual —
+# secrets get redacted, the response streams back, nothing else changes.
 ```
 
-`scripts/install.py` auto-creates a `.venv` and re-launches itself inside it
-before installing anything, so `pip install -e` never runs against the
-system Python (this avoids the `externally-managed-environment` error on
-PEP 668 distros like Debian 12+/Ubuntu 23.10+). `./run.sh` then picks up
-that same `.venv` automatically. If venv creation ever fails (e.g. the
-`python3-venv` package isn't installed), create one manually first:
+Want to see it work first, with no API key and nothing to configure?
+
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
+llmguard demo
 ```
 
-**Non-interactive (CI / headless):**
-```bash
-python scripts/install.py --yes --features all --preset balanced
+It runs a prompt full of fake secrets through the firewall and shows you the
+before/after:
+
+```
+BEFORE:  Here is my AWS key AKIAIOSFODNN7EXAMPLE and email jane.doe@corp.com, SSN 123-45-6789. ...
+AFTER:   Here is my AWS key [AWS_ACCESS_KEY_REDACTED] and email [EMAIL_ADDRESS_REDACTED], SSN [US_SSN_REDACTED]. ...
 ```
 
-Re-run the installer any time to add features or switch to a different
-preset. It only *adds* — deselecting a previously-installed feature or
-preset on a later run does not uninstall it; remove it manually (e.g.
-`pip uninstall gliner`) if you want it gone.
+## How it works
 
-### What gets installed
+LLMGuard runs a local reverse proxy. For each request it scans the prompt with a
+tiered detection engine (fast regex first; optional NLP/NER and a local LLM classifier
+for nuance), redacts anything sensitive in place, then forwards the sanitized request
+to the real provider using **your** API key. The response streams straight back — only
+the outbound prompt is touched.
+
+- **Zero system footprint** — it's just a base-URL env var. No CA, no system proxy.
+- **Your key stays yours** — it rides through in the request header to the provider.
+- **Redact by default** — your workflow keeps working; the loudest secrets block.
+- **Cross-platform** — macOS, Linux, Windows.
+
+Supported front doors today: OpenAI-compatible (`/v1/chat/completions`, `/v1/completions`,
+`/v1/embeddings`) via `OPENAI_BASE_URL`, and Anthropic (`/v1/messages`) via
+`ANTHROPIC_BASE_URL`. Any other path is passed straight through untouched.
+
+### Turning on deeper detection (optional)
+
+Regex secret-scanning is always on and needs nothing extra. For names/addresses and
+nuanced content, install the optional detectors:
 
 | Component | Install extra | Size | Description |
 |---|---|---|---|
 | Regex scanner | (always on) | 0 | API keys, JWTs, SSNs, credit cards, emails, phones |
 | GLiNER PII | `[ner]` | ~300 MB | Zero-shot NER for names, addresses, DOBs |
 | Presidio PII | `[pii]` | ~500 MB | spaCy-based PII with en_core_web_lg model |
-| Browser proxy | `[browser-proxy]` | ~50 MB | MITM interception for 20+ LLM domains |
-| LLM classifier | Ollama + model | 1-4 GB | Nuanced classification via local LLM |
+| LLM classifier | Ollama + model | 1-4 GB | Nuanced classification via a local LLM |
 
-### Detection presets (Tier 3 LLM classifier)
+---
 
-| Preset | Stack | VRAM | Latency | F1 | Notes |
-|---|---|---|---|---|---|
-| `minimal` | Regex only | 0 | <1ms | 14% | Pattern matching, no LLM |
-| `balanced` | Regex + Qwen3 1.7B | 1.8 GB | ~164ms | 92% | Recommended - fits 16GB laptops |
-| `quality` | Regex + GLiNER + Qwen3 | 1.8 GB | ~209ms | 91% recall | Highest recall, more false positives |
-| `legacy-cpu` | Regex + Llama 3.2 1B | 0 (CPU) | not yet benchmarked | not yet benchmarked | CPU-only fallback when no GPU is usable |
+## Browser mode (optional) & Enterprise
 
-Gemma 4 E2B is available as a manual toggle in the dashboard for 32GB+ machines.
+LLMGuard also has an optional **browser mode** — it can intercept web LLM UIs
+(ChatGPT, Claude, Gemini, Copilot, and others) through a local proxy — and commercial
+**Enterprise** editions for fleets. The developer CLI wedge above is the fastest way to
+get value with zero system changes; the sections below cover the broader deployment.
 
-### Dashboard
-
-Once running, the dashboard is at **http://127.0.0.1:9876/** with:
-- Real-time request log (blocked / allowed / redacted)
-- Detection preset selector (Minimal / Balanced / Quality / Legacy CPU)
-- Per-detector toggles (Regex, GLiNER, Gemma 4 E2B, Qwen3)
-- GLiNER entity label and confidence configuration
-- Benchmark runner (70-sample test suite)
-- Policy rules and domain management
-
-### Server / proxy mode (Docker)
-
-```bash
-cp .env.example .env          # add your LLM provider keys
-docker compose up              # proxy on :8000, TLS on :443
-curl localhost:8000/health     # check health
-```
-
-## How Transparent Interception Works
+### How transparent (browser) interception works
 
 ```
 User / App  -->  System Proxy (PAC)  -->  LLMGuard (mitmproxy)  -->  LLM API
@@ -118,44 +81,41 @@ User / App  -->  System Proxy (PAC)  -->  LLMGuard (mitmproxy)  -->  LLM API
                  the firewall
 ```
 
-1. PAC file routes LLM domains (chatgpt.com, api.openai.com, etc.) through the local proxy.
+1. A PAC file routes LLM domains (chatgpt.com, api.openai.com, etc.) through the local proxy.
 2. mitmproxy terminates TLS with a locally-trusted CA certificate.
-3. Firewall scans request content in parallel (regex + GLiNER + LLM classifier).
+3. The firewall scans request content in parallel (regex + GLiNER + LLM classifier).
 4. Clean requests forward immediately; violations block or redact.
 
-The CA certificate is auto-generated and trusted on first launch (no admin password needed on macOS).
+The CA certificate is auto-generated and trusted on first launch. Browser mode is
+opt-in and installs the `[browser-proxy]` extra.
 
-## Project Layout
+### Detection presets (Tier 3 LLM classifier)
+
+| Preset | Stack | VRAM | Latency | F1 | Notes |
+|---|---|---|---|---|---|
+| `minimal` | Regex only | 0 | <1ms | 14% | Pattern matching, no LLM |
+| `balanced` | Regex + Qwen3 1.7B | 1.8 GB | ~164ms | 92% | Recommended - fits 16GB laptops |
+| `maximum` | Regex + GLiNER + Qwen3 | 1.8 GB | ~209ms | 91% recall | Highest recall, more false positives |
+
+### Project layout
 
 ```
 llmguard/
+  cli.py              # CLI entry point: `llmguard start` / `llmguard demo`
+  gateway.py          # Transparent redacting reverse proxy (the CLI wedge)
+  extract.py          # Provider-aware prompt-text extraction (OpenAI + Anthropic)
+  redact.py           # Dot-path body redaction helpers
   detectors/          # Pluggable detection modules
     secrets.py        # Regex patterns (API keys, SSNs, emails)
     pii.py            # Presidio PII detector
     registry.py       # Detector registry + pipeline
-    local_llm.py      # Ollama LLM classifier (Gemma 4 / Qwen3)
+    local_llm.py      # Ollama LLM classifier (Gemma / Qwen3)
   policy/
-    __init__.py       # Rule evaluation engine
-    rules.yaml        # Declarative block/redact/allow rules
+    rules.yaml        # Default (enterprise) block-first rules
+    wedge_rules.yaml  # CLI-wedge redact-first policy
   config.py           # Settings model (env-driven)
 
-app/
-  services/
-    mitm_addon.py     # mitmproxy addon (browser interception)
-    proxy.py          # Proxy process manager
-    pipeline_config.py # Shared pipeline config builder
-  server/
-    api.py            # Dashboard API server
-  assets/
-    dashboard.html    # Single-page dashboard UI
-  config/
-    schema.py         # App config schema (presets, detection stack)
-
-scripts/
-  install.py          # Cross-platform hardware-aware installer
-  install.sh          # macOS install + py2app build
-install.bat           # Windows installer wrapper
-install.ps1           # Windows PowerShell installer
+app/                  # Browser mode + native desktop app + dashboard
 ```
 
 ## License
