@@ -16,7 +16,26 @@ Security Model:
     - CA key is stored in ~/.llmguard/ca/ with 0600 permissions
     - CA cert is user-scoped (not system-wide unless IT deploys via MDM)
     - Proxy only binds to 127.0.0.1 (no external exposure)
-    - PAC file ensures minimal traffic routing
+    - System proxy configuration is PAC-only: we set AutoConfigURL (Windows)
+      / -setautoproxyurl (macOS) and ProxyEnable/-setautoproxystate, nothing
+      else. The PAC's FindProxyForURL only returns our proxy for domains in
+      INTERCEPTED_DOMAINS; every other host resolves to DIRECT. We do NOT
+      also configure a blanket ProxyServer / -setsecurewebproxy /
+      -setwebproxy, because that would route ALL HTTP/HTTPS traffic through
+      mitmproxy - breaking unrelated apps (IDEs, package managers, git,
+      corporate tools) whenever they don't trust our CA or mitmproxy isn't
+      running, and conflicting with any corporate proxy already configured.
+      Tools that don't evaluate the system PAC (some CLIs/daemons) are out
+      of scope for this browser-proxy path; point them at
+      http://127.0.0.1:<port> directly via the CLI-integration mode instead.
+    - enable_system_proxy() is idempotent about this: it also actively clears
+      any blanket proxy state (ProxyServer/ProxyOverride on Windows,
+      -setsecurewebproxy/-setwebproxy on macOS) that may already be present
+      from a prior blanket-era install of LLMGuard. Without this, a machine
+      that had the old blanket proxy set - especially if the previous
+      process was killed before its normal disable/atexit cleanup ran -
+      would keep routing ALL traffic through mitmproxy even after upgrading
+      to this PAC-only version.
 """
 
 from __future__ import annotations
@@ -369,7 +388,28 @@ def enable_system_proxy(port: int = 8080) -> bool:
 
     success = False
     for interface in interfaces:
-        # Set PAC file - smart routing for domains
+        # PAC-only: this is the ONLY proxy setting we configure. The PAC file
+        # (generate_pac_file) routes just the domains in INTERCEPTED_DOMAINS
+        # through 127.0.0.1:{port}; every other host evaluates to DIRECT.
+        # We deliberately do NOT also call -setsecurewebproxy/-setwebproxy -
+        # those set a blanket system proxy that would route ALL HTTP/HTTPS
+        # traffic (Cursor's backend, pip, git, corporate tools, etc.) through
+        # mitmproxy, breaking those apps whenever they don't trust our CA or
+        # mitmproxy isn't running, and conflicting with any corporate proxy
+        # already configured on the machine.
+        #
+        # Tradeoff: some CLIs/daemons don't evaluate the system PAC at all
+        # (they read HTTP_PROXY/HTTPS_PROXY env vars or nothing). Those are
+        # intentionally NOT covered by this browser-proxy path - they should
+        # instead be pointed at our explicit local endpoint
+        # (http://127.0.0.1:{port}) via the CLI-integration mode. We do not
+        # add a blanket fallback to "catch" them.
+        #
+        # Note: some browsers may keep reusing already-open HTTP/2 connections
+        # made before the PAC took effect, appearing to bypass interception
+        # briefly. The existing guidance to restart the browser after
+        # enabling interception addresses this; it is a browser-side caching
+        # behavior, not something a blanket proxy is needed to fix.
         subprocess.run(
             ["networksetup", "-setautoproxyurl", interface, pac_url],
             capture_output=True,
@@ -378,30 +418,30 @@ def enable_system_proxy(port: int = 8080) -> bool:
             ["networksetup", "-setautoproxystate", interface, "on"],
             capture_output=True,
         )
-        # ALSO set explicit HTTPS proxy - ensures Safari can't bypass via
-        # connection pooling or HTTP/2 multiplexing on existing connections.
-        # mitmproxy passes non-LLM traffic through transparently.
+
+        # Defensively clear any blanket web proxy left over from a prior
+        # blanket-era install of LLMGuard (before this PAC-only fix). We
+        # never SET these to "on" - only ever turn them off - so this is a
+        # no-op on a fresh install where they were never configured.
         subprocess.run(
-            ["networksetup", "-setsecurewebproxy", interface,
-             "127.0.0.1", str(port)],
+            ["networksetup", "-setsecurewebproxystate", interface, "off"],
             capture_output=True,
         )
         subprocess.run(
-            ["networksetup", "-setwebproxy", interface,
-             "127.0.0.1", str(port)],
+            ["networksetup", "-setwebproxystate", interface, "off"],
             capture_output=True,
         )
 
-    # Flush DNS cache and reset socket pool to force reconnection through proxy
+    # Flush DNS cache to force fresh lookups (PAC host resolution, etc.)
     subprocess.run(["dscacheutil", "-flushcache"], capture_output=True)
 
-    # Verify at least one interface has the proxy enabled
+    # Verify at least one interface has the PAC enabled
     for interface in interfaces:
         check = subprocess.run(
-            ["networksetup", "-getsecurewebproxy", interface],
+            ["networksetup", "-getautoproxyurl", interface],
             capture_output=True, text=True,
         )
-        if "Enabled: Yes" in check.stdout:
+        if pac_url in check.stdout and "Enabled: Yes" in check.stdout:
             success = True
             break
 
@@ -428,6 +468,10 @@ def disable_system_proxy() -> bool:
         return False
 
     for interface in interfaces:
+        # We only ever turn the PAC (autoproxy) on, so that's all we need to
+        # turn off. The securewebproxy/webproxy -off calls are kept as
+        # defensive no-ops in case an older LLMGuard version left one of
+        # those set on this machine (pre PAC-only fix).
         subprocess.run(
             ["networksetup", "-setsecurewebproxystate", interface, "off"],
             capture_output=True,
@@ -492,7 +536,36 @@ def _get_non_macos_interfaces() -> list[str]:
 
 
 def _enable_windows_proxy(port: int) -> bool:
-    """Enable PAC and explicit proxy settings for the current Windows user."""
+    """Enable PAC-only proxy settings for the current Windows user.
+
+    PAC-only: AutoConfigURL + ProxyEnable are the ONLY proxy values we set.
+    The PAC file (generate_pac_file) routes just the domains in
+    INTERCEPTED_DOMAINS through 127.0.0.1:{port}; every other host evaluates
+    to DIRECT in FindProxyForURL. We deliberately do NOT also set
+    ProxyServer/ProxyOverride - that is a blanket system proxy that routes
+    ALL HTTP/HTTPS traffic (Cursor's backend, pip, git, corporate tools,
+    etc.) through mitmproxy, breaking those apps whenever they don't trust
+    our CA or mitmproxy isn't running, and conflicting with any corporate
+    proxy already configured on this machine (see
+    _backup_windows_proxy_settings - if the user already had an
+    AutoConfigURL, e.g. a corporate PAC, we back it up and restore it on
+    disable rather than leave our own PAC in place).
+
+    Idempotency note: we also unconditionally DELETE ProxyServer/
+    ProxyOverride here (never set them). This matters for users upgrading
+    from a pre-PAC-only LLMGuard version that did set a blanket
+    ProxyServer - especially if that older process was killed before its
+    normal disable/atexit cleanup ran, leaving the blanket proxy stuck in
+    the registry. Without this, re-enabling would layer our PAC on top of
+    the still-present stale blanket proxy rather than replacing it. On a
+    fresh install where these values were never set, the delete is a no-op.
+
+    Tradeoff: some CLIs/daemons never evaluate the Windows PAC (they honor
+    HTTP_PROXY/HTTPS_PROXY env vars or nothing at all). Those tools are
+    intentionally NOT covered here - point them at our explicit local
+    endpoint (http://127.0.0.1:{port}) via the CLI-integration mode instead.
+    We do not add a blanket ProxyServer fallback to "catch" them.
+    """
     import winreg
 
     pac_url = "http://127.0.0.1:9876/proxy.pac"
@@ -502,23 +575,17 @@ def _enable_windows_proxy(port: int) -> bool:
     with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_SET_VALUE) as key:
         winreg.SetValueEx(key, "AutoConfigURL", 0, winreg.REG_SZ, pac_url)
         winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
-        winreg.SetValueEx(
-            key,
-            "ProxyServer",
-            0,
-            winreg.REG_SZ,
-            f"http=127.0.0.1:{port};https=127.0.0.1:{port}",
-        )
-        winreg.SetValueEx(
-            key,
-            "ProxyOverride",
-            0,
-            winreg.REG_SZ,
-            "localhost;127.0.0.1;<local>",
-        )
+
+        # Unconditionally delete any blanket proxy left over from a prior
+        # blanket-era install of LLMGuard (before this PAC-only fix). This
+        # is idempotent - a no-op when they're absent, which is the case on
+        # a fresh install that never set them. We never SET these values
+        # here, only ever remove them.
+        _delete_winreg_value(key, "ProxyServer")
+        _delete_winreg_value(key, "ProxyOverride")
 
     _refresh_windows_proxy_settings()
-    return _windows_proxy_points_to_llmguard(key_path, port)
+    return _windows_proxy_points_to_llmguard(key_path, pac_url)
 
 
 def _backup_windows_proxy_settings(key_path: str) -> None:
@@ -549,7 +616,26 @@ def _backup_windows_proxy_settings(key_path: str) -> None:
 
 
 def _restore_windows_proxy() -> bool:
-    """Restore Windows proxy values saved by _backup_windows_proxy_settings."""
+    """Restore Windows proxy values saved by _backup_windows_proxy_settings.
+
+    This also restores a pre-existing corporate AutoConfigURL: if the user
+    already had their own PAC configured (common on managed/enterprise
+    machines) before enabling LLMGuard, _backup_windows_proxy_settings
+    captured it, and the loop below writes that exact value back rather
+    than just deleting AutoConfigURL. If the user never had one, the
+    backed-up entry is None and we delete the key instead, restoring the
+    "no PAC configured" state.
+
+    FOLLOW-UP (not implemented here): while LLMGuard interception is
+    *enabled*, we overwrite the corporate AutoConfigURL wholesale rather
+    than chaining to it (e.g. having our PAC delegate to the corporate PAC
+    for domains we don't care about). For an enterprise/Pro deployment,
+    chaining would be safer than a full overwrite-and-restore, since any
+    corporate PAC logic (e.g. internal domains needing a specific proxy)
+    is inactive for the duration LLMGuard is on. Restore-on-disable (below)
+    mitigates the risk once the user turns interception off, but does not
+    help while it's running.
+    """
     import winreg
 
     key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
@@ -570,6 +656,7 @@ def _restore_windows_proxy() -> bool:
         else:
             _delete_winreg_value(key, "AutoConfigURL")
             _delete_winreg_value(key, "ProxyServer")
+            _delete_winreg_value(key, "ProxyOverride")
             winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 0)
 
     if WINDOWS_PROXY_BACKUP_PATH.exists():
@@ -587,15 +674,20 @@ def _delete_winreg_value(key, name: str) -> None:
         pass
 
 
-def _windows_proxy_points_to_llmguard(key_path: str, port: int) -> bool:
+def _windows_proxy_points_to_llmguard(key_path: str, pac_url: str) -> bool:
+    """Verify our PAC is the active AutoConfigURL (PAC-only, no ProxyServer)."""
     import winreg
 
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ) as key:
         try:
-            proxy_server, _ = winreg.QueryValueEx(key, "ProxyServer")
+            auto_config_url, _ = winreg.QueryValueEx(key, "AutoConfigURL")
         except FileNotFoundError:
             return False
-    return f"127.0.0.1:{port}" in str(proxy_server)
+        try:
+            proxy_enable, _ = winreg.QueryValueEx(key, "ProxyEnable")
+        except FileNotFoundError:
+            proxy_enable = 0
+    return str(auto_config_url) == pac_url and bool(proxy_enable)
 
 
 def _refresh_windows_proxy_settings() -> None:

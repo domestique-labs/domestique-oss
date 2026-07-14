@@ -166,6 +166,60 @@ class ProxyService:
         return env
 
 
+def _refresh_mitm_confdir(ca_cert_path: Path, ca_key_path: Path, confdir: Path) -> bool:
+    """Copy the LLMGuard CA into mitmproxy's confdir if missing or stale.
+
+    mitmdump reads its CA exclusively from ``confdir/mitmproxy-ca.pem`` /
+    ``mitmproxy-ca-cert.pem`` -- it has no idea our own
+    ``~/.llmguard/ca/llmguard-ca.{pem,key}`` even exists. This used to copy
+    only once ever (``if not mitm_cert.exists(): ...``), so if the source
+    CA was ever rotated, regenerated, or restored from a backup without
+    also clearing ``ca/mitmproxy/``, mitmdump kept signing with the STALE
+    copy while ``cert_manager``/the dashboard both read the NEW CA and
+    happily reported it as generated+trusted -- an undiagnosable cert
+    mismatch (audit I7, hit in practice restoring a ``ca.bak``).
+
+    Chosen approach: re-copy whenever the destination is missing OR older
+    (mtime) than the source CA, rather than unconditionally clearing/
+    rewriting the confdir on every ``start()`` call. This is cheap, keeps
+    the fix localized to the one place that already reads these paths (no
+    new coupling to ``interceptor.generate_ca()``, which doesn't know
+    mitmproxy's confdir layout and shouldn't have to), and correctly
+    handles the two real triggers: CA regeneration (``generate_ca()``
+    rewrites the source files with a fresh mtime) and a typical backup
+    restore (``cp``/``Copy-Item`` without explicitly preserving
+    timestamps sets the restored file's mtime to "now"). It is NOT a
+    100%-airtight guarantee: a restore that deliberately preserves an
+    OLDER mtime than the existing stale confdir copy would not be caught
+    by this check; a content-hash comparison would close that gap at the
+    cost of hashing both files on every proxy start for a scenario that
+    hasn't been observed in practice.
+
+    Returns:
+        True if a (re)copy happened, False if the confdir copy was
+        already up to date.
+    """
+    confdir.mkdir(parents=True, exist_ok=True)
+    mitm_cert = confdir / "mitmproxy-ca-cert.pem"
+    mitm_key = confdir / "mitmproxy-ca.pem"
+
+    source_mtime = ca_cert_path.stat().st_mtime
+    stale = (
+        not mitm_cert.exists()
+        or not mitm_key.exists()
+        or mitm_cert.stat().st_mtime < source_mtime
+    )
+    if not stale:
+        return False
+
+    # mitmproxy wants combined key+cert in mitmproxy-ca.pem
+    combined = ca_key_path.read_text() + "\n" + ca_cert_path.read_text()
+    mitm_key.write_text(combined)
+    # And the cert alone
+    mitm_cert.write_text(ca_cert_path.read_text())
+    return True
+
+
 class BrowserProxyService:
     """Manages the mitmproxy-based HTTPS interception proxy.
 
@@ -261,19 +315,11 @@ class BrowserProxyService:
         self._clear_port()
 
         # mitmproxy expects its CA files in a specific format in confdir.
-        # We symlink our CA into the mitmproxy confdir structure.
+        # We copy our CA into the mitmproxy confdir structure, refreshing
+        # it whenever the source CA is newer than the copy already there
+        # (audit I7 -- see _refresh_mitm_confdir's docstring for why).
         mitmproxy_confdir = CA_DIR / "mitmproxy"
-        mitmproxy_confdir.mkdir(parents=True, exist_ok=True)
-
-        # mitmproxy looks for mitmproxy-ca-cert.pem in confdir
-        mitm_cert = mitmproxy_confdir / "mitmproxy-ca-cert.pem"
-        mitm_key = mitmproxy_confdir / "mitmproxy-ca.pem"
-        if not mitm_cert.exists():
-            # mitmproxy wants combined key+cert in mitmproxy-ca.pem
-            combined = CA_KEY_PATH.read_text() + "\n" + CA_CERT_PATH.read_text()
-            mitm_key.write_text(combined)
-            # And the cert alone
-            mitm_cert.write_text(CA_CERT_PATH.read_text())
+        _refresh_mitm_confdir(CA_CERT_PATH, CA_KEY_PATH, mitmproxy_confdir)
 
         addon_path = Path(__file__).parent / "mitm_addon.py"
         APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -357,9 +403,17 @@ class BrowserProxyService:
             **subprocess_group_kwargs(),
         )
 
-        # Wait for proxy to be ready (accept connections on the port)
+        # Wait for proxy to be ready (accept connections on the port).
+        # On a cold first-run the addon imports the full detection stack
+        # (torch/transformers/etc.), which can take well over 4s -- especially
+        # when it races the initial model warmup/GPU benchmark on a constrained
+        # machine. Poll generously (up to ~30s) and only fail if mitmdump
+        # actually dies; a slow-but-alive process must not be killed prematurely.
         import time
-        for attempt in range(20):  # Up to 4 seconds
+        readiness_timeout_s = 30
+        attempts = readiness_timeout_s * 5  # 0.2s per attempt
+        hinted = False
+        for attempt in range(attempts):
             time.sleep(0.2)
             proc = self._process  # snapshot; stop() may set _process=None concurrently
             if proc is None or proc.poll() is not None:
@@ -374,13 +428,22 @@ class BrowserProxyService:
                 raise RuntimeError(f"mitmdump exited immediately: {err}")
             if is_port_listening(self.PROXY_PORT):
                 break
+            if not hinted and attempt >= 20:  # ~4s in, still coming up
+                hinted = True
+                print(
+                    "  … browser proxy still starting "
+                    "(loading detection models, may take ~30s on first run)",
+                    flush=True,
+                )
         else:
-            # Process is alive but port not listening after 4s
+            # Alive but never bound within the timeout -- now it's a real failure.
             proc = self._process
             if proc is not None:
                 proc.terminate()
             self._process = None
-            raise RuntimeError("mitmdump started but not listening after 4s")
+            raise RuntimeError(
+                f"mitmdump started but not listening after {readiness_timeout_s}s"
+            )
 
         # Enable system proxy to route LLM traffic through us
         enable_system_proxy(port=self.PROXY_PORT)

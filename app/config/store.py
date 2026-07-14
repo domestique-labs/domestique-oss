@@ -92,6 +92,62 @@ class ConfigStore:
             else:
                 current_dict[key] = value
 
+        # Mark `browser_interception` as user-configured only when the
+        # caller's intent is unambiguous -- see
+        # AppConfig.browser_interception_configured (audit C6). The
+        # dashboard's /api/config save always POSTs the *entire* config
+        # object (it round-trips the backend's own to_dict()), so
+        # `browser_interception` is present on literally every save, even
+        # ones that only touch an unrelated field (a detector toggle, a
+        # preset change, a custom pattern edit). Treating mere key
+        # PRESENCE as "the user configured this" meant an unrelated save
+        # racing ahead of portable's first-run auto-enable thread could
+        # permanently freeze `browser_interception_configured=True` with
+        # the stale default `browser_interception=False` baked in --
+        # silently defeating the "auto-enable exactly once" guarantee
+        # without the user ever having chosen to disable interception.
+        #
+        # Instead, only flip `configured` when there's real evidence of
+        # intent:
+        #   1. the incoming value actually differs from what's currently
+        #      stored (the user/API genuinely changed it), or
+        #   2. the payload explicitly sets `browser_interception_configured`
+        #      itself (an internal caller stating its intent directly).
+        # A same-value resend from an unrelated save satisfies neither and
+        # leaves `configured` untouched.
+        if "browser_interception" in data and bool(data["browser_interception"]) != bool(
+            current.browser_interception
+        ):
+            current_dict["browser_interception_configured"] = True
+        if "browser_interception_configured" in data:
+            current_dict["browser_interception_configured"] = bool(
+                data["browser_interception_configured"]
+            )
+
+        # Same reasoning as browser_interception_configured just above,
+        # applied to detection_stack -- see
+        # AppConfig.detection_stack_configured. The dashboard's full-object
+        # POST includes `detection_stack` on every save (e.g. an unrelated
+        # proxy_port change round-trips the whole config), so mere key
+        # presence proves nothing about intent; only a field that actually
+        # differs from what's currently stored is real signal that the user
+        # touched the detection stack. Once set, low-resource hardware's
+        # light profile (mitm_addon.py::_light_profile_stack) trusts the
+        # on-disk stack as-is instead of down-converting a default-valued
+        # heavy tier -- this is what gives a low-resource user a real,
+        # supported way to keep (or re-enable) a heavy detector like
+        # `qwen3_1_7b`.
+        if "detection_stack" in data and isinstance(data["detection_stack"], dict):
+            current_stack = current.to_dict().get("detection_stack", {})
+            for key, value in data["detection_stack"].items():
+                if key not in current_stack or bool(value) != bool(current_stack[key]):
+                    current_dict["detection_stack_configured"] = True
+                    break
+        if "detection_stack_configured" in data:
+            current_dict["detection_stack_configured"] = bool(
+                data["detection_stack_configured"]
+            )
+
         config = AppConfig.from_dict(current_dict)
         cls.save(config)
         return config

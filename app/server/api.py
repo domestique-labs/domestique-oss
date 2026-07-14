@@ -512,10 +512,18 @@ class APIHandler(BaseHTTPRequestHandler):
             from app.services.interceptor import get_intercepted_domains
             # Read live stats from the mitm addon
             stats_file = Path.home() / ".llmguard" / "browser_stats.json"
-            stats = {"inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0}
+            # `light_profile_active`: whether the addon auto-downgraded to
+            # regex-only detection because it detected low-resource hardware
+            # (see app/services/mitm_addon.py::_light_profile_active). This
+            # is the only user-facing surface for that decision -- otherwise
+            # it's only ever logged to browser_proxy.log.
+            stats = {
+                "inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0,
+                "light_profile_active": False,
+            }
             try:
                 if stats_file.exists():
-                    stats = json.loads(stats_file.read_text(encoding="utf-8"))
+                    stats.update(json.loads(stats_file.read_text(encoding="utf-8")))
             except (json.JSONDecodeError, OSError):
                 pass
             self._send_json({
@@ -523,6 +531,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 "setup_complete": _browser_proxy_service.is_setup,
                 "intercepted_domains": get_intercepted_domains(),
                 "stats": stats,
+                "light_profile_active": stats.get("light_profile_active", False),
             })
 
         elif self.path == "/proxy.pac":
@@ -691,6 +700,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 _browser_proxy_service.start()
                 config = ConfigStore.current()
                 config.browser_interception = True
+                config.browser_interception_configured = True
                 ConfigStore.save(config)
                 self._send_json({"ok": True})
             except RuntimeError as e:
@@ -700,6 +710,7 @@ class APIHandler(BaseHTTPRequestHandler):
             _browser_proxy_service.stop()
             config = ConfigStore.current()
             config.browser_interception = False
+            config.browser_interception_configured = True
             ConfigStore.save(config)
             self._send_json({"ok": True})
 

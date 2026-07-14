@@ -359,10 +359,12 @@ def _verify_system_proxy_config() -> str:
                 except FileNotFoundError:
                     configured_url = ""
                 try:
-                    proxy_server, _ = winreg.QueryValueEx(key, "ProxyServer")
+                    proxy_enable, _ = winreg.QueryValueEx(key, "ProxyEnable")
                 except FileNotFoundError:
-                    proxy_server = ""
-            if configured_url == pac_url or "127.0.0.1:8080" in str(proxy_server):
+                    proxy_enable = 0
+            # PAC-only: we never set ProxyServer, so healthy state is just
+            # our AutoConfigURL being active with ProxyEnable=1.
+            if configured_url == pac_url and proxy_enable:
                 return "ok"
             return "pac_disabled"
         except OSError as exc:

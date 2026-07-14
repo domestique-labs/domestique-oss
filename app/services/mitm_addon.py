@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -44,6 +45,92 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 logger = logging.getLogger("llmguard.mitm")
+
+
+# --- Hardware-aware detection profile ---------------------------------------
+#
+# Weak hardware (no usable GPU and/or low RAM) must never be asked to build
+# the heavy in-process tiers (GLiNER, semantic embeddings, local-LLM warmup)
+# synchronously at startup -- that's exactly what makes cold binds slow and
+# risks OOM on the addon process. Below that threshold we fall back to a
+# light, regex-only profile (SecretDetector is pure regex: <1ms, zero model
+# load) unless the user explicitly opted into a heavier tier.
+
+_LOW_RAM_THRESHOLD_GB = 8.0
+_MIN_USABLE_VRAM_GB = 2.0
+
+# Mirrors app.config.schema.DetectionStackConfig's own field defaults. Used
+# to distinguish "the user explicitly turned this on" from "this is just the
+# dataclass default that got serialized to config.json" -- the same
+# ambiguity already documented on AppConfig.browser_interception_configured
+# (to_dict() always serializes every field, so key *presence* in config.json
+# proves nothing about intent; only a value that *differs* from the safe
+# default is real signal).
+_STACK_SAFE_DEFAULTS = {
+    "regex": True,
+    "gliner_pii": False,
+    "openai_privacy_filter": False,
+    "gemma4_e2b": False,
+    "qwen3_1_7b": True,
+    "legacy_cpu": False,
+}
+
+
+def _detect_low_resource_hardware() -> bool:
+    """True if this machine is weak enough to warrant the light profile.
+
+    Reuses the existing stdlib/ctypes RAM probe and nvidia-smi/Apple-Silicon
+    VRAM probe from ``scripts/install.py`` instead of re-implementing
+    hardware detection. Fails toward "capable" (False) on any detection
+    error -- a detection glitch must never silently narrow security
+    coverage; the light profile is an intentional, logged trade-off, not
+    something that should kick in by accident.
+    """
+    try:
+        from scripts.install import detect_gpu, detect_total_ram_gb
+
+        ram_gb = detect_total_ram_gb()
+        _gpu_name, vram_gb = detect_gpu()
+    except Exception:
+        return False
+
+    low_ram = ram_gb > 0 and ram_gb < _LOW_RAM_THRESHOLD_GB
+    no_gpu = vram_gb < _MIN_USABLE_VRAM_GB
+    return bool(low_ram or no_gpu)
+
+
+def _light_profile_stack(stack: dict, stack_configured: bool = False) -> dict:
+    """Down-convert a raw ``detection_stack`` dict to regex-only, preserving
+    any field the user explicitly opted into (value True, differing from
+    that field's safe default -- see ``_STACK_SAFE_DEFAULTS``).
+
+    ``qwen3_1_7b`` defaults True in the dataclass, so a bare True value there
+    is normally indistinguishable from having never touched the dashboard --
+    on low-resource hardware it is switched off along with the other heavy
+    tiers unless the user separately enabled a different heavy detector.
+
+    ``stack_configured`` (mirrors ``AppConfig.detection_stack_configured``)
+    breaks that ambiguity: once the user has explicitly changed the
+    detection stack at least once, the entire on-disk stack is honored as-is
+    -- including a default-valued ``qwen3_1_7b: True`` -- instead of being
+    down-converted. Without this, a low-resource user had NO supported way
+    to keep (or re-enable) the shipped-default heavy detector: re-toggling
+    it in the dashboard just writes ``True`` again, identical to the
+    never-configured default.
+    """
+    if stack_configured:
+        return {
+            key: bool(stack.get(key, default))
+            for key, default in _STACK_SAFE_DEFAULTS.items()
+        }
+
+    light = {"regex": bool(stack.get("regex", _STACK_SAFE_DEFAULTS["regex"]))}
+    for key, default in _STACK_SAFE_DEFAULTS.items():
+        if key == "regex":
+            continue
+        value = stack.get(key, default)
+        light[key] = bool(value is True and default is False)
+    return light
 
 
 class _InspectResult:
@@ -100,6 +187,18 @@ class LLMGuardAddon:
 
     MAX_LOG_ENTRIES = 500  # Keep last N entries in the request log
 
+    # Bounded hold for the request path while the background-built detector
+    # pipeline is not yet ready (see load() / _wait_for_detector_ready()).
+    DETECTOR_READY_WAIT_S = 20.0
+
+    # Minimum interval between automatic re-init attempts after a
+    # background pipeline-construction failure (see
+    # _maybe_retry_detector_init()). Bounds how often a storm of blocked
+    # requests can hammer a still-broken dependency (e.g. a locked policy
+    # file or an Ollama outage) -- a detected config change bypasses this
+    # backoff and retries immediately regardless.
+    DETECTOR_RETRY_BACKOFF_S = 5.0
+
     def __init__(self):
         self._detector = None
         self._data_dir = Path.home() / ".llmguard"
@@ -109,11 +208,34 @@ class LLMGuardAddon:
         self._config_file = self._data_dir / "config.json"
         self._api_base = "http://127.0.0.1:9876"
         self._data_dir.mkdir(parents=True, exist_ok=True)
+        # Ready by default: tests/tools that construct LLMGuardAddon() and
+        # assign self._detector directly (bypassing load()) get immediate,
+        # non-blocking behavior. load() clears this while the pipeline is
+        # being built on a background thread.
+        self._detector_ready = threading.Event()
+        self._detector_ready.set()
+        self._detector_init_error: Exception | None = None
+        self._light_profile_active = False
+        # Self-heal state for _maybe_retry_detector_init(): guards against
+        # more than one concurrent background retry attempt, and gates how
+        # often an automatic retry is attempted absent a config change.
+        self._detector_retry_lock = threading.Lock()
+        self._last_detector_retry_ts = 0.0
 
     def _persist_stats(self):
-        """Write stats to a shared file for the dashboard to read."""
+        """Write stats to a shared file for the dashboard to read.
+
+        Includes ``light_profile_active`` (see ``_init_detector`` /
+        ``_resolve_hardware_profile``) alongside the request counters so an
+        auto-selected regex-only downgrade is visible to the dashboard/API
+        (``/api/browser-proxy``), not just logged to ``browser_proxy.log``
+        -- an ordinary user has no other way to discover that detection was
+        silently narrowed on their machine.
+        """
         try:
-            self._stats_file.write_text(json.dumps(self._stats))
+            payload = dict(self._stats)
+            payload["light_profile_active"] = self._light_profile_active
+            self._stats_file.write_text(json.dumps(payload))
         except OSError:
             pass
 
@@ -215,32 +337,98 @@ class LLMGuardAddon:
         return ""
 
     def load(self, loader):
-        """Called when the addon is loaded."""
+        """Called when the addon is loaded.
+
+        mitmproxy does not accept connections on the proxy port until this
+        method returns, so building the detection pipeline (which can
+        instantiate torch/transformers/GLiNER) must NEVER happen
+        synchronously here -- doing so gates the port bind on however long
+        model construction takes, which on a cold cache or weak hardware can
+        blow past the readiness-timeout safety net and get the whole proxy
+        killed. Build it on a background thread instead; the request path
+        (``_wait_for_detector_ready`` / ``_inspect``) holds briefly for
+        intercepted LLM traffic until the pipeline is ready, and fails
+        closed if it never becomes ready.
+        """
         ctx.log.info("LLMGuard addon loaded - inspecting LLM API traffic")
-        self._init_detector()
+        self._detector_ready.clear()
+        self._detector_init_error = None
+        threading.Thread(
+            target=self._build_detector_pipeline_background,
+            daemon=True,
+            name="detector-pipeline-init",
+        ).start()
         self._warmup_llm()
-        # Pre-warm all detectors (GLiNER lazy load etc) in background
+
+    def _build_detector_pipeline_background(self):
+        """Build the detector pipeline off the mitmproxy event loop.
+
+        Runs on the thread started from ``load()``. On success, sets
+        ``_detector_ready`` and then warms the detectors (GLiNER lazy-load
+        etc) so the first real request doesn't pay that cost. On failure,
+        records the exception in ``_detector_init_error`` and still sets
+        ``_detector_ready`` so waiters stop blocking -- ``_detector`` stays
+        ``None``, and the request path treats "ready but no detector" as
+        fail-closed (block), never fail-open.
+        """
+        try:
+            self._init_detector()
+        except Exception as e:
+            self._detector_init_error = e
+            ctx.log.error(
+                f"Detector pipeline failed to build: {e} - "
+                "failing closed on intercepted requests until resolved"
+            )
+            self._detector_ready.set()
+            return
+
+        ctx.log.info("Detection pipeline ready")
+        self._detector_ready.set()
+
+        # Pre-warm all detectors (GLiNER lazy load etc) now that the
+        # pipeline exists, still off the mitmproxy event loop.
         if self._detector:
-            import threading
-            def _warmup_detectors():
-                import asyncio
-                loop = asyncio.new_event_loop()
-                try:
-                    loop.run_until_complete(
-                        self._detector.inspect("warmup email test@example.com SSN 123-45-6789")
-                    )
-                    ctx.log.info("All detectors warmed up")
-                except Exception as e:
-                    ctx.log.warn(f"Detector warmup: {e}")
-                finally:
-                    loop.close()
-            threading.Thread(target=_warmup_detectors, daemon=True, name="detector-warmup").start()
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(
+                    self._detector.inspect("warmup email test@example.com SSN 123-45-6789")
+                )
+                ctx.log.info("All detectors warmed up")
+            except Exception as e:
+                ctx.log.warn(f"Detector warmup: {e}")
+            finally:
+                loop.close()
+
+    async def _wait_for_detector_ready(self, timeout: float | None = None) -> bool:
+        """Bounded wait for the background-built pipeline to become ready.
+
+        Returns True once the pipeline is ready to use. Returns False if the
+        wait expires, or if the pipeline is "ready" (init finished) but
+        construction actually failed (``self._detector`` is None) -- both are
+        fail-closed conditions for the caller.
+
+        Waits via ``run_in_executor`` so the bounded hold never blocks
+        mitmproxy's event loop -- other flows keep flowing concurrently.
+        """
+        if timeout is None:
+            timeout = self.DETECTOR_READY_WAIT_S
+        if not self._detector_ready.is_set():
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, self._detector_ready.wait, timeout)
+        return self._detector_ready.is_set() and self._detector is not None
 
     def _init_detector(self):
-        """Build detection pipeline from config. Called once at startup.
+        """Build detection pipeline from config. Called once at startup (in
+        the background -- see ``load()``) and again whenever the on-disk
+        config changes (hot-reload path in ``_inspect()``).
 
         Uses the shared pipeline_config helper for consistent Settings
-        construction between API and mitm processes.
+        construction between API and mitm processes. On low-resource
+        hardware (no usable GPU and/or low RAM), gates the heavy in-process
+        tiers (GLiNER, local LLM) down to a light, regex-only profile so the
+        pipeline builds near-instantly and never OOMs -- see
+        ``_resolve_hardware_profile``. The user's explicit choices are never
+        silently overridden; an auto-selected light profile is logged.
         """
         import os
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -248,13 +436,74 @@ class LLMGuardAddon:
         from app.services.pipeline_config import settings_from_config, config_hash, load_config_dict
         from llmguard.detectors.registry import create_detector_pipeline
 
-        config = load_config_dict()
-        settings = settings_from_config(config)
+        raw_config = load_config_dict()
+        effective_config, profile_note = self._resolve_hardware_profile(raw_config)
+
+        settings = settings_from_config(effective_config)
         self._detector = create_detector_pipeline(settings)
-        self._config_hash = config_hash(config)
+        # Hash the RAW config, not the hardware-adjusted one: _inspect()'s
+        # hot-reload check always hashes a fresh load_config_dict(), so
+        # comparing against a hash of the adjusted config would spuriously
+        # detect a "change" (and rebuild) on every single request.
+        self._config_hash = config_hash(raw_config)
 
         names = [d.name for d in self._detector._detectors]
         ctx.log.info(f"Detection pipeline: {', '.join(names)}")
+        self._light_profile_active = profile_note is not None
+        if profile_note:
+            ctx.log.warn(profile_note)
+        # Surface the (possibly just-changed) light-profile state to
+        # browser_stats.json immediately -- don't wait for the first
+        # inspected request to write it, so the dashboard can show it right
+        # after startup / a hot-reload rebuild.
+        self._persist_stats()
+
+    def _hardware_is_low_resource(self) -> bool:
+        """Cache the hardware-resource determination for this process's
+        lifetime -- hardware doesn't change at runtime, and GPU probing can
+        shell out to nvidia-smi, so there's no need to repeat that work on
+        every config hot-reload."""
+        if not hasattr(self, "_low_resource_cache"):
+            self._low_resource_cache = _detect_low_resource_hardware()
+        return self._low_resource_cache
+
+    def _resolve_hardware_profile(self, config: dict) -> tuple[dict, str | None]:
+        """Return ``(effective_config, profile_note)``.
+
+        On capable hardware, returns *config* unchanged (full/config-
+        respecting stack) and ``profile_note`` is ``None``.
+
+        On low-resource hardware, returns a copy of *config* with
+        ``detection_stack`` down-converted to regex-only (see
+        ``_light_profile_stack``) plus a human-readable note to log -- unless
+        the resulting stack is identical to what was already configured (a
+        user who already runs regex-only sees no note), in which case
+        ``profile_note`` is ``None`` too.
+
+        If ``detection_stack_configured`` is set on *config* (the user has
+        explicitly changed the detection stack via the dashboard/API at
+        least once -- see ``AppConfig.detection_stack_configured``), the
+        on-disk stack is honored as-is instead of being down-converted --
+        this is what lets a low-resource user keep or re-enable a
+        default-valued heavy detector like ``qwen3_1_7b``.
+        """
+        if not self._hardware_is_low_resource():
+            return config, None
+
+        stack = dict(config.get("detection_stack", {}))
+        stack_configured = bool(config.get("detection_stack_configured", False))
+        light_stack = _light_profile_stack(stack, stack_configured)
+        if light_stack == stack:
+            return config, None
+
+        effective = dict(config)
+        effective["detection_stack"] = light_stack
+        note = (
+            "interceptor running light profile: regex-only - low-resource "
+            "machine detected (no usable GPU and/or low RAM); enable heavier "
+            "detection tiers (GLiNER / local LLM) in the dashboard if desired"
+        )
+        return effective, note
 
     def _warmup_llm(self):
         """Pre-load Ollama model so first request doesn't block."""
@@ -883,6 +1132,91 @@ class LLMGuardAddon:
 
         return "\n".join(extracted_parts) if extracted_parts else None
 
+    def _config_changed_since_last_check(self) -> bool:
+        """True once per actual on-disk config change (mtime-gated hash
+        compare, avoids a JSON parse on the common no-change hot path).
+
+        Shared by the hot-reload check below (ready path) and
+        ``_maybe_retry_detector_init`` (not-ready path) so that fixing a
+        broken policy file and re-saving config rebuilds the pipeline either
+        way -- whether or not the previous background build already failed.
+        """
+        from app.services.pipeline_config import config_mtime_ns, config_hash, load_config_dict
+        mtime = config_mtime_ns()
+        if mtime == getattr(self, "_config_mtime", 0):
+            return False
+        self._config_mtime = mtime
+        return config_hash(load_config_dict()) != getattr(self, "_config_hash", "")
+
+    def _maybe_retry_detector_init(self) -> None:
+        """Self-heal after a transient detector-construction failure.
+
+        Called from ``_inspect()``'s not-ready branch whenever
+        ``self._detector_init_error`` is set (a previous background build
+        failed). Without this, ``_wait_for_detector_ready()`` would never
+        return True again -- it requires ``self._detector is not None`` --
+        and nothing else ever re-triggered ``_init_detector()`` once
+        ``_detector_ready`` was set on failure, so a TRANSIENT problem
+        (locked/missing policy file, an Ollama blip while resolving a model,
+        a disk hiccup) would block 100% of LLM traffic PERMANENTLY until a
+        full mitmdump restart.
+
+        Retries in the background (never on the request coroutine --
+        rebuilding can be slow) and at most once per
+        ``DETECTOR_RETRY_BACKOFF_S`` seconds unless the on-disk config has
+        actually changed, so a storm of blocked requests doesn't hammer a
+        still-broken dependency. At most one retry runs at a time (guarded
+        by ``_detector_retry_lock``).
+
+        Fail-closed holds throughout: this never sets ``self._detector``
+        itself and never touches ``_detector_ready`` (already set) -- the
+        CURRENT request that triggered this call has already decided to
+        fail closed (see the caller) regardless of how this retry turns
+        out. Only a LATER request can benefit, once (if) the retry lands.
+        """
+        try:
+            config_changed = self._config_changed_since_last_check()
+        except Exception:
+            config_changed = False
+
+        now = time.time()
+        if not config_changed and (now - self._last_detector_retry_ts) < self.DETECTOR_RETRY_BACKOFF_S:
+            return
+        if not self._detector_retry_lock.acquire(blocking=False):
+            return  # a retry attempt is already in flight
+        self._last_detector_retry_ts = now
+        threading.Thread(
+            target=self._retry_detector_init_background,
+            daemon=True,
+            name="detector-pipeline-retry",
+        ).start()
+
+    def _retry_detector_init_background(self) -> None:
+        """Background retry of ``_init_detector()`` after a prior failure.
+
+        Runs on the thread started by ``_maybe_retry_detector_init``. On
+        success, clears ``self._detector_init_error`` so subsequent requests
+        resume normal inspection. On (repeat) failure, records the new
+        exception and logs it -- traffic keeps failing closed exactly as
+        before, no different from the original failure.
+        """
+        try:
+            try:
+                self._init_detector()
+            except Exception as e:
+                self._detector_init_error = e
+                ctx.log.error(
+                    f"Detector pipeline retry failed: {e} - still failing closed"
+                )
+                return
+            self._detector_init_error = None
+            ctx.log.info(
+                "Detector pipeline recovered after previous failure - "
+                "inspection resumed"
+            )
+        finally:
+            self._detector_retry_lock.release()
+
     async def _inspect(self, content: str) -> dict:
         """Run content through the detection pipeline.
 
@@ -893,16 +1227,36 @@ class LLMGuardAddon:
         async scan(). For a single-user desktop proxy this is fine. For
         multi-user enterprise deployments, wrap in asyncio.to_thread() to
         avoid blocking mitmproxy's event loop on slow detectors.
+
+        Startup race: the pipeline is now built on a background thread (see
+        ``load()``), so a request can arrive before it's ready. We hold
+        briefly (bounded, see ``DETECTOR_READY_WAIT_S``) for it to finish.
+        If it never becomes ready in time -- or construction raised -- this
+        fails CLOSED (blocks) rather than letting sensitive data through
+        uninspected. A construction failure also triggers a background
+        self-heal retry (see ``_maybe_retry_detector_init``) so the lockout
+        isn't permanent -- but THIS request still fails closed regardless of
+        how that retry turns out.
         """
         try:
-            from app.services.pipeline_config import config_mtime_ns, config_hash, load_config_dict
-            mtime = config_mtime_ns()
-            if mtime != getattr(self, "_config_mtime", 0):
-                self._config_mtime = mtime
-                h = config_hash(load_config_dict())
-                if h != getattr(self, "_config_hash", ""):
-                    ctx.log.info("Config changed, rebuilding pipeline")
-                    self._init_detector()
+            ready = await self._wait_for_detector_ready()
+            if not ready:
+                if self._detector_init_error is not None:
+                    ctx.log.error(
+                        "Detection pipeline unavailable "
+                        f"({self._detector_init_error}) - failing closed"
+                    )
+                    self._maybe_retry_detector_init()
+                else:
+                    ctx.log.error(
+                        "Detection pipeline not ready after "
+                        f"{self.DETECTOR_READY_WAIT_S}s - failing closed"
+                    )
+                return {"action": "block", "reasons": ["detectors_unavailable"]}
+
+            if self._config_changed_since_last_check():
+                ctx.log.info("Config changed, rebuilding pipeline")
+                self._init_detector()
 
             result = await self._detector.inspect(content)
 
