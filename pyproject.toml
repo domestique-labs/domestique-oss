@@ -12,11 +12,11 @@ license = {text = "Apache-2.0"}
 dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.34,<1",
-    "litellm>=1.80,<1.81",
-    "pydantic>=2.10,<2.12",
-    "pydantic-settings>=2.7,<2.12",
+    "litellm>=1.80,<1.93",
+    "pydantic>=2.10,<2.14",
+    "pydantic-settings>=2.7,<2.15",
     "httpx>=0.28,<1",
-    "structlog>=24.4,<25",
+    "structlog>=24.4,<27",
     "pyyaml>=6,<7",
     "python-dotenv>=1,<2",
     "prometheus-client>=0.21,<1",
@@ -32,7 +32,7 @@ pii = [
     "spacy>=3.8,<4",
 ]
 semantic = [
-    "sentence-transformers>=3.0,<4",
+    "sentence-transformers>=3.0,<6",
     "numpy>=1.26,<3",
 ]
 ner = [
@@ -47,23 +47,23 @@ browser-proxy = [
 file-scanning = [
     "pdfminer.six>=20240706",
     "openpyxl>=3.1,<4",
-    "pillow>=10,<12",
+    "pillow>=10,<13",
     "pytesseract>=0.3,<1",
 ]
 macos-native = [
-    "pyobjc-framework-Cocoa>=10,<12",
-    "pyobjc-framework-WebKit>=10,<12",
-    "pyobjc-framework-Vision>=10,<12",
+    "pyobjc-framework-Cocoa>=10,<13",
+    "pyobjc-framework-WebKit>=10,<13",
+    "pyobjc-framework-Vision>=10,<13",
     "py2app>=0.28,<1",
 ]
 desktop = [
     "llmguard[browser-proxy,file-scanning]",
     "pystray>=0.19,<1",
-    "pillow>=10,<12",
+    "pillow>=10,<13",
 ]
 bench = [
     "llmguard[pii,semantic,ner,local-llm]",
-    "datasets>=3.0,<4",
+    "datasets>=3.0,<6",
 ]
 all = [
     "llmguard[pii,semantic,ner,local-llm,browser-proxy,file-scanning]",
@@ -72,12 +72,12 @@ workshop = [
     "llmguard[bench]",
 ]
 dev = [
-    "pytest>=8,<9",
-    "pytest-asyncio>=0.25,<1",
-    "pytest-benchmark>=4,<5",
+    "pytest>=8,<10",
+    "pytest-asyncio>=0.25,<2",
+    "pytest-benchmark>=4,<6",
     "httpx>=0.28,<1",
     "ruff>=0.8,<1",
-    "mypy>=1.13,<2",
+    "mypy>=1.13,<3",
     "pre-commit>=4,<5",
 ]
 
