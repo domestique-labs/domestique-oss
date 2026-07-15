@@ -8,8 +8,8 @@
 
 <p align="center">
   Point your agent or app at Domestique and it redacts secrets and PII out of your prompts
-  <em>before</em> they reach OpenAI, Anthropic, or any LLM — with zero system changes.<br>
-  No CA to install, no system proxy, cross-platform.
+  <em>before</em> they reach OpenAI, Anthropic, or any LLM.<br>
+  No CA to install, no system proxy, no admin — just point a tool at a local endpoint. Cross-platform.
 </p>
 
 <!-- Badges are added in the README-badges change (#23); when merged they slot in here, centered. -->
@@ -70,7 +70,7 @@ for nuance), redacts anything sensitive in place, then forwards the sanitized re
 to the real provider using **your** API key. The response streams straight back — only
 the outbound prompt is touched.
 
-- **Zero system footprint** — it's just a base-URL env var. No CA, no system proxy.
+- **No CA, no system proxy, no admin** — pointing a tool at the wedge is just a base-URL env var.
 - **Your key stays yours** — it rides through in the request header to the provider.
 - **Redact by default** — your workflow keeps working; the loudest secrets block.
 - **Cross-platform** — macOS, Linux, Windows.
@@ -98,7 +98,8 @@ nuanced content, install the optional detectors:
 Domestique also has an optional **browser mode** — it can intercept web LLM UIs
 (ChatGPT, Claude, Gemini, Copilot, and others) through a local proxy — and commercial
 **Enterprise** editions for fleets. The developer CLI wedge above is the fastest way to
-get value with zero system changes; the sections below cover the broader deployment.
+get value — no CA, no system proxy, no admin. Browser mode below is more invasive by nature:
+it trusts a local CA and sets a system proxy so it can inspect HTTPS traffic from your browser.
 
 ### How transparent (browser) interception works
 
