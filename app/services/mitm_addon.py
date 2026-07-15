@@ -36,6 +36,7 @@ from urllib.error import URLError
 from urllib.request import Request
 
 from mitmproxy import ctx, http
+from mitmproxy.net import encoding as mitm_encoding
 
 _direct_opener = _urllib_req.build_opener(_urllib_req.ProxyHandler({}))
 _direct_urlopen = _direct_opener.open
@@ -203,10 +204,91 @@ class LLMGuardAddon:
     # backoff and retries immediately regardless.
     DETECTOR_RETRY_BACKOFF_S = 5.0
 
+    # Path fragments that identify a genuine conversation/completion
+    # endpoint -- one that carries user-authored prompt content (outbound)
+    # or assistant-authored reply content (inbound). Shared by the
+    # request-side prompt-DLP filter and the response-side leak-scan
+    # filter (see ``_is_conversation_path``) so both directions apply the
+    # identical scope. Internal endpoints (sentinel, telemetry,
+    # autocompletions, connectors, static assets) are noise and cause
+    # false positives / false "inspected" counts with none of the DLP
+    # value.
+    _CONVERSATION_PATH_FRAGMENTS = (
+        # ChatGPT web
+        "/conversation",  # /backend-api/f/conversation
+        "/backend-anon/",  # guest conversations
+        # OpenAI API
+        "/v1/chat/completions",
+        "/v1/completions",
+        "/v1/responses",  # 2025 Responses API
+        # Anthropic
+        "/v1/messages",
+        "/v1/complete",  # legacy
+        "/completion",  # Claude web: /api/.../completion
+        "/append_message",  # Claude web
+        # Google Gemini
+        "/batchexecute",  # Gemini web (BardChatUi)
+        "/StreamGenerate",  # Gemini web streaming
+        ":generateContent",  # Gemini API
+        ":streamGenerateContent",  # Gemini API streaming
+        # Microsoft Copilot
+        "/c/api/chat",
+        "/c/api/conversations",
+        "/c/api/messages",
+        "/turing/conversation",
+        # Cohere
+        "/v2/chat",
+        "/v1/chat",
+        # Generic (covers most OpenAI-compatible APIs: Groq, xAI,
+        # DeepSeek, Together, Fireworks, Cursor, etc.)
+        "/chat/completions",
+        "/generate",
+        "/predictions",  # Replicate
+        # HuggingFace
+        "/models/",  # api-inference: /models/{model}
+        # Cursor / Windsurf (gRPC-web)
+        "/aiserver.v1.",  # Cursor: /aiserver.v1.ChatService/
+    )
+    _SKIP_PATH_SUBSTRINGS = (
+        "/sentinel/",
+        "/autocompletions",
+        "/connectors/",
+        "/telemetry",
+        "/rgstr",
+        "/library",
+        "/cdn-cgi/",
+        "/ces/",
+        "/cdn/",
+        "/_next/",
+        "/assets/",
+        "/static/",
+        "/favicon",
+        "/init",
+    )
+
     def __init__(self):
         self._detector = None
         self._data_dir = Path.home() / ".llmguard"
-        self._stats = {"inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0}
+        self._stats = {
+            "inspected": 0,
+            "blocked": 0,
+            "redacted": 0,
+            "allowed": 0,
+            # Response-side leak alerts (async, non-blocking scan -- see
+            # responseheaders()/response()). Counted separately from the
+            # request-side counters above because a response alert can
+            # never block/redact; it only surfaces a leak after the bytes
+            # already reached the browser.
+            "response_alerts": 0,
+            # A teed response body whose Content-Encoding could not be
+            # decoded (unknown encoding, or corrupt/truncated compressed
+            # bytes) -- the background scan could NOT inspect it for a
+            # leak. Tracked separately from response_alerts so "0 alerts"
+            # can't be misread as "everything was scanned and clean" when
+            # some responses were actually un-scannable. See
+            # _report_unscannable_response().
+            "response_scan_errors": 0,
+        }
         self._stats_file = self._data_dir / "browser_stats.json"
         self._log_file = self._data_dir / "request_log.jsonl"
         self._config_file = self._data_dir / "config.json"
@@ -225,6 +307,13 @@ class LLMGuardAddon:
         # often an automatic retry is attempted absent a config change.
         self._detector_retry_lock = threading.Lock()
         self._last_detector_retry_ts = 0.0
+        # Strong references to fire-and-forget background response-scan
+        # tasks (asyncio.create_task(...) in response()). Per the asyncio
+        # docs, a Task with no other referent can be garbage-collected
+        # before it completes, silently dropping the scan -- this set
+        # keeps each task alive until it finishes, then self-evicts via
+        # the done callback. See response() / _scan_response_bytes_async().
+        self._background_tasks: set[asyncio.Task] = set()
 
     def _persist_stats(self):
         """Write stats to a shared file for the dashboard to read.
@@ -595,72 +684,10 @@ class LLMGuardAddon:
         # Skip non-conversation paths. Only inspect endpoints that carry
         # user-authored content (chat messages, completions). Internal
         # endpoints (sentinel, telemetry, autocompletions, connectors,
-        # static assets) are noise and cause false positives.
-        _CONVERSATION_PATH_FRAGMENTS = (
-            # ChatGPT web
-            "/conversation",  # /backend-api/f/conversation
-            "/backend-anon/",  # guest conversations
-            # OpenAI API
-            "/v1/chat/completions",
-            "/v1/completions",
-            "/v1/responses",  # 2025 Responses API
-            # Anthropic
-            "/v1/messages",
-            "/v1/complete",  # legacy
-            "/completion",  # Claude web: /api/.../completion
-            "/append_message",  # Claude web
-            # Google Gemini
-            "/batchexecute",  # Gemini web (BardChatUi)
-            "/StreamGenerate",  # Gemini web streaming
-            ":generateContent",  # Gemini API
-            ":streamGenerateContent",  # Gemini API streaming
-            # Microsoft Copilot
-            "/c/api/chat",
-            "/c/api/conversations",
-            "/c/api/messages",
-            "/turing/conversation",
-            # Cohere
-            "/v2/chat",
-            "/v1/chat",
-            # Generic (covers most OpenAI-compatible APIs: Groq, xAI,
-            # DeepSeek, Together, Fireworks, Cursor, etc.)
-            "/chat/completions",
-            "/generate",
-            "/predictions",  # Replicate
-            # HuggingFace
-            "/models/",  # api-inference: /models/{model}
-            # Cursor / Windsurf (gRPC-web)
-            "/aiserver.v1.",  # Cursor: /aiserver.v1.ChatService/
-        )
-        _SKIP_PATH_SUBSTRINGS = (
-            "/sentinel/",
-            "/autocompletions",
-            "/connectors/",
-            "/telemetry",
-            "/rgstr",
-            "/library",
-            "/cdn-cgi/",
-            "/ces/",
-            "/cdn/",
-            "/_next/",
-            "/assets/",
-            "/static/",
-            "/favicon",
-            "/init",
-        )
-        if any(s in path for s in _SKIP_PATH_SUBSTRINGS):
-            self._log_request(
-                {
-                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "host": host,
-                    "method": method,
-                    "path": path[:100],
-                    "action": "pass",
-                    "reason": "non-conversation path",
-                }
-            )
-            return
-        if not any(f in path for f in _CONVERSATION_PATH_FRAGMENTS):
+        # static assets) are noise and cause false positives. (See
+        # ``_is_conversation_path`` -- shared with the response-side scan
+        # filter in ``responseheaders()``/``response()``.)
+        if not self._is_conversation_path(path):
             self._log_request(
                 {
                     "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -865,6 +892,24 @@ class LLMGuardAddon:
         from app.services.interceptor import INTERCEPTED_DOMAINS
 
         return any(host.endswith(d) or host == d for d in INTERCEPTED_DOMAINS)
+
+    def _is_conversation_path(self, path: str) -> bool:
+        """True if *path* is a genuine LLM conversation/completion
+        endpoint (see ``_CONVERSATION_PATH_FRAGMENTS`` /
+        ``_SKIP_PATH_SUBSTRINGS``).
+
+        Shared by ``request()`` (outbound prompt DLP) and
+        ``responseheaders()`` / the ``response()`` fallback path (inbound
+        response-leak scanning) so both directions apply the identical
+        scope. Internal endpoints on an LLM host -- telemetry, sentinel,
+        autocompletions, connectors, polling, static assets -- are
+        excluded: scanning/logging them is pure noise (dozens of extra
+        "inspected" entries per real user interaction) with none of the
+        DLP value.
+        """
+        if any(s in path for s in self._SKIP_PATH_SUBSTRINGS):
+            return False
+        return any(f in path for f in self._CONVERSATION_PATH_FRAGMENTS)
 
     def _emit_audit_event(
         self,
@@ -1366,22 +1411,124 @@ class LLMGuardAddon:
         except (json.JSONDecodeError, KeyError):
             pass
 
-    # --- Response Scanning (Bidirectional DLP) -----------------------
+    # --- Response Scanning (Bidirectional DLP, async / non-blocking) -
+
+    async def responseheaders(self, flow: http.HTTPFlow) -> None:
+        """Decide whether to stream this response straight through to the
+        browser while teeing a copy off for background scanning.
+
+        This fires once response headers arrive, before any body bytes do.
+        Setting ``flow.response.stream`` to a callable here is what keeps
+        ChatGPT-style token streaming intact: mitmproxy forwards each body
+        chunk to the browser AS IT ARRIVES from upstream (the callable's
+        return value), instead of buffering the entire response before
+        ``response()`` runs -- the old, blocking behavior. The callable
+        also appends each chunk to an in-memory buffer so ``response()``
+        can hand a COPY of the full body to a background scan once
+        streaming completes, without ever delaying delivery.
+
+        Only touches known LLM-host, conversation-path, JSON/SSE API
+        responses -- everything else (static assets, other hosts,
+        telemetry/polling on an LLM host -- see ``_is_conversation_path``,
+        the same filter ``request()`` uses) is left at mitmproxy's default
+        (non-streamed) handling, unchanged from before this change. This
+        also means non-conversation responses are never logged as
+        "inspected", cutting the noise a single chat interaction used to
+        generate from background polling/telemetry calls.
+        """
+        host = flow.request.pretty_host
+        if not self._is_llm_endpoint(host):
+            return
+        if flow.response is None:
+            return
+        if not self._is_conversation_path(flow.request.path):
+            return
+
+        # Skip static assets — only tee API responses (JSON / SSE)
+        content_type = flow.response.headers.get("content-type", "")
+        is_api_response = "application/json" in content_type or "text/event-stream" in content_type
+        if not is_api_response:
+            return
+
+        buf = bytearray()
+        flow.metadata["llmguard_streamed"] = True
+        flow.metadata["llmguard_response_buf"] = buf
+        # The teed bytes are captured off the wire, BEFORE mitmproxy's
+        # normal auto-decompression (which only happens when something
+        # reads flow.response.content/.text -- never touched on this
+        # streamed path, by design). Content-Encoding is known now, at
+        # header time, so stash it for the background scan to decode with
+        # (see _scan_response_bytes_async / _decode_response_body).
+        flow.metadata["llmguard_response_encoding"] = flow.response.headers.get(
+            "content-encoding", ""
+        )
+
+        def _tee(chunk: bytes) -> bytes:
+            # Called synchronously by mitmproxy for every body chunk as it
+            # arrives from upstream (and once more with b"" at end of
+            # body). Must stay cheap and must never block -- the return
+            # value is forwarded to the browser immediately.
+            if chunk:
+                buf.extend(chunk)
+            return chunk
+
+        flow.response.stream = _tee
 
     async def response(self, flow: http.HTTPFlow) -> None:
-        """Inspect LLM responses for leaked sensitive data.
+        """Handle a completed response.
 
-        Detects training data extraction attacks where LLMs leak PII,
-        credentials, or internal data in their responses. Operates in
-        alert mode: logs and flags but does not block responses.
+        Two paths:
 
-        Only scans actual LLM API responses (JSON/SSE), not static
-        assets like JS bundles, CSS, images, or HTML pages.
+        1. Streamed (the normal case for real traffic -- see
+           ``responseheaders()``): the body already reached the browser
+           chunk-by-chunk, untouched. ``flow.response.content`` is
+           unavailable (mitmproxy never buffered it, by design). Kick off
+           a background scan of the teed COPY and return immediately --
+           this hook must never block, because for a streamed response
+           there is nothing left it could usefully delay.
+
+        2. Fallback / non-streamed: a response ``responseheaders()``
+           chose not to tee (e.g. non-LLM host, or content-type wasn't
+           known to be scannable at header time), or a caller that builds
+           a flow with content already attached directly (some tests do
+           this). Scans synchronously against ``flow.response.content``,
+           same as the original alert-mode behavior.
         """
         host = flow.request.pretty_host
         if not self._is_llm_endpoint(host):
             return
 
+        metadata = getattr(flow, "metadata", None)
+        if isinstance(metadata, dict) and metadata.get("llmguard_streamed") is True:
+            buf = metadata.get("llmguard_response_buf")
+            if buf:
+                data = bytes(buf)
+                content_type = (
+                    flow.response.headers.get("content-type", "") if flow.response else ""
+                )
+                content_encoding = metadata.get("llmguard_response_encoding", "")
+                # Fire-and-forget: never await the scan here. The bytes
+                # are already gone to the browser, so there is nothing
+                # for this hook to block on. The task is kept alive via
+                # self._background_tasks (added, then evicted by the done
+                # callback) -- an unreferenced asyncio.Task can otherwise
+                # be garbage-collected mid-run, silently dropping the
+                # scan.
+                t = asyncio.create_task(
+                    self._scan_response_bytes_async(
+                        host=host,
+                        path=flow.request.path,
+                        content_type=content_type,
+                        content_encoding=content_encoding,
+                        data=data,
+                    )
+                )
+                self._background_tasks.add(t)
+                t.add_done_callback(self._background_tasks.discard)
+            return
+
+        if not self._is_conversation_path(flow.request.path):
+            return
         if not flow.response or not flow.response.content:
             return
         if len(flow.response.content) < 20:
@@ -1404,50 +1551,217 @@ class LLMGuardAddon:
         if result["action"] in ("block", "redact"):
             reasons = result.get("reasons", [])
             preview = response_text[:200]
-
-            self._log_request(
-                {
-                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "host": host,
-                    "method": "RESPONSE",
-                    "path": flow.request.path[:100],
-                    "action": "response_alert",
-                    "reasons": reasons,
-                    "content_preview": preview,
-                    "direction": "inbound",
-                }
-            )
-
-            # Emit audit event for response leak
-            self._emit_audit_event(
-                action="response_alert",
+            self._report_response_leak(
                 host=host,
-                method="RESPONSE",
                 path=flow.request.path,
                 reasons=reasons,
-                latency_ms=0,
+                preview=preview,
                 content_length=len(flow.response.content),
-                content_preview=preview,
             )
 
-            ctx.log.warn(f"RESPONSE ALERT from {host}: sensitive data in response - {reasons}")
-
-            # Add warning header (doesn't block - alert mode)
+            # Add warning header (doesn't block - alert mode). Only
+            # possible on this fallback path: headers haven't reached
+            # the client yet, unlike the streamed path above.
             flow.response.headers["X-LLMGuard-Alert"] = (
                 f"Sensitive data detected in response: {','.join(reasons)}"
             )
 
-    def _extract_response_content(self, flow: http.HTTPFlow) -> str | None:
-        """Extract text content from an LLM response body.
+    async def _scan_response_bytes_async(
+        self,
+        *,
+        host: str,
+        path: str,
+        content_type: str,
+        data: bytes,
+        content_encoding: str = "",
+    ) -> None:
+        """Background scan of a teed response copy.
 
-        Handles streaming (SSE) and JSON response formats.
+        Runs as a fire-and-forget ``asyncio.create_task`` kicked off from
+        ``response()``. By the time this executes, the real response
+        bytes have already reached the browser via the streaming tee
+        installed in ``responseheaders()``. A detected leak can only be
+        logged/alerted (dashboard stats, debug/request log, audit trail)
+        -- it can never block or modify a response that was already
+        delivered. This is "detect + surface, don't block" for the
+        response direction; the request/prompt DLP path is unaffected and
+        still blocks synchronously before forwarding (see ``request()``).
+
+        ``data`` is the RAW wire bytes teed off ``flow.response.stream``
+        -- still Content-Encoding'd (gzip/br/zstd/deflate) if the upstream
+        sent it that way, because the streaming tee runs before
+        mitmproxy's normal auto-decompression would ever kick in (that
+        only happens on ``.content``/``.text`` access, which this path
+        never does, by design -- see ``responseheaders()``). Decode it
+        the same way mitmproxy's own ``Message.content`` would before
+        attempting to parse JSON/SSE, or a compressed conversation
+        response silently scans as garbage bytes and no leak is ever
+        detected -- see ``_decode_response_body``.
+
+        Any failure here is swallowed (logged at debug level only) -- a
+        background scan must never surface as an error on the proxied
+        flow, which has already completed from the browser's perspective.
+        A body that fails to decode is the one exception to "swallow and
+        move on": that must be recorded as un-scannable (not silently
+        treated as "scanned, clean"), see ``_report_unscannable_response``.
+        """
+        try:
+            if not data:
+                return
+            try:
+                decoded = self._decode_response_body(data, content_encoding)
+            except ValueError as exc:
+                self._report_unscannable_response(
+                    host=host,
+                    path=path,
+                    content_encoding=content_encoding,
+                    error=str(exc),
+                )
+                return
+
+            if len(decoded) < 20:
+                return
+            response_text = self._extract_text_from_body(content_type, decoded)
+            if not response_text:
+                return
+
+            result = await self._inspect(response_text)
+            if result["action"] in ("block", "redact"):
+                reasons = result.get("reasons", [])
+                preview = response_text[:200]
+                self._report_response_leak(
+                    host=host,
+                    path=path,
+                    reasons=reasons,
+                    preview=preview,
+                    content_length=len(decoded),
+                )
+        except Exception:
+            logger.debug("Background response scan failed", exc_info=True)
+
+    def _decode_response_body(self, raw: bytes, content_encoding: str) -> bytes:
+        """Decode a raw (possibly Content-Encoding'd) response body the
+        same way mitmproxy's own ``Message.content``/``get_content()``
+        would (see ``mitmproxy/http.py``), using mitmproxy's own
+        ``mitmproxy.net.encoding.decode`` helper -- so the background scan
+        of a teed streamed copy sees the identical decompressed bytes the
+        pre-streaming code got for free from ``flow.response.content``.
+
+        No/identity/unrecognized-but-blank encoding -> bytes returned
+        unchanged (nothing to decode). A real, non-identity encoding that
+        fails to decode (corrupt/truncated body, or a server advertising
+        an encoding it didn't actually use) raises ``ValueError`` -- the
+        caller must treat that as "could not be scanned," never as
+        "scanned, nothing found."
+        """
+        encoding = (content_encoding or "").strip().lower()
+        if not encoding or encoding == "identity":
+            return raw
+        decoded = mitm_encoding.decode(raw, encoding)
+        if isinstance(decoded, str):
+            # A server may illegally specify a byte->str codec name (e.g.
+            # "utf-8") in Content-Encoding -- mitmproxy's own get_content()
+            # treats this as invalid too.
+            raise ValueError(f"Invalid Content-Encoding: {encoding!r}")
+        return decoded
+
+    def _report_unscannable_response(
+        self,
+        *,
+        host: str,
+        path: str,
+        content_encoding: str,
+        error: str,
+    ) -> None:
+        """A teed response body could not be decoded, so the background
+        scan never got to inspect it for a leak -- do NOT let this pass
+        silently (that would be indistinguishable from "scanned, clean").
+        Records a dedicated stats counter (kept separate from
+        ``response_alerts`` -- see ``__init__``), a request-log entry, and
+        a proxy-log warning, mirroring how a detected leak is surfaced via
+        ``_report_response_leak`` so both are equally visible to the
+        dashboard/debug log/audit trail.
+        """
+        self._stats["response_scan_errors"] = self._stats.get("response_scan_errors", 0) + 1
+        self._persist_stats()
+        self._log_request(
+            {
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "host": host,
+                "method": "RESPONSE",
+                "path": path[:100],
+                "action": "response_undecodable",
+                "reasons": [f"content-encoding={content_encoding!r}: {error}"],
+                "direction": "inbound",
+            }
+        )
+        ctx.log.warn(
+            f"RESPONSE UNSCANNABLE from {host}: could not decode "
+            f"Content-Encoding={content_encoding!r} ({error}) -- this "
+            f"response body was NOT scanned for a data leak"
+        )
+
+    def _report_response_leak(
+        self,
+        *,
+        host: str,
+        path: str,
+        reasons: list[str],
+        preview: str,
+        content_length: int,
+    ) -> None:
+        """Record a detected response-side leak: stats counter, request
+        log entry, audit event, and a proxy-log warning. Shared by the
+        synchronous fallback scan and the async background scan
+        (``response()`` / ``_scan_response_bytes_async()``) so both
+        surface leaks identically to the dashboard and debug log.
+        """
+        self._stats["response_alerts"] += 1
+        self._persist_stats()
+        self._log_request(
+            {
+                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "host": host,
+                "method": "RESPONSE",
+                "path": path[:100],
+                "action": "response_alert",
+                "reasons": reasons,
+                "content_preview": preview,
+                "direction": "inbound",
+            }
+        )
+        self._emit_audit_event(
+            action="response_alert",
+            host=host,
+            method="RESPONSE",
+            path=path,
+            reasons=reasons,
+            latency_ms=0,
+            content_length=content_length,
+            content_preview=preview,
+        )
+        ctx.log.warn(f"RESPONSE ALERT from {host}: sensitive data in response - {reasons}")
+
+    def _extract_response_content(self, flow: http.HTTPFlow) -> str | None:
+        """Extract text content from an LLM response body attached to a
+        flow (the non-streamed / fallback path -- ``flow.response.content``
+        is available). Delegates to ``_extract_text_from_body`` so the
+        streamed async-scan path (which only has raw bytes, no flow) uses
+        the identical extraction logic.
         """
         if not flow.response or not flow.response.content:
             return None
-
         content_type = flow.response.headers.get("content-type", "")
-        raw = flow.response.content
+        return self._extract_text_from_body(content_type, flow.response.content)
 
+    def _extract_text_from_body(self, content_type: str, raw: bytes) -> str | None:
+        """Extract text content from a raw response body + content-type.
+
+        Handles streaming (SSE) and JSON response formats. Shared by the
+        flow-based fallback path (``_extract_response_content``) and the
+        background async-scan path (``_scan_response_bytes_async``, which
+        only has a teed byte copy, not a live flow).
+        """
         # Handle Server-Sent Events (streaming responses)
         if "text/event-stream" in content_type:
             return self._extract_sse_content(raw)
