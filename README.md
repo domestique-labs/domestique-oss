@@ -89,6 +89,22 @@ User / App  -->  System Proxy (PAC)  -->  LLMGuard (mitmproxy)  -->  LLM API
 The CA certificate is auto-generated and trusted on first launch. Browser mode is
 opt-in and installs the `[browser-proxy]` extra.
 
+#### Disable QUIC (HTTP/3) so traffic can't bypass the proxy
+
+Chromium browsers prefer **QUIC**, which runs over UDP/443 and skips the TCP proxy
+entirely — a silent DLP blind spot. For a reliable browser-mode test or deployment,
+turn QUIC off. A helper is included for the Chromium browsers:
+
+```powershell
+# Chrome / Brave / Edge — writes the standard QuicAllowed enterprise policy
+# (the same lever MDM pulls fleet-wide). Auto-elevates via UAC. -Enable to revert.
+scripts/toggle-quic.ps1 -Browser chrome        # or: brave | edge
+```
+
+For **Opera** and **Firefox** the script prints the correct manual step (they use
+different mechanisms). Enterprise editions enforce this fleet-wide automatically via
+browser policy and by blocking outbound UDP/443 at the firewall.
+
 ### Detection presets (Tier 3 LLM classifier)
 
 | Preset | Stack | VRAM | Latency | F1 | Notes |
