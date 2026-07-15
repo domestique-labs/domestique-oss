@@ -1,0 +1,6 @@
+# Default owners for everything in the repo. These users are requested for
+# review on every pull request. Add more owners (or per-path rules) as the
+# team grows, e.g.:
+#   /domestique/detectors/  @owner-a @owner-b
+#   /docs/                   @docs-owner
+* @Alexvz2

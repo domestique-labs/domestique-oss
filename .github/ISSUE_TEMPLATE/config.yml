@@ -3,3 +3,9 @@ contact_links:
   - name: Security vulnerability
     url: https://github.com/domestique-labs/domestique-oss/security/advisories/new
     about: Report security issues privately — never in a public issue (see SECURITY.md).
+  - name: Questions & discussion
+    url: https://github.com/domestique-labs/domestique-oss/discussions
+    about: Ask questions, share ideas, and get help from the community.
+  - name: Setup guides (recipes)
+    url: https://github.com/domestique-labs/domestique-oss/tree/main/docs/recipes
+    about: Per-tool setup for Claude Code, Codex, Cursor, aider, and OpenAI/Anthropic SDKs.
