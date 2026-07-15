@@ -20,12 +20,12 @@ from __future__ import annotations
 import errno
 import json
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from app.config.store import ConfigStore
 from app.services.benchmark import BenchmarkService
-from app.services.proxy import ProxyService, BrowserProxyService
+from app.services.proxy import BrowserProxyService, ProxyService
 
 # Singleton services (shared across all requests)
 _proxy_service = ProxyService()
@@ -56,7 +56,7 @@ _workshop_bench = {
 _startup_state = {"phase": "starting", "detail": ""}
 
 # Global detector pipeline - built eagerly, rebuilt on config change
-import hashlib as _hashlib
+
 
 class _VenvScanner:
     """Runs the detection pipeline in the project .venv subprocess.
@@ -75,6 +75,7 @@ class _VenvScanner:
     def _venv_python() -> str | None:
         """Find the venv python binary."""
         from pathlib import Path
+
         root = Path(__file__).resolve().parent.parent.parent
         if not (root / ".venv").exists():
             s = root
@@ -83,9 +84,11 @@ class _VenvScanner:
                     root = s
                     break
                 s = s.parent
-        for candidate in [root / ".venv" / "bin" / "python3",
-                          root / ".venv" / "bin" / "python",
-                          root / ".venv" / "Scripts" / "python.exe"]:
+        for candidate in [
+            root / ".venv" / "bin" / "python3",
+            root / ".venv" / "bin" / "python",
+            root / ".venv" / "Scripts" / "python.exe",
+        ]:
             if candidate.exists():
                 return str(candidate)
         return None
@@ -98,6 +101,7 @@ class _VenvScanner:
         if not vpy:
             return
         from pathlib import Path
+
         root = Path(vpy).parent.parent  # .venv/bin/python -> .venv -> project root
         if not (root / "app").exists():
             root = root.parent  # .venv -> project root
@@ -136,9 +140,11 @@ class _VenvScanner:
             "        print(json.dumps({'ok':False,'error':str(e)}), flush=True)\n"
         )
         import subprocess
+
         self._proc = subprocess.Popen(
             [vpy, "-c", worker],
-            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             cwd=str(root),
         )
@@ -159,6 +165,7 @@ class _VenvScanner:
             if self._proc is None or self._proc.poll() is not None:
                 return []  # venv not available, degrade gracefully
             import json
+
             try:
                 self._proc.stdin.write(json.dumps({"text": text}).encode() + b"\n")
                 self._proc.stdin.flush()
@@ -208,16 +215,17 @@ class _ResourceMonitor:
     """
 
     def __init__(self) -> None:
-        import time
         import os
+        import time
+
         self._last_time = time.monotonic()
         self._last_cpu = time.process_time()
         self._cpu_pct = 0.0
         self._ncpu = os.cpu_count() or 1
 
     def snapshot(self) -> dict:
-        import time
         import sys
+        import time
 
         # CPU: delta of process CPU time vs wall clock
         now = time.monotonic()
@@ -249,8 +257,9 @@ class _ResourceMonitor:
     def _get_rss_unix() -> float:
         """Get RSS in MB on macOS/Linux via the resource module."""
         try:
-            import resource as _res
             import platform
+            import resource as _res
+
             rss = _res.getrusage(_res.RUSAGE_SELF).ru_maxrss
             # macOS reports bytes, Linux reports KB
             if platform.system() == "Darwin":
@@ -315,7 +324,8 @@ class _ResourceMonitor:
         try:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
             resp = opener.open(
-                urllib.request.Request("http://localhost:11434/api/ps"), timeout=1,
+                urllib.request.Request("http://localhost:11434/api/ps"),
+                timeout=1,
             )
             ps = json.loads(resp.read())
             result["running"] = True
@@ -323,14 +333,16 @@ class _ResourceMonitor:
                 vram = m.get("size_vram", 0) / 1024 / 1024
                 total = m.get("size", 0) / 1024 / 1024
                 result["vram_mb"] += vram
-                result["models"].append({
-                    "name": m.get("name", "unknown"),
-                    "size_mb": round(total, 1),
-                    "vram_mb": round(vram, 1),
-                    "quantization": m.get("details", {}).get("quantization_level", ""),
-                    "context_length": m.get("context_length", 0),
-                    "expires_at": m.get("expires_at", ""),
-                })
+                result["models"].append(
+                    {
+                        "name": m.get("name", "unknown"),
+                        "size_mb": round(total, 1),
+                        "vram_mb": round(vram, 1),
+                        "quantization": m.get("details", {}).get("quantization_level", ""),
+                        "context_length": m.get("context_length", 0),
+                        "expires_at": m.get("expires_at", ""),
+                    }
+                )
         except Exception:
             return result
 
@@ -338,11 +350,17 @@ class _ResourceMonitor:
         try:
             if sys.platform == "win32":
                 r = subprocess.run(
-                    ["powershell", "-NoProfile", "-Command",
-                     "Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue | "
-                     "Measure-Object -Property WorkingSet64 -Sum | "
-                     "Select-Object -ExpandProperty Sum"],
-                    capture_output=True, text=True, timeout=5,
+                    [
+                        "powershell",
+                        "-NoProfile",
+                        "-Command",
+                        "Get-Process -Name 'ollama*' -ErrorAction SilentlyContinue | "
+                        "Measure-Object -Property WorkingSet64 -Sum | "
+                        "Select-Object -ExpandProperty Sum",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if r.returncode == 0 and r.stdout.strip():
                     result["mem_mb"] = round(int(r.stdout.strip()) / 1024 / 1024, 1)
@@ -350,7 +368,9 @@ class _ResourceMonitor:
                 # macOS/Linux: use ps to sum RSS of ollama processes
                 r = subprocess.run(
                     ["pgrep", "-f", "ollama"],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 if r.returncode == 0:
                     pids = r.stdout.strip().split("\n")
@@ -358,7 +378,9 @@ class _ResourceMonitor:
                     for pid in pids:
                         pr = subprocess.run(
                             ["ps", "-o", "rss=", "-p", pid.strip()],
-                            capture_output=True, text=True, timeout=5,
+                            capture_output=True,
+                            text=True,
+                            timeout=5,
                         )
                         if pr.returncode == 0 and pr.stdout.strip():
                             total_rss += int(pr.stdout.strip())
@@ -478,22 +500,26 @@ class APIHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/status":
             from app.services.cert_manager import get_cert_status
+
             cert = get_cert_status()
-            self._send_json({
-                "proxy_running": _proxy_service.is_running,
-                "proxy_pid": _proxy_service.pid,
-                "browser_proxy_running": _browser_proxy_service.is_running,
-                "browser_proxy_setup": _browser_proxy_service.is_setup,
-                "benchmark_running": _benchmark_service.state.running,
-                "benchmark_progress": _benchmark_service.state.progress,
-                "startup_phase": _startup_state["phase"],
-                "startup_detail": _startup_state["detail"],
-                "cert_generated": cert["generated"],
-                "cert_trusted": cert["trusted"],
-            })
+            self._send_json(
+                {
+                    "proxy_running": _proxy_service.is_running,
+                    "proxy_pid": _proxy_service.pid,
+                    "browser_proxy_running": _browser_proxy_service.is_running,
+                    "browser_proxy_setup": _browser_proxy_service.is_setup,
+                    "benchmark_running": _benchmark_service.state.running,
+                    "benchmark_progress": _benchmark_service.state.progress,
+                    "startup_phase": _startup_state["phase"],
+                    "startup_detail": _startup_state["detail"],
+                    "cert_generated": cert["generated"],
+                    "cert_trusted": cert["trusted"],
+                }
+            )
 
         elif self.path == "/api/cert-status":
             from app.services.cert_manager import get_cert_status
+
             self._send_json(get_cert_status())
 
         elif self.path == "/api/resources":
@@ -501,15 +527,18 @@ class APIHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/benchmark":
             state = _benchmark_service.state
-            self._send_json({
-                "running": state.running,
-                "progress": state.progress,
-                "last_run": state.last_run,
-                "report_exists": state.report_exists,
-            })
+            self._send_json(
+                {
+                    "running": state.running,
+                    "progress": state.progress,
+                    "last_run": state.last_run,
+                    "report_exists": state.report_exists,
+                }
+            )
 
         elif self.path == "/api/browser-proxy":
             from app.services.interceptor import get_intercepted_domains
+
             # Read live stats from the mitm addon
             stats_file = Path.home() / ".llmguard" / "browser_stats.json"
             # `light_profile_active`: whether the addon auto-downgraded to
@@ -518,7 +547,10 @@ class APIHandler(BaseHTTPRequestHandler):
             # is the only user-facing surface for that decision -- otherwise
             # it's only ever logged to browser_proxy.log.
             stats = {
-                "inspected": 0, "blocked": 0, "redacted": 0, "allowed": 0,
+                "inspected": 0,
+                "blocked": 0,
+                "redacted": 0,
+                "allowed": 0,
                 # Response-side leak alerts (async, non-blocking scan of the
                 # LLM's *reply* -- see mitm_addon.py::_report_response_leak).
                 # Counted separately from the request-side counters because a
@@ -538,13 +570,15 @@ class APIHandler(BaseHTTPRequestHandler):
                     stats.update(json.loads(stats_file.read_text(encoding="utf-8")))
             except (json.JSONDecodeError, OSError):
                 pass
-            self._send_json({
-                "running": _browser_proxy_service.is_running,
-                "setup_complete": _browser_proxy_service.is_setup,
-                "intercepted_domains": get_intercepted_domains(),
-                "stats": stats,
-                "light_profile_active": stats.get("light_profile_active", False),
-            })
+            self._send_json(
+                {
+                    "running": _browser_proxy_service.is_running,
+                    "setup_complete": _browser_proxy_service.is_setup,
+                    "intercepted_domains": get_intercepted_domains(),
+                    "stats": stats,
+                    "light_profile_active": stats.get("light_profile_active", False),
+                }
+            )
 
         elif self.path == "/proxy.pac":
             # Serve PAC file via HTTP (Safari ignores file:// PAC in some cases)
@@ -575,6 +609,7 @@ class APIHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/health":
             # Full health check including interception chain verification
             from app.services.watchdog import verify_interception_chain
+
             results = verify_interception_chain()
             self._send_json(results)
 
@@ -592,30 +627,50 @@ class APIHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/approval-token":
             # Serve CSRF token for dashboard to use in approval actions
             from app.services.approval import get_approval_manager
+
             mgr = get_approval_manager()
             self._send_json({"token": mgr.csrf_token})
 
         elif self.path == "/api/classifier-prompt/default":
             # Serve the built-in default classifier prompt
             from llmguard.detectors.local_llm import _CLASSIFIER_SYSTEM_PROMPT
+
             self._send_json({"prompt": _CLASSIFIER_SYSTEM_PROMPT})
 
         elif self.path == "/api/builtin-patterns":
             from llmguard.detectors.secrets import _PATTERNS
-            self._send_json({"patterns": [
-                {"name": p.name, "regex": p.regex, "confidence": p.confidence}
-                for p in _PATTERNS
-            ]})
+
+            self._send_json(
+                {
+                    "patterns": [
+                        {"name": p.name, "regex": p.regex, "confidence": p.confidence}
+                        for p in _PATTERNS
+                    ]
+                }
+            )
 
         elif self.path == "/api/gliner-config":
             config = ConfigStore.current()
-            self._send_json({
-                "labels": getattr(config, "gliner_labels", [
-                    "person", "email", "phone_number", "address", "date_of_birth",
-                    "social_security_number", "credit_card", "password", "ip_address",
-                ]),
-                "threshold": getattr(config, "gliner_threshold", 0.5),
-            })
+            self._send_json(
+                {
+                    "labels": getattr(
+                        config,
+                        "gliner_labels",
+                        [
+                            "person",
+                            "email",
+                            "phone_number",
+                            "address",
+                            "date_of_birth",
+                            "social_security_number",
+                            "credit_card",
+                            "password",
+                            "ip_address",
+                        ],
+                    ),
+                    "threshold": getattr(config, "gliner_threshold", 0.5),
+                }
+            )
 
         elif self.path == "/api/benchmark-report":
             report_path = Path(__file__).parent.parent.parent / "reports" / "benchmark_report.html"
@@ -627,7 +682,9 @@ class APIHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(content)
             else:
-                self._send_json({"error": "No benchmark report found. Run the benchmark first."}, 404)
+                self._send_json(
+                    {"error": "No benchmark report found. Run the benchmark first."}, 404
+                )
 
         elif self.path == "/api/custom-patterns":
             config = ConfigStore.current()
@@ -635,10 +692,12 @@ class APIHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/domains":
             config = ConfigStore.current()
-            self._send_json({
-                "monitored": config.monitored_domains,
-                "allowed": config.allowed_domains,
-            })
+            self._send_json(
+                {
+                    "monitored": config.monitored_domains,
+                    "allowed": config.allowed_domains,
+                }
+            )
 
         elif self.path == "/api/policy-rules":
             config = ConfigStore.current()
@@ -646,22 +705,27 @@ class APIHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/scan":
             # GET with no body returns scan capabilities info
-            self._send_json({
-                "tiers": ["regex", "ner", "llm"],
-                "categories": [
-                    "CREDENTIALS", "CUSTOMER_DATA", "PROPRIETARY_CODE",
-                    "INTERNAL_COMMS", "BUSINESS_STRATEGY",
-                ],
-            })
+            self._send_json(
+                {
+                    "tiers": ["regex", "ner", "llm"],
+                    "categories": [
+                        "CREDENTIALS",
+                        "CUSTOMER_DATA",
+                        "PROPRIETARY_CODE",
+                        "INTERNAL_COMMS",
+                        "BUSINESS_STRATEGY",
+                    ],
+                }
+            )
 
         elif self.path == "/api/workshop/benchmark":
-           self._handle_benchmark_status()
+            self._handle_benchmark_status()
 
         elif self.path == "/api/workshop/datasets":
-           self._handle_list_datasets()
+            self._handle_list_datasets()
 
         elif self.path == "/api/workshop/dataset":
-           self._handle_get_dataset()
+            self._handle_get_dataset()
 
         else:
             self._send_json({"error": "not found"}, 404)
@@ -696,7 +760,8 @@ class APIHandler(BaseHTTPRequestHandler):
             self._send_json(results)
 
         elif self.path == "/api/cert/install":
-            from app.services.cert_manager import install_and_trust, get_cert_status
+            from app.services.cert_manager import get_cert_status, install_and_trust
+
             success = install_and_trust()
             status = get_cert_status()
             self._send_json({"ok": success, "status": status})
@@ -782,7 +847,8 @@ class APIHandler(BaseHTTPRequestHandler):
             limit: Max entries to return (default 100)
             filter: Filter by action (blocked, allowed, redacted, pass)
         """
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
+
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
         limit = int(params.get("limit", ["100"])[0])
@@ -812,7 +878,8 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def _handle_debug_trace(self) -> None:
         """Serve the raw prompt decision trace with optional filtering."""
-        from urllib.parse import urlparse, parse_qs
+        from urllib.parse import parse_qs, urlparse
+
         from llmguard.debug_trace import read_debug_trace
 
         parsed = urlparse(self.path)
@@ -869,29 +936,35 @@ class APIHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 failed.append({"proxy": "browser", "error": str(exc)})
 
-        self._send_json({
-            "ok": len(failed) == 0,
-            "restarted": restarted,
-            "failed": failed,
-        })
+        self._send_json(
+            {
+                "ok": len(failed) == 0,
+                "restarted": restarted,
+                "failed": failed,
+            }
+        )
 
     # --- Approval handlers -------------------------------------------
 
     def _handle_list_approvals(self) -> None:
         """List pending and recent approvals."""
         from app.services.approval import get_approval_manager
+
         mgr = get_approval_manager()
         pending = [a.to_dict() for a in mgr.list_pending()]
         recent = [a.to_dict() for a in mgr.list_recent(limit=20)]
-        self._send_json({
-            "pending": pending,
-            "recent": recent,
-            "pending_count": len(pending),
-        })
+        self._send_json(
+            {
+                "pending": pending,
+                "recent": recent,
+                "pending_count": len(pending),
+            }
+        )
 
     def _handle_get_approval(self, approval_id: str) -> None:
         """Get status of a single approval (used by addon polling)."""
         from app.services.approval import get_approval_manager
+
         mgr = get_approval_manager()
         approval = mgr.get(approval_id)
         if approval is None:
@@ -902,6 +975,7 @@ class APIHandler(BaseHTTPRequestHandler):
     def _handle_submit_approval(self) -> None:
         """Submit a new pending approval (called by mitm addon)."""
         from app.services.approval import get_approval_manager
+
         try:
             data = json.loads(self._read_body())
             mgr = get_approval_manager()
@@ -920,17 +994,19 @@ class APIHandler(BaseHTTPRequestHandler):
             # Trigger a best-effort desktop notification
             self._notify_approval_needed(approval)
 
-            self._send_json({
-                "ok": True,
-                "id": approval.id,
-                "timeout_seconds": timeout,
-            })
+            self._send_json(
+                {
+                    "ok": True,
+                    "id": approval.id,
+                    "timeout_seconds": timeout,
+                }
+            )
         except (json.JSONDecodeError, TypeError) as e:
             self._send_json({"error": f"invalid request: {e}"}, 400)
 
     def _handle_approval_decision(self, approval_id: str, decision: str) -> None:
         """Process an approve/deny decision from the dashboard."""
-        from app.services.approval import get_approval_manager, ApprovalStatus
+        from app.services.approval import ApprovalStatus, get_approval_manager
 
         # Validate CSRF token
         csrf = self.headers.get("X-CSRF-Token", "")
@@ -939,10 +1015,7 @@ class APIHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "invalid CSRF token"}, 403)
             return
 
-        status = (
-            ApprovalStatus.APPROVED if decision == "approved"
-            else ApprovalStatus.DENIED
-        )
+        status = ApprovalStatus.APPROVED if decision == "approved" else ApprovalStatus.DENIED
 
         try:
             approval = mgr.decide(approval_id, status)
@@ -957,6 +1030,7 @@ class APIHandler(BaseHTTPRequestHandler):
         """Send a desktop notification for a pending approval."""
         try:
             from app.services.notifications import notify
+
             categories = ", ".join(approval.findings[:3])
             title = "LLMGuard: Approval Needed"
             msg = f"{categories} detected in request to {approval.host}"
@@ -969,6 +1043,7 @@ class APIHandler(BaseHTTPRequestHandler):
     def _handle_custom_patterns_update(self) -> None:
         """Add, update, or replace custom regex patterns."""
         import re as re_module
+
         try:
             data = json.loads(self._read_body())
             patterns = data.get("patterns", [])
@@ -979,7 +1054,9 @@ class APIHandler(BaseHTTPRequestHandler):
                     return
                 required = {"name", "regex", "confidence", "category"}
                 if not required.issubset(p.keys()):
-                    self._send_json({"error": f"pattern missing fields: {required - set(p.keys())}"}, 400)
+                    self._send_json(
+                        {"error": f"pattern missing fields: {required - set(p.keys())}"}, 400
+                    )
                     return
                 try:
                     re_module.compile(p["regex"])
@@ -987,7 +1064,9 @@ class APIHandler(BaseHTTPRequestHandler):
                     self._send_json({"error": f"invalid regex '{p['name']}': {e}"}, 400)
                     return
                 if not (0.0 <= p["confidence"] <= 1.0):
-                    self._send_json({"error": f"confidence must be 0.0-1.0 for '{p['name']}'"}, 400)
+                    self._send_json(
+                        {"error": f"confidence must be 0.0-1.0 for '{p['name']}'"}, 400
+                    )
                     return
             ConfigStore.save_dict({"custom_patterns": patterns})
             self._send_json({"ok": True, "count": len(patterns)})
@@ -1003,12 +1082,16 @@ class APIHandler(BaseHTTPRequestHandler):
                 if not isinstance(data["monitored"], list):
                     self._send_json({"error": "monitored must be a list"}, 400)
                     return
-                update["monitored_domains"] = [d.strip().lower() for d in data["monitored"] if d.strip()]
+                update["monitored_domains"] = [
+                    d.strip().lower() for d in data["monitored"] if d.strip()
+                ]
             if "allowed" in data:
                 if not isinstance(data["allowed"], list):
                     self._send_json({"error": "allowed must be a list"}, 400)
                     return
-                update["allowed_domains"] = [d.strip().lower() for d in data["allowed"] if d.strip()]
+                update["allowed_domains"] = [
+                    d.strip().lower() for d in data["allowed"] if d.strip()
+                ]
             ConfigStore.save_dict(update)
             self._send_json({"ok": True})
         except (json.JSONDecodeError, TypeError) as e:
@@ -1056,27 +1139,33 @@ class APIHandler(BaseHTTPRequestHandler):
 
             # Also run custom patterns from config
             from app.config.store import ConfigStore
+
             cfg = ConfigStore.current().to_dict()
             custom_patterns = cfg.get("custom_patterns", [])
             if custom_patterns:
                 import re as re_module
+
                 for pat in custom_patterns:
                     try:
                         compiled = re_module.compile(pat["regex"])
                         for m in compiled.finditer(text):
-                            detections.append({
-                                "detector": f"custom:{pat['name']}",
-                                "category": pat["category"],
-                                "confidence": pat["confidence"],
-                            })
+                            detections.append(
+                                {
+                                    "detector": f"custom:{pat['name']}",
+                                    "category": pat["category"],
+                                    "confidence": pat["confidence"],
+                                }
+                            )
                     except Exception:
                         pass
 
-            self._send_json({
-                "detections": detections,
-                "total_latency_ms": total_ms,
-                "text_length": len(text),
-            })
+            self._send_json(
+                {
+                    "detections": detections,
+                    "total_latency_ms": total_ms,
+                    "text_length": len(text),
+                }
+            )
         except (json.JSONDecodeError, TypeError) as e:
             self._send_json({"error": f"invalid json: {e}"}, 400)
 
@@ -1101,13 +1190,16 @@ class APIHandler(BaseHTTPRequestHandler):
                     data = json.loads(f.read_text(encoding="utf-8"))
                     samples = data.get("samples", [])
                     from collections import Counter
+
                     dist = dict(Counter(s["expected"] for s in samples))
-                    results.append({
-                        "path": str(f),
-                        "name": data.get("name", f.stem),
-                        "samples": len(samples),
-                        "distribution": dist,
-                    })
+                    results.append(
+                        {
+                            "path": str(f),
+                            "name": data.get("name", f.stem),
+                            "samples": len(samples),
+                            "distribution": dist,
+                        }
+                    )
                 except Exception:
                     pass
         # Custom uploaded dataset
@@ -1117,13 +1209,16 @@ class APIHandler(BaseHTTPRequestHandler):
                 data = json.loads(custom.read_text(encoding="utf-8"))
                 samples = data.get("samples", [])
                 from collections import Counter
+
                 dist = dict(Counter(s["expected"] for s in samples))
-                results.append({
-                    "path": str(custom),
-                    "name": "Custom (uploaded)",
-                    "samples": len(samples),
-                    "distribution": dist,
-                })
+                results.append(
+                    {
+                        "path": str(custom),
+                        "name": "Custom (uploaded)",
+                        "samples": len(samples),
+                        "distribution": dist,
+                    }
+                )
             except Exception:
                 pass
         self._send_json({"datasets": results})
@@ -1133,13 +1228,15 @@ class APIHandler(BaseHTTPRequestHandler):
         dataset_path = self._get_active_dataset_path()
         try:
             data = json.loads(dataset_path.read_text(encoding="utf-8"))
-            self._send_json({
-                "ok": True,
-                "source": str(dataset_path),
-                "sample_count": len(data.get("samples", [])),
-                "metadata": data.get("metadata", {}),
-                "samples": data.get("samples", []),
-            })
+            self._send_json(
+                {
+                    "ok": True,
+                    "source": str(dataset_path),
+                    "sample_count": len(data.get("samples", [])),
+                    "metadata": data.get("metadata", {}),
+                    "samples": data.get("samples", []),
+                }
+            )
         except (OSError, json.JSONDecodeError) as e:
             self._send_json({"error": f"failed to load dataset: {e}"}, 500)
 
@@ -1162,7 +1259,9 @@ class APIHandler(BaseHTTPRequestHandler):
                     if line.strip():
                         samples.append(json.loads(line))
             else:
-                self._send_json({"error": "expected {samples: [...]} or [{...}, ...] or {lines: '...'}"}, 400)
+                self._send_json(
+                    {"error": "expected {samples: [...]} or [{...}, ...] or {lines: '...'}"}, 400
+                )
                 return
 
             # Validate samples
@@ -1193,12 +1292,14 @@ class APIHandler(BaseHTTPRequestHandler):
             }
             custom_path.write_text(json.dumps(custom_data, indent=2))
 
-            self._send_json({
-                "ok": True,
-                "sample_count": len(samples),
-                "categories": custom_data["metadata"]["categories"],
-                "path": str(custom_path),
-            })
+            self._send_json(
+                {
+                    "ok": True,
+                    "sample_count": len(samples),
+                    "categories": custom_data["metadata"]["categories"],
+                    "path": str(custom_path),
+                }
+            )
         except json.JSONDecodeError as e:
             self._send_json({"error": f"invalid JSON: {e}"}, 400)
         except Exception as e:
@@ -1250,7 +1351,8 @@ class APIHandler(BaseHTTPRequestHandler):
             custom_dir.mkdir(parents=True, exist_ok=True)
             custom_path = custom_dir / "custom_dataset.json"
             custom_data = {
-                "metadata": metadata or {
+                "metadata": metadata
+                or {
                     "name": f"Loaded from {file_path.name}",
                     "version": "custom",
                     "sample_count": len(samples),
@@ -1260,12 +1362,14 @@ class APIHandler(BaseHTTPRequestHandler):
             }
             custom_path.write_text(json.dumps(custom_data, indent=2))
 
-            self._send_json({
-                "ok": True,
-                "sample_count": len(samples),
-                "source": str(file_path),
-                "categories": list(set(s["expected"] for s in samples)),
-            })
+            self._send_json(
+                {
+                    "ok": True,
+                    "sample_count": len(samples),
+                    "source": str(file_path),
+                    "categories": list(set(s["expected"] for s in samples)),
+                }
+            )
         except json.JSONDecodeError as e:
             self._send_json({"error": f"invalid JSON in file: {e}"}, 400)
         except Exception as e:
@@ -1274,14 +1378,16 @@ class APIHandler(BaseHTTPRequestHandler):
     def _handle_benchmark_status(self) -> None:
         """Return benchmark progress or last results."""
         if _workshop_bench["running"]:
-            self._send_json({
-                "ok": True,
-                "running": True,
-                "dataset_source": _workshop_bench["dataset_source"],
-                "total_samples": _workshop_bench["total_samples"],
-                "processed": _workshop_bench["processed"],
-                "current_sample": _workshop_bench["current_sample"],
-            })
+            self._send_json(
+                {
+                    "ok": True,
+                    "running": True,
+                    "dataset_source": _workshop_bench["dataset_source"],
+                    "total_samples": _workshop_bench["total_samples"],
+                    "processed": _workshop_bench["processed"],
+                    "current_sample": _workshop_bench["current_sample"],
+                }
+            )
             return
         if _workshop_bench.get("error"):
             self._send_json({"ok": False, "error": _workshop_bench["error"]})
@@ -1306,7 +1412,11 @@ class APIHandler(BaseHTTPRequestHandler):
             return
 
         try:
-            body_data = json.loads(self._read_body()) if int(self.headers.get("Content-Length", 0)) > 0 else {}
+            body_data = (
+                json.loads(self._read_body())
+                if int(self.headers.get("Content-Length", 0)) > 0
+                else {}
+            )
         except json.JSONDecodeError:
             body_data = {}
 
@@ -1324,7 +1434,9 @@ class APIHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
         if not samples:
-            dataset_path = self._get_active_dataset_path(prefer_custom=body_data.get("use_custom_dataset", False))
+            dataset_path = self._get_active_dataset_path(
+                prefer_custom=body_data.get("use_custom_dataset", False)
+            )
             try:
                 data = json.loads(dataset_path.read_text(encoding="utf-8"))
                 samples = data.get("samples", [])
@@ -1340,14 +1452,22 @@ class APIHandler(BaseHTTPRequestHandler):
         source_label = " + ".join(source_names) if source_names else "unknown"
 
         # Reset state and launch
-        _workshop_bench.update({
-            "running": True, "dataset_source": source_label,
-            "total_samples": len(samples), "processed": 0,
-            "current_sample": "", "results": [], "report": None, "error": None,
-        })
+        _workshop_bench.update(
+            {
+                "running": True,
+                "dataset_source": source_label,
+                "total_samples": len(samples),
+                "processed": 0,
+                "current_sample": "",
+                "results": [],
+                "report": None,
+                "error": None,
+            }
+        )
 
         def _run():
             import time
+
             try:
                 results = []
 
@@ -1362,7 +1482,9 @@ class APIHandler(BaseHTTPRequestHandler):
                     latency_ms = round((time.perf_counter() - start_t) * 1000, 1)
 
                     if detections:
-                        llm_dets = [d for d in detections if d["detector"] == "local_llm_classifier"]
+                        llm_dets = [
+                            d for d in detections if d["detector"] == "local_llm_classifier"
+                        ]
                         if llm_dets:
                             best = max(llm_dets, key=lambda d: d["confidence"])
                         else:
@@ -1373,22 +1495,30 @@ class APIHandler(BaseHTTPRequestHandler):
 
                     predicted_norm = self._normalize_category(predicted)
 
-                    results.append({
-                        "id": sample.get("id"), "text_preview": text[:80],
-                        "expected": expected, "predicted": predicted_norm,
-                        "predicted_raw": predicted,
-                        "confidence": confidence, "correct": predicted_norm == expected,
-                        "latency_ms": latency_ms, "difficulty": sample.get("difficulty", "medium"),
-                        "detection_count": len(detections),
-                    })
+                    results.append(
+                        {
+                            "id": sample.get("id"),
+                            "text_preview": text[:80],
+                            "expected": expected,
+                            "predicted": predicted_norm,
+                            "predicted_raw": predicted,
+                            "confidence": confidence,
+                            "correct": predicted_norm == expected,
+                            "latency_ms": latency_ms,
+                            "difficulty": sample.get("difficulty", "medium"),
+                            "detection_count": len(detections),
+                        }
+                    )
 
                 _workshop_bench["processed"] = len(samples)
 
                 metrics = self._compute_metrics(results)
                 report = {
                     "timestamp": __import__("datetime").datetime.now().isoformat(),
-                    "dataset_source": source_label, "total_samples": len(results),
-                    "metrics": metrics, "results": results,
+                    "dataset_source": source_label,
+                    "total_samples": len(results),
+                    "metrics": metrics,
+                    "results": results,
                 }
                 results_dir = Path.home() / ".llmguard" / "workshop"
                 results_dir.mkdir(parents=True, exist_ok=True)
@@ -1396,12 +1526,15 @@ class APIHandler(BaseHTTPRequestHandler):
                 _workshop_bench["report"] = report
             except Exception as e:
                 import traceback
+
                 _workshop_bench["error"] = f"{e}\n{traceback.format_exc()}"
             finally:
                 _workshop_bench["running"] = False
 
         threading.Thread(target=_run, daemon=True, name="workshop-bench").start()
-        self._send_json({"ok": True, "message": "benchmark started", "total_samples": len(samples)})
+        self._send_json(
+            {"ok": True, "message": "benchmark started", "total_samples": len(samples)}
+        )
 
     _CATEGORY_MAP = {
         # LLM classifier prefixed categories
@@ -1456,8 +1589,14 @@ class APIHandler(BaseHTTPRequestHandler):
             if key == lower:
                 return val
         # If it's already a standard label, keep it
-        standard = {"PROPRIETARY_CODE", "BUSINESS_STRATEGY", "CUSTOMER_DATA",
-                     "INTERNAL_COMMS", "CREDENTIALS", "NONE"}
+        standard = {
+            "PROPRIETARY_CODE",
+            "BUSINESS_STRATEGY",
+            "CUSTOMER_DATA",
+            "INTERNAL_COMMS",
+            "CREDENTIALS",
+            "NONE",
+        }
         if raw in standard:
             return raw
         # Any detection that isn't NONE means something was found
@@ -1467,7 +1606,9 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def _compute_metrics(self, results: list) -> dict:
         """Compute precision, recall, F1, accuracy from benchmark results."""
-        categories = list(set(r["expected"] for r in results) | set(r["predicted"] for r in results))
+        categories = list(
+            set(r["expected"] for r in results) | set(r["predicted"] for r in results)
+        )
         categories = [c for c in categories if c != "NONE"] + ["NONE"]
 
         total = len(results)
@@ -1482,7 +1623,11 @@ class APIHandler(BaseHTTPRequestHandler):
 
         precision = round(tp / (tp + fp) * 100, 1) if (tp + fp) > 0 else 0
         recall = round(tp / (tp + fn) * 100, 1) if (tp + fn) > 0 else 0
-        f1 = round(2 * precision * recall / (precision + recall), 1) if (precision + recall) > 0 else 0
+        f1 = (
+            round(2 * precision * recall / (precision + recall), 1)
+            if (precision + recall) > 0
+            else 0
+        )
 
         # Per-category metrics
         per_category = {}
@@ -1492,9 +1637,17 @@ class APIHandler(BaseHTTPRequestHandler):
             cat_fn = sum(1 for r in results if r["expected"] == cat and r["predicted"] != cat)
             cat_prec = round(cat_tp / (cat_tp + cat_fp) * 100, 1) if (cat_tp + cat_fp) > 0 else 0
             cat_rec = round(cat_tp / (cat_tp + cat_fn) * 100, 1) if (cat_tp + cat_fn) > 0 else 0
-            cat_f1 = round(2 * cat_prec * cat_rec / (cat_prec + cat_rec), 1) if (cat_prec + cat_rec) > 0 else 0
-            per_category[cat] = {"precision": cat_prec, "recall": cat_rec, "f1": cat_f1,
-                                 "support": sum(1 for r in results if r["expected"] == cat)}
+            cat_f1 = (
+                round(2 * cat_prec * cat_rec / (cat_prec + cat_rec), 1)
+                if (cat_prec + cat_rec) > 0
+                else 0
+            )
+            per_category[cat] = {
+                "precision": cat_prec,
+                "recall": cat_rec,
+                "f1": cat_f1,
+                "support": sum(1 for r in results if r["expected"] == cat),
+            }
 
         # Latency stats
         latencies = [r["latency_ms"] for r in results]
@@ -1506,11 +1659,15 @@ class APIHandler(BaseHTTPRequestHandler):
             "precision": precision,
             "recall": recall,
             "f1": f1,
-            "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+            "tp": tp,
+            "fp": fp,
+            "fn": fn,
+            "tn": tn,
             "per_category": per_category,
             "avg_latency_ms": avg_latency,
             "p95_latency_ms": p95_latency,
-            "total": total, "correct": correct,
+            "total": total,
+            "correct": correct,
         }
 
     def _get_active_dataset_path(self, prefer_custom: bool = False) -> Path:
@@ -1536,6 +1693,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
 from socketserver import ThreadingMixIn
 
+
 class _LocalHTTPServer(ThreadingMixIn, HTTPServer):
     """Multi-threaded HTTPServer that skips getfqdn() in server_bind.
 
@@ -1546,8 +1704,9 @@ class _LocalHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
 
     def server_bind(self) -> None:
-        self.socket.setsockopt(__import__("socket").SOL_SOCKET,
-                               __import__("socket").SO_REUSEADDR, 1)
+        self.socket.setsockopt(
+            __import__("socket").SOL_SOCKET, __import__("socket").SO_REUSEADDR, 1
+        )
         self.socket.bind(self.server_address)
         self.server_address = self.socket.getsockname()
         self.server_name = "localhost"

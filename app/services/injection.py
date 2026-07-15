@@ -30,7 +30,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class InjectionCategory(str, Enum):
@@ -83,7 +82,7 @@ class InjectionResult:
 
     is_injection: bool
     findings: list[InjectionFinding] = field(default_factory=list)
-    highest_severity: Optional[Severity] = None
+    highest_severity: Severity | None = None
     categories: list[str] = field(default_factory=list)
 
     @property
@@ -138,7 +137,6 @@ _INJECTION_PATTERNS: list[InjectionPattern] = [
         severity=Severity.HIGH,
         description="Verbatim repetition request",
     ),
-
     # === Role Manipulation ===
     InjectionPattern(
         name="ignore_instructions",
@@ -188,7 +186,6 @@ _INJECTION_PATTERNS: list[InjectionPattern] = [
         severity=Severity.MEDIUM,
         description="Hypothetical framing to bypass guardrails",
     ),
-
     # === Known Jailbreaks ===
     InjectionPattern(
         name="dan_jailbreak",
@@ -220,7 +217,6 @@ _INJECTION_PATTERNS: list[InjectionPattern] = [
         severity=Severity.CRITICAL,
         description="Token smuggling / special token injection",
     ),
-
     # === Encoding Evasion ===
     InjectionPattern(
         name="base64_instruction",
@@ -244,7 +240,6 @@ _INJECTION_PATTERNS: list[InjectionPattern] = [
         severity=Severity.MEDIUM,
         description="Character-by-character exfiltration",
     ),
-
     # === Context Overflow ===
     InjectionPattern(
         name="padding_attack",
@@ -256,7 +251,6 @@ _INJECTION_PATTERNS: list[InjectionPattern] = [
         severity=Severity.MEDIUM,
         description="Context padding / overflow attempt",
     ),
-
     # === Payload Injection ===
     InjectionPattern(
         name="code_execution_request",
@@ -296,7 +290,7 @@ class InjectionDetector:
 
     def __init__(
         self,
-        patterns: Optional[list[InjectionPattern]] = None,
+        patterns: list[InjectionPattern] | None = None,
         min_severity: Severity = Severity.LOW,
     ) -> None:
         """Initialize with detection patterns.
@@ -322,7 +316,7 @@ class InjectionDetector:
 
         findings: list[InjectionFinding] = []
         max_severity_level = -1
-        max_severity: Optional[Severity] = None
+        max_severity: Severity | None = None
 
         for pattern_def in self._patterns:
             severity_level = _SEVERITY_ORDER[pattern_def.severity]

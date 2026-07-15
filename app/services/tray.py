@@ -9,15 +9,15 @@ from __future__ import annotations
 
 import threading
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 _ASSETS = Path(__file__).parent.parent / "assets" / "images"
 _ICON_PATH = _ASSETS / "logo-64.png"
 _FALLBACK_ICON = Path(__file__).parent.parent / "assets" / "icon.png"
 
 
-def _load_icon() -> "Image":
+def _load_icon() -> Image:
     """Load the tray icon image via Pillow."""
     from PIL import Image
 

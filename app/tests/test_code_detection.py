@@ -1,7 +1,8 @@
 """Tests for code and IP detection."""
 
 import pytest
-from app.services.code_detection import CodeDetector, OrgConfig, CodeResult
+
+from app.services.code_detection import CodeDetector, OrgConfig
 
 
 @pytest.fixture
@@ -96,9 +97,7 @@ class TestConnectionStrings:
     """Tests for connection string detection."""
 
     def test_jdbc(self, default_detector):
-        result = default_detector.scan(
-            "jdbc:postgresql://db.internal:5432/production"
-        )
+        result = default_detector.scan("jdbc:postgresql://db.internal:5432/production")
         assert result.is_sensitive is True
         assert "connection_string" in result.categories
 
@@ -137,7 +136,9 @@ class TestFilePaths:
         assert "file_path" in result.categories
 
     def test_windows_path(self, default_detector):
-        result = default_detector.scan(r"Located at C:\Users\admin\Projects\secret-api\config.json")
+        result = default_detector.scan(
+            r"Located at C:\Users\admin\Projects\secret-api\config.json"
+        )
         assert result.is_sensitive is True
 
 

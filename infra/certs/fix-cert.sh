@@ -7,14 +7,16 @@
 # does not raise certificate errors. It also tries to add it to the per-user
 # NSS database that Firefox/Chrome use.
 #
-# Run it from the llmguard folder:
-#     ./fix-cert.sh
+# Run it from the project root:
+#     ./infra/certs/fix-cert.sh
 #
 # Installing into the system trust store requires sudo.
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+# This script lives in infra/certs/; the project root (where the `app` package
+# and .venv live) is two levels up.
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 # The `app` package lives in the project root and is not pip-installed.

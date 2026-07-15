@@ -18,7 +18,7 @@ from AppKit import (
     NSWindowStyleMaskResizable,
     NSWindowStyleMaskTitled,
 )
-from Foundation import NSURL, NSURLRequest
+from Foundation import NSURL
 from WebKit import WKWebView, WKWebViewConfiguration
 
 # Autoresizing mask: flexible width (0x02) + flexible height (0x10)
@@ -91,6 +91,7 @@ class MainWindow:
         """Load the dashboard HTML into the web view (cache-busted)."""
         if DASHBOARD_PATH.exists():
             import time
+
             cache_bust = int(time.time())
             url = NSURL.fileURLWithPath_(str(DASHBOARD_PATH))
             # Force reload by using loadFileURL which doesn't cache as aggressively

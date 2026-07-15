@@ -51,8 +51,12 @@ class _StubPipeline:
     bug did.
     """
 
-    def __init__(self, action: Action, findings: list[Finding] | None = None,
-                 redacted_text: str | None = None) -> None:
+    def __init__(
+        self,
+        action: Action,
+        findings: list[Finding] | None = None,
+        redacted_text: str | None = None,
+    ) -> None:
         self._action = action
         self._findings = findings or []
         self._redacted_text = redacted_text
@@ -73,14 +77,12 @@ def mock_ctx():
         yield mock
 
 
-def _make_request_flow(body: dict) -> "tflow.HTTPFlow":
+def _make_request_flow(body: dict) -> tflow.HTTPFlow:
     req = tutils.treq(
         host="api.openai.com",
         method=b"POST",
         path=b"/v1/chat/completions",
-        headers=__import__("mitmproxy").http.Headers(
-            ((b"content-type", b"application/json"),)
-        ),
+        headers=__import__("mitmproxy").http.Headers(((b"content-type", b"application/json"),)),
         content=json.dumps(body).encode(),
     )
     return tflow.tflow(req=req)
@@ -115,7 +117,9 @@ class TestRequestInspectPath:
         addon = _addon_with(pipeline)
         flow = _make_request_flow({"messages": [{"role": "user", "content": "my key is AKIA..."}]})
 
-        await addon.request(flow)  # must not raise TypeError: 'coroutine' object is not subscriptable
+        await addon.request(
+            flow
+        )  # must not raise TypeError: 'coroutine' object is not subscriptable
 
         assert flow.response is not None
         assert flow.response.status_code == 403
@@ -126,7 +130,9 @@ class TestRequestInspectPath:
     async def test_allow_leaves_request_untouched(self):
         pipeline = _StubPipeline(action=Action.ALLOW)
         addon = _addon_with(pipeline)
-        flow = _make_request_flow({"messages": [{"role": "user", "content": "hello there, how are you?"}]})
+        flow = _make_request_flow(
+            {"messages": [{"role": "user", "content": "hello there, how are you?"}]}
+        )
 
         await addon.request(flow)
 
@@ -172,7 +178,9 @@ class TestResponseInspectPath:
             ),
         )
 
-        await addon.response(flow)  # must not raise TypeError: 'coroutine' object is not subscriptable
+        await addon.response(
+            flow
+        )  # must not raise TypeError: 'coroutine' object is not subscriptable
 
         assert "X-LLMGuard-Alert" in flow.response.headers
 

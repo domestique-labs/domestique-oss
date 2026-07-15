@@ -18,7 +18,6 @@ from typing import NoReturn
 from app.config.store import ConfigStore
 from app.server.api import start_api_server
 
-
 DASHBOARD_PATH = Path(__file__).parent / "assets" / "dashboard.html"
 DEFAULT_API_PORT = 9876
 
@@ -236,7 +235,9 @@ def _ensure_cert_generated_portable() -> None:
                 "(adds to OS trust store; no admin needed on Windows)..."
             )
             if cert_manager.install_and_trust():
-                print("  ✓ Certificate trusted — HTTPS interception will work without browser warnings.")
+                print(
+                    "  ✓ Certificate trusted — HTTPS interception will work without browser warnings."
+                )
             elif sys.platform.startswith("linux"):
                 print("  ⚠ Automatic trust isn't implemented on Linux yet (manual trust needed).")
                 print("    Browsers will show cert warnings for intercepted sites until you run")
@@ -267,6 +268,7 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     # Portable mode has no AppKit warmup path; mark startup complete so the
     # dashboard exits its "starting" state instead of spinning forever.
     import app.server.api as _api
+
     _api._startup_state["phase"] = "ready"
     _api._startup_state["detail"] = ""
 
@@ -279,6 +281,7 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
 
     # Ensure Ollama is available and the configured model is ready.
     import threading
+
     threading.Thread(target=_ensure_ollama, daemon=True).start()
 
     # Auto-start proxies that were enabled in the saved config.
@@ -310,7 +313,9 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     # Keep the tray icon state in sync with proxy status.
     if tray:
         threading.Thread(
-            target=_tray_sync_loop, args=(tray,), daemon=True,
+            target=_tray_sync_loop,
+            args=(tray,),
+            daemon=True,
         ).start()
 
     try:
@@ -342,16 +347,20 @@ def _detect_accelerator() -> dict:
         try:
             r = subprocess.run(
                 ["sysctl", "-n", "hw.memsize"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
-            ram_gb = round(int(r.stdout.strip()) / (1024 ** 3), 1)
+            ram_gb = round(int(r.stdout.strip()) / (1024**3), 1)
         except Exception:
             ram_gb = 8.0
         chip = "Apple Silicon"
         try:
             r = subprocess.run(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             chip = r.stdout.strip() or chip
         except Exception:
@@ -371,9 +380,14 @@ def _detect_accelerator() -> dict:
     if nvidia_smi:
         try:
             r = subprocess.run(
-                [nvidia_smi, "--query-gpu=name,memory.total,memory.free",
-                 "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=5,
+                [
+                    nvidia_smi,
+                    "--query-gpu=name,memory.total,memory.free",
+                    "--format=csv,noheader,nounits",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             line = r.stdout.strip().split("\n")[0]
             parts = [s.strip() for s in line.split(",")]
@@ -397,7 +411,9 @@ def _detect_accelerator() -> dict:
         try:
             r = subprocess.run(
                 [rocm_smi, "--showmeminfo", "vram", "--csv"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             for line in r.stdout.strip().splitlines()[1:]:
                 parts = line.split(",")
@@ -406,7 +422,7 @@ def _detect_accelerator() -> dict:
                     return {
                         "type": "rocm",
                         "name": "AMD GPU (ROCm)",
-                        "vram_gb": round(total_bytes / (1024 ** 3), 1),
+                        "vram_gb": round(total_bytes / (1024**3), 1),
                         "env": {
                             "OLLAMA_FLASH_ATTENTION": "1",
                             "OLLAMA_KEEP_ALIVE": "30m",
@@ -467,8 +483,8 @@ def _ensure_ollama() -> None:
     import os
     import shutil
     import subprocess
-    import urllib.request
     import urllib.error
+    import urllib.request
 
     config = ConfigStore.current()
     stack = config.detection_stack
@@ -477,6 +493,7 @@ def _ensure_ollama() -> None:
     model = None
     if stack.gemma4_e2b:
         from llmguard.detectors.local_llm import _resolve_gemma_model
+
         model = _resolve_gemma_model()
     elif stack.qwen3_1_7b:
         model = "qwen3:1.7b"
@@ -497,15 +514,27 @@ def _ensure_ollama() -> None:
             print("▶ Ollama not found — installing via winget...")
             try:
                 subprocess.run(
-                    ["winget", "install", "Ollama.Ollama",
-                     "--accept-source-agreements", "--accept-package-agreements"],
-                    capture_output=True, timeout=300,
+                    [
+                        "winget",
+                        "install",
+                        "Ollama.Ollama",
+                        "--accept-source-agreements",
+                        "--accept-package-agreements",
+                    ],
+                    capture_output=True,
+                    timeout=300,
                 )
                 # Refresh PATH after install
                 user_path = subprocess.run(
-                    ["powershell", "-NoProfile", "-Command",
-                     "[Environment]::GetEnvironmentVariable('Path','User')"],
-                    capture_output=True, text=True, timeout=10,
+                    [
+                        "powershell",
+                        "-NoProfile",
+                        "-Command",
+                        "[Environment]::GetEnvironmentVariable('Path','User')",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 ).stdout.strip()
                 os.environ["PATH"] = os.environ.get("PATH", "") + ";" + user_path
                 # winget's post-install PATH registration can lag a moment
@@ -519,8 +548,7 @@ def _ensure_ollama() -> None:
             if brew:
                 print("▶ Ollama not found — installing via brew...")
                 try:
-                    subprocess.run([brew, "install", "ollama"],
-                                   capture_output=True, timeout=300)
+                    subprocess.run([brew, "install", "ollama"], capture_output=True, timeout=300)
                     ollama_bin = shutil.which("ollama")
                 except Exception as exc:
                     print(f"  ⚠ Ollama install failed: {exc}")
@@ -550,13 +578,15 @@ def _ensure_ollama() -> None:
                 subprocess.Popen(
                     [ollama_bin, "serve"],
                     creationflags=subprocess.CREATE_NO_WINDOW,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             else:
                 subprocess.Popen(
                     [ollama_bin, "serve"],
                     start_new_session=True,
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             for _ in range(20):
                 time.sleep(0.5)
@@ -570,7 +600,8 @@ def _ensure_ollama() -> None:
     try:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         resp = opener.open(
-            urllib.request.Request("http://localhost:11434/api/tags"), timeout=5,
+            urllib.request.Request("http://localhost:11434/api/tags"),
+            timeout=5,
         )
         tags = json.loads(resp.read())
         pulled = {m["name"] for m in tags.get("models", [])}
@@ -597,13 +628,17 @@ def _ollama_infer(opener, model: str, text: str, num_predict: int = 5) -> dict |
     """Run a single Ollama inference and return timing metadata."""
     import json
     import urllib.request
-    payload = json.dumps({
-        "model": model,
-        "messages": [{"role": "user", "content": text}],
-        "stream": False, "think": False, "keep_alive": "30m",
-        "options": {"num_predict": num_predict, "num_ctx": 4096,
-                    "temperature": 0, "top_k": 1},
-    }).encode()
+
+    payload = json.dumps(
+        {
+            "model": model,
+            "messages": [{"role": "user", "content": text}],
+            "stream": False,
+            "think": False,
+            "keep_alive": "30m",
+            "options": {"num_predict": num_predict, "num_ctx": 4096, "temperature": 0, "top_k": 1},
+        }
+    ).encode()
     req = urllib.request.Request(
         "http://localhost:11434/api/chat",
         data=payload,
@@ -659,8 +694,7 @@ def _benchmark_and_warm(model: str, hw: dict, opener) -> None:
         _ollama_infer(opener, model, "warmup", num_predict=1)
         times = []
         for _ in range(n):
-            r = _ollama_infer(opener, model, "Classify: My SSN is 123-45-6789",
-                              num_predict=10)
+            r = _ollama_infer(opener, model, "Classify: My SSN is 123-45-6789", num_predict=10)
             if r:
                 pe = r.get("prompt_eval_duration", 0) / 1e6
                 ev = r.get("eval_duration", 0) / 1e6
@@ -725,7 +759,8 @@ def _start_system_tray(api_port: int):
         return None
 
     from app.server.api import (
-        get_proxy_service, get_browser_proxy_service,
+        get_browser_proxy_service,
+        get_proxy_service,
     )
 
     def _toggle() -> None:
@@ -750,6 +785,7 @@ def _start_system_tray(api_port: int):
 
     def _quit() -> None:
         import os
+
         _cleanup_services()
         os._exit(0)
 
@@ -764,14 +800,11 @@ def _start_system_tray(api_port: int):
 
 def _tray_sync_loop(tray) -> None:
     """Poll proxy status and keep the tray icon in sync."""
-    from app.server.api import get_proxy_service, get_browser_proxy_service
+    from app.server.api import get_browser_proxy_service, get_proxy_service
 
     while True:
         try:
-            active = (
-                get_proxy_service().is_running
-                or get_browser_proxy_service().is_running
-            )
+            active = get_proxy_service().is_running or get_browser_proxy_service().is_running
             tray.set_active(active)
         except Exception:
             pass
@@ -784,7 +817,7 @@ def _auto_start_proxies() -> None:
     Respects the user's last-known state so protection resumes
     automatically after an app restart without manual re-enabling.
     """
-    from app.server.api import get_proxy_service, get_browser_proxy_service
+    from app.server.api import get_browser_proxy_service, get_proxy_service
 
     config = ConfigStore.current()
 

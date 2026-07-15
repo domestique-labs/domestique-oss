@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app import main
 from app.config.schema import AppConfig
 from app.config.store import ConfigStore
@@ -43,8 +41,12 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
         with p1, p2:
             ConfigStore.load()  # never-configured, fresh default AppConfig
             bp = self._fake_bp()
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()
 
             bp.start.assert_called_once()
@@ -64,8 +66,12 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             ConfigStore.save(config)
 
             bp = self._fake_bp()
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()
 
             bp.start.assert_not_called()
@@ -83,8 +89,12 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             ConfigStore.save(config)
 
             bp = self._fake_bp()
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()
 
             bp.start.assert_called_once()
@@ -94,8 +104,12 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
         with p1, p2:
             ConfigStore.load()  # fresh -> will be auto-enabled
             bp = self._fake_bp(is_running=True)
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()
 
             bp.start.assert_not_called()
@@ -106,8 +120,12 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             ConfigStore.load()
             bp = self._fake_bp()
             bp.start.side_effect = RuntimeError("mitmdump exploded")
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()  # must not raise
 
 
@@ -167,28 +185,36 @@ class TestConfigStoreBrowserInterceptionSaveDict:
         save re-sends the current, unchanged `browser_interception` value
         (as the dashboard's full-object POST always does) -- this must NOT
         be treated as the user configuring interception."""
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()  # fresh: browser_interception=False, configured=False
-            result = ConfigStore.save_dict({
-                "browser_interception": False,  # unchanged -- just along for the ride
-                "proxy_port": 9001,  # the field the user actually meant to change
-            })
+            result = ConfigStore.save_dict(
+                {
+                    "browser_interception": False,  # unchanged -- just along for the ride
+                    "proxy_port": 9001,  # the field the user actually meant to change
+                }
+            )
             assert result.proxy_port == 9001
             assert result.browser_interception is False
             assert result.browser_interception_configured is False
 
     def test_save_dict_marks_configured_on_value_change_false_to_true(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()  # False, unconfigured
             result = ConfigStore.save_dict({"browser_interception": True})
             assert result.browser_interception is True
             assert result.browser_interception_configured is True
 
     def test_save_dict_marks_configured_on_value_change_true_to_false(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
             config = ConfigStore.current()
             config.browser_interception = True
@@ -200,19 +226,25 @@ class TestConfigStoreBrowserInterceptionSaveDict:
             assert result.browser_interception_configured is True
 
     def test_save_dict_honors_explicit_configured_flag_in_payload(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()  # fresh: unconfigured
-            result = ConfigStore.save_dict({
-                "browser_interception": False,  # unchanged value
-                "browser_interception_configured": True,  # explicit intent
-            })
+            result = ConfigStore.save_dict(
+                {
+                    "browser_interception": False,  # unchanged value
+                    "browser_interception_configured": True,  # explicit intent
+                }
+            )
             assert result.browser_interception is False
             assert result.browser_interception_configured is True
 
     def test_save_dict_leaves_configured_alone_when_key_absent(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
             result = ConfigStore.save_dict({"proxy_port": 9001})
             assert result.browser_interception_configured is False
@@ -249,15 +281,21 @@ class TestBrowserInterceptionRaceRegression:
             # ahead of the auto-enable thread, resending the current,
             # untouched browser_interception=False as part of its
             # full-object POST.
-            ConfigStore.save_dict({
-                "detection_stack": {"gliner_pii": True},
-                "browser_interception": False,
-            })
+            ConfigStore.save_dict(
+                {
+                    "detection_stack": {"gliner_pii": True},
+                    "browser_interception": False,
+                }
+            )
             assert ConfigStore.current().browser_interception_configured is False
 
             bp = self._fake_bp()
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()
 
             bp.start.assert_called_once()
@@ -284,8 +322,12 @@ class TestBrowserInterceptionRaceRegression:
             ConfigStore.reset()
             ConfigStore.load()
             bp = self._fake_bp()
-            with patch("app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)), \
-                 patch("app.server.api.get_browser_proxy_service", return_value=bp):
+            with (
+                patch(
+                    "app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                ),
+                patch("app.server.api.get_browser_proxy_service", return_value=bp),
+            ):
                 main._auto_start_proxies()
 
             bp.start.assert_not_called()

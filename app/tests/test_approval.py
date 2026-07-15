@@ -10,19 +10,16 @@ Covers:
 
 from __future__ import annotations
 
-import json
-import time
 import threading
+import time
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app.services.approval import (
     ApprovalManager,
     ApprovalStatus,
     PendingApproval,
-    get_approval_manager,
 )
-
 
 # --- ApprovalManager Unit Tests -----------------------------------------
 
@@ -246,6 +243,7 @@ class TestRedaction:
     def _get_redact(self):
         """Import the redaction method."""
         from app.services.mitm_addon import LLMGuardAddon
+
         addon = LLMGuardAddon()
         return addon._redact_for_preview
 
@@ -286,6 +284,7 @@ class TestApprovalFlowIntegration:
     def test_approval_mode_check_default(self):
         """Default config should have approval_mode=False."""
         from app.config.schema import AppConfig
+
         config = AppConfig()
         assert config.approval_mode is False
         assert config.approval_timeout_seconds == 30
@@ -293,6 +292,7 @@ class TestApprovalFlowIntegration:
     def test_approval_mode_serialization(self):
         """Approval mode should round-trip through to_dict/from_dict."""
         from app.config.schema import AppConfig
+
         config = AppConfig(approval_mode=True, approval_timeout_seconds=60)
         d = config.to_dict()
         restored = AppConfig.from_dict(d)

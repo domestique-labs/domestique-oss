@@ -8,15 +8,17 @@
     created until the proxy first starts. This script generates the CA (if
     missing) and adds it to the current user's Trusted Root store.
 
-    Run it from the llmguard folder as the same Windows user that runs LLMGuard:
-        .\fix-cert.ps1
+    Run it from the project root as the same Windows user that runs LLMGuard:
+        .\infra\certs\fix-cert.ps1
 
     A Windows security dialog will appear asking to install the certificate from
     "LLMGuard Local CA" - you must click Yes for trust to succeed.
 #>
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent $MyInvocation.MyCommand.Path
+# This script lives in infra\certs\; the project root (where the `app` package
+# and .venv live) is two levels up.
+$Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
 # Force UTF-8 so console output from the app code doesn't crash on cp1252.

@@ -4,17 +4,13 @@ from __future__ import annotations
 
 import json
 import time
-import tempfile
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from app.services.audit import (
-    AuditStore,
-    AuditEvent,
     AuditAction,
-    AuditSeverity,
+    AuditStore,
     RetentionPolicy,
     create_audit_event,
 )
@@ -117,53 +113,47 @@ class TestAuditStore:
 
     def test_query_filter_by_action(self, audit_store):
         # Record both block and allow events
-        audit_store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="api.openai.com"
-        ))
-        audit_store.record(create_audit_event(
-            action=AuditAction.ALLOW, destination="api.anthropic.com"
-        ))
+        audit_store.record(
+            create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com")
+        )
+        audit_store.record(
+            create_audit_event(action=AuditAction.ALLOW, destination="api.anthropic.com")
+        )
         time.sleep(0.3)
 
         blocked = audit_store.query(action=AuditAction.BLOCK)
         assert all(r["action"] == "block" for r in blocked)
 
     def test_query_filter_by_destination(self, audit_store):
-        audit_store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="api.openai.com"
-        ))
-        audit_store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="chatgpt.com"
-        ))
+        audit_store.record(
+            create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com")
+        )
+        audit_store.record(create_audit_event(action=AuditAction.BLOCK, destination="chatgpt.com"))
         time.sleep(0.3)
 
         results = audit_store.query(destination="chatgpt.com")
         assert all(r["destination"] == "chatgpt.com" for r in results)
 
     def test_query_with_time_range(self, audit_store):
-        audit_store.record(create_audit_event(
-            action=AuditAction.ALLOW, destination="api.openai.com"
-        ))
+        audit_store.record(
+            create_audit_event(action=AuditAction.ALLOW, destination="api.openai.com")
+        )
         time.sleep(0.3)
 
         # Query with time window that includes now
-        results = audit_store.query(
-            since=datetime.now(timezone.utc) - timedelta(minutes=5)
-        )
+        results = audit_store.query(since=datetime.now(UTC) - timedelta(minutes=5))
         assert len(results) >= 1
 
     def test_event_count_tracks_writes(self, audit_store):
         for _ in range(5):
-            audit_store.record(create_audit_event(
-                action=AuditAction.ALLOW, destination="api.openai.com"
-            ))
+            audit_store.record(
+                create_audit_event(action=AuditAction.ALLOW, destination="api.openai.com")
+            )
         time.sleep(0.3)
         assert audit_store.event_count >= 5
 
     def test_jsonl_output_created(self, audit_store, tmp_audit_dir):
-        audit_store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="chatgpt.com"
-        ))
+        audit_store.record(create_audit_event(action=AuditAction.BLOCK, destination="chatgpt.com"))
         time.sleep(0.3)
 
         jsonl_path = tmp_audit_dir / "events.jsonl"
@@ -175,17 +165,13 @@ class TestAuditStore:
 
     def test_get_stats(self, audit_store):
         for i in range(3):
-            audit_store.record(create_audit_event(
-                action=AuditAction.BLOCK, destination="api.openai.com"
-            ))
-        audit_store.record(create_audit_event(
-            action=AuditAction.ALLOW, destination="claude.ai"
-        ))
+            audit_store.record(
+                create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com")
+            )
+        audit_store.record(create_audit_event(action=AuditAction.ALLOW, destination="claude.ai"))
         time.sleep(0.3)
 
-        stats = audit_store.get_stats(
-            since=datetime.now(timezone.utc) - timedelta(hours=1)
-        )
+        stats = audit_store.get_stats(since=datetime.now(UTC) - timedelta(hours=1))
         assert stats["total_events"] >= 4
         assert "block" in stats["action_counts"]
 
@@ -200,9 +186,7 @@ class TestAuditStore:
         store.FLUSH_INTERVAL = 10.0  # Long interval
         store.start()
 
-        store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="api.openai.com"
-        ))
+        store.record(create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com"))
         store.stop()  # Should flush on stop
 
         # Verify it was written
@@ -222,9 +206,7 @@ class TestRetentionPolicy:
         store.FLUSH_INTERVAL = 0.1
         store.start()
 
-        store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="api.openai.com"
-        ))
+        store.record(create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com"))
         time.sleep(0.3)
 
         # Force retention check
@@ -245,9 +227,7 @@ class TestRetentionPolicy:
         store.start()
 
         for i in range(10):
-            store.record(create_audit_event(
-                action=AuditAction.ALLOW, destination=f"host{i}.com"
-            ))
+            store.record(create_audit_event(action=AuditAction.ALLOW, destination=f"host{i}.com"))
         time.sleep(0.5)
 
         store._enforce_retention()
@@ -262,7 +242,5 @@ class TestAuditStoreQueueBehavior:
     def test_record_when_stopped_is_noop(self, tmp_audit_dir):
         store = AuditStore(data_dir=tmp_audit_dir)
         # Don't start - record should silently do nothing
-        store.record(create_audit_event(
-            action=AuditAction.BLOCK, destination="api.openai.com"
-        ))
+        store.record(create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com"))
         # No error raised

@@ -32,14 +32,13 @@ Usage:
 from __future__ import annotations
 
 import logging
-import os
-import time
 import threading
-from dataclasses import dataclass, field
+import time
+from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger("llmguard.policy")
 
@@ -57,13 +56,13 @@ class PolicyAction(Enum):
 class MatchCondition:
     """Conditions that must all be true for a rule to apply."""
 
-    category: Optional[str] = None         # PII category (SSN, EMAIL, etc.)
-    destination: Optional[str] = None      # Target host or wildcard
-    source_app: Optional[str] = None       # Application name
-    time_range: Optional[str] = None       # "HH:MM-HH:MM" (e.g., "09:00-17:00")
-    min_confidence: Optional[float] = None # Minimum detection confidence
+    category: str | None = None  # PII category (SSN, EMAIL, etc.)
+    destination: str | None = None  # Target host or wildcard
+    source_app: str | None = None  # Application name
+    time_range: str | None = None  # "HH:MM-HH:MM" (e.g., "09:00-17:00")
+    min_confidence: float | None = None  # Minimum detection confidence
 
-    def matches(self, context: "RequestContext") -> bool:
+    def matches(self, context: RequestContext) -> bool:
         """Check if all conditions match the given context."""
         if self.category and self.category != context.category:
             return False
@@ -116,12 +115,12 @@ class PolicyRule:
     name: str
     match: MatchCondition
     action: PolicyAction
-    priority: int = 0          # Higher priority rules evaluated first
-    notify: Optional[str] = None  # Email/channel to notify
+    priority: int = 0  # Higher priority rules evaluated first
+    notify: str | None = None  # Email/channel to notify
     enabled: bool = True
     description: str = ""
 
-    def applies_to(self, context: "RequestContext") -> bool:
+    def applies_to(self, context: RequestContext) -> bool:
         """Check if this rule matches the given request context."""
         return self.enabled and self.match.matches(context)
 
@@ -130,11 +129,11 @@ class PolicyRule:
 class RequestContext:
     """Context about the current request being evaluated."""
 
-    destination: str            # Target host (e.g., "api.openai.com")
-    category: str = ""          # PII category detected (e.g., "SSN")
-    source_app: str = ""        # Application name (e.g., "Safari", "curl")
-    confidence: float = 1.0     # Detection confidence [0.0, 1.0]
-    content_preview: str = ""   # First N chars of content (for logging)
+    destination: str  # Target host (e.g., "api.openai.com")
+    category: str = ""  # PII category detected (e.g., "SSN")
+    source_app: str = ""  # Application name (e.g., "Safari", "curl")
+    confidence: float = 1.0  # Detection confidence [0.0, 1.0]
+    content_preview: str = ""  # First N chars of content (for logging)
     method: str = "POST"
     path: str = ""
     user: str = "local"
@@ -145,9 +144,9 @@ class PolicyDecision:
     """The engine's decision after evaluating all rules."""
 
     action: PolicyAction
-    rule_name: str              # Which rule made the decision
-    notify: Optional[str]       # Who to notify (if any)
-    reason: str = ""            # Human-readable explanation
+    rule_name: str  # Which rule made the decision
+    notify: str | None  # Who to notify (if any)
+    reason: str = ""  # Human-readable explanation
 
 
 class PolicyEngine:
@@ -159,18 +158,16 @@ class PolicyEngine:
 
     def __init__(
         self,
-        rules: Optional[list[PolicyRule]] = None,
+        rules: list[PolicyRule] | None = None,
         default_action: PolicyAction = PolicyAction.BLOCK,
     ) -> None:
-        self._rules = sorted(
-            rules or [], key=lambda r: r.priority, reverse=True
-        )
+        self._rules = sorted(rules or [], key=lambda r: r.priority, reverse=True)
         self._default_action = default_action
         self._lock = threading.Lock()
         self._stats = {"evaluations": 0, "blocks": 0, "allows": 0, "redacts": 0}
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PolicyEngine":
+    def from_dict(cls, data: dict[str, Any]) -> PolicyEngine:
         """Create a PolicyEngine from a parsed YAML/JSON dictionary.
 
         Expected format:
@@ -208,19 +205,21 @@ class PolicyEngine:
         return cls(rules=rules, default_action=default)
 
     @classmethod
-    def from_yaml(cls, yaml_str: str) -> "PolicyEngine":
+    def from_yaml(cls, yaml_str: str) -> PolicyEngine:
         """Create a PolicyEngine from a YAML string."""
         try:
             import yaml
+
             data = yaml.safe_load(yaml_str)
         except ImportError:
             # Fallback: basic YAML-like parsing for simple cases
             import json
+
             data = json.loads(yaml_str)
         return cls.from_dict(data)
 
     @classmethod
-    def from_file(cls, path: Path) -> "PolicyEngine":
+    def from_file(cls, path: Path) -> PolicyEngine:
         """Load policy from a YAML file."""
         content = Path(path).read_text()
         return cls.from_yaml(content)
@@ -300,19 +299,19 @@ class PolicyWatcher:
         self,
         policy_path: Path,
         reload_interval: float = 10.0,
-        on_reload: Optional[callable] = None,
+        on_reload: callable | None = None,
     ) -> None:
         self._path = Path(policy_path)
         self._interval = reload_interval
         self._on_reload = on_reload
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._last_mtime = 0.0
-        self._engine: Optional[PolicyEngine] = None
+        self._engine: PolicyEngine | None = None
         self._lock = threading.Lock()
 
     @property
-    def engine(self) -> Optional[PolicyEngine]:
+    def engine(self) -> PolicyEngine | None:
         """Get the current policy engine."""
         with self._lock:
             return self._engine
@@ -342,9 +341,7 @@ class PolicyWatcher:
             with self._lock:
                 self._engine = engine
             self._last_mtime = self._path.stat().st_mtime
-            logger.info(
-                f"Policy loaded: {len(engine.rules)} rules from {self._path}"
-            )
+            logger.info(f"Policy loaded: {len(engine.rules)} rules from {self._path}")
             if self._on_reload:
                 self._on_reload(engine)
         except Exception as e:

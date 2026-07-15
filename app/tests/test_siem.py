@@ -4,21 +4,20 @@ from __future__ import annotations
 
 import json
 import socket
-import time
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.audit import AuditEvent, create_audit_event, AuditAction
+from app.services.audit import AuditAction, create_audit_event
 from app.services.siem import (
-    SyslogBackend,
     CEFBackend,
-    WebhookBackend,
     FileBackend,
     SIEMDispatcher,
+    SyslogBackend,
+    WebhookBackend,
 )
 
 
@@ -186,9 +185,7 @@ class TestFileBackend:
         backend = FileBackend(path=out)
 
         for i in range(5):
-            event = create_audit_event(
-                action=AuditAction.ALLOW, destination=f"host{i}.com"
-            )
+            event = create_audit_event(action=AuditAction.ALLOW, destination=f"host{i}.com")
             backend.send(event)
 
         backend.close()

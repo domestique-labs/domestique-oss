@@ -92,6 +92,15 @@ User / App  -->  System Proxy (PAC)  -->  LLMGuard (mitmproxy)  -->  LLM API
 The CA certificate is auto-generated and trusted on first launch. Browser mode is
 opt-in and installs the `[browser-proxy]` extra.
 
+If the certificate gate doesn't clear automatically (fresh installs on Windows, and
+Linux, where system-store trust needs a manual step), run the helper for your OS from
+the project root:
+
+```
+./infra/certs/fix-cert.sh        # Linux — generates + trusts the CA (uses sudo)
+.\infra\certs\fix-cert.ps1       # Windows — generates + trusts the CA (click Yes on the prompt)
+```
+
 #### Disable QUIC (HTTP/3) so traffic can't bypass the proxy
 
 Chromium browsers prefer **QUIC**, which runs over UDP/443 and skips the TCP proxy

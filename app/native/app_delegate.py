@@ -11,22 +11,23 @@ import webbrowser
 from pathlib import Path
 
 import objc
-from AppKit import NSApp, NSObject
+from AppKit import NSObject
 from Foundation import NSLog as _NSLog
+
 
 def NSLog(msg):
     """NSLog wrapper that handles non-ASCII characters."""
     try:
         _NSLog(msg)
     except (UnicodeEncodeError, UnicodeDecodeError):
-        _NSLog(msg.encode('ascii', 'replace').decode('ascii'))
+        _NSLog(msg.encode("ascii", "replace").decode("ascii"))
+
 
 from app.config.store import ConfigStore
 from app.native.status_bar import StatusBar
-from app.native.window import MainWindow
-from app.services.proxy import ProxyService, BrowserProxyService
 from app.services.benchmark import BenchmarkService
-from app.services.watchdog import Watchdog, ProtectionState
+from app.services.proxy import ProxyService
+from app.services.watchdog import ProtectionState, Watchdog
 
 
 class AppDelegate(NSObject):
@@ -67,7 +68,7 @@ class AppDelegate(NSObject):
         """Generate CA if needed and trust it (no admin password required)."""
         try:
             from app.server.api import get_browser_proxy_service
-            from app.services.cert_manager import is_cert_trusted, install_and_trust
+            from app.services.cert_manager import install_and_trust, is_cert_trusted
 
             svc = get_browser_proxy_service()
             if not svc.is_setup:
@@ -96,6 +97,7 @@ class AppDelegate(NSObject):
         self._watchdog.stop()
         try:
             from app.server.api import get_browser_proxy_service
+
             svc = get_browser_proxy_service()
             if svc.is_running:
                 svc.stop()
@@ -109,6 +111,7 @@ class AppDelegate(NSObject):
     def toggleFirewall_(self, sender) -> None:
         """Toggle protection on/off - syncs menu bar + dashboard state."""
         from app.server.api import get_browser_proxy_service
+
         svc = get_browser_proxy_service()
 
         if svc.is_running:
@@ -139,11 +142,11 @@ class AppDelegate(NSObject):
         Waits for cert to be trusted before starting the proxy.
         """
         try:
-            from app.server.api import get_browser_proxy_service
-            from app.services.cert_manager import is_cert_trusted
             import json
             import urllib.request
+
             import app.server.api as _api
+            from app.server.api import get_browser_proxy_service
 
             _api._startup_state["phase"] = "starting"
             _api._startup_state["detail"] = "Initializing..."
@@ -163,6 +166,7 @@ class AppDelegate(NSObject):
                 pass
 
             import platform as _plat
+
             _apple = _plat.system() == "Darwin" and _plat.machine() == "arm64"
 
             models_to_warm = []
@@ -189,14 +193,20 @@ class AppDelegate(NSObject):
                 _api._startup_state["phase"] = "warming"
                 _api._startup_state["detail"] = f"Loading {model}..."
                 try:
-                    data = json.dumps({
-                        "model": model,
-                        "messages": [{"role": "user", "content": "warmup"}],
-                        "stream": False, "options": {"num_predict": 1, "num_ctx": 8192},
-                        "keep_alive": "24h",
-                    }).encode()
-                    req = urllib.request.Request("http://localhost:11434/api/chat",
-                                                data=data, headers={"Content-Type": "application/json"})
+                    data = json.dumps(
+                        {
+                            "model": model,
+                            "messages": [{"role": "user", "content": "warmup"}],
+                            "stream": False,
+                            "options": {"num_predict": 1, "num_ctx": 8192},
+                            "keep_alive": "24h",
+                        }
+                    ).encode()
+                    req = urllib.request.Request(
+                        "http://localhost:11434/api/chat",
+                        data=data,
+                        headers={"Content-Type": "application/json"},
+                    )
                     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
                     opener.open(req, timeout=120)
                     NSLog(f"LLMGuard: {model} ready")
@@ -210,6 +220,7 @@ class AppDelegate(NSObject):
             _api._startup_state["detail"] = "Warming up detectors..."
             try:
                 from app.server.api import _venv_scanner
+
                 _venv_scanner.scan("warmup test@example.com SSN 123-45-6789")
             except Exception as e:
                 NSLog(f"LLMGuard: detector warmup failed: {e}")
@@ -227,10 +238,11 @@ class AppDelegate(NSObject):
                 pass  # UI sync is non-critical
 
         except Exception as e:
-            err_msg = str(e).encode('ascii', 'replace').decode('ascii')
+            err_msg = str(e).encode("ascii", "replace").decode("ascii")
             NSLog(f"LLMGuard: failed to start: {err_msg}")
             try:
                 import app.server.api as _api2
+
                 _api2._startup_state["phase"] = "error"
                 _api2._startup_state["detail"] = err_msg
             except Exception:
@@ -241,6 +253,7 @@ class AppDelegate(NSObject):
         """Stop browser proxy and sync UI state."""
         try:
             from app.server.api import get_browser_proxy_service
+
             svc = get_browser_proxy_service()
             if svc.is_running:
                 svc.stop()
@@ -267,6 +280,7 @@ class AppDelegate(NSObject):
         while not self._shutting_down:
             try:
                 from app.server.api import get_browser_proxy_service
+
                 svc = get_browser_proxy_service()
                 current_state = svc.is_running
                 if current_state != last_state:
@@ -286,6 +300,7 @@ class AppDelegate(NSObject):
         """Called by watchdog to restart the proxy. Returns True on success."""
         try:
             from app.server.api import get_browser_proxy_service
+
             svc = get_browser_proxy_service()
             if svc.is_running:
                 svc.stop()

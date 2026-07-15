@@ -11,9 +11,9 @@ import sys
 import threading
 import time
 import webbrowser
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -32,7 +32,7 @@ class BenchmarkState:
 
     running: bool = False
     progress: str = ""
-    last_run: Optional[str] = None
+    last_run: str | None = None
     report_exists: bool = False
 
     @property
@@ -54,7 +54,7 @@ class BenchmarkService:
             time.sleep(1)
     """
 
-    def __init__(self, on_complete: Optional[Callable[[], None]] = None) -> None:
+    def __init__(self, on_complete: Callable[[], None] | None = None) -> None:
         """Initialize the benchmark service.
 
         Args:

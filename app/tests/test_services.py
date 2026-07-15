@@ -8,17 +8,13 @@ Tests cover:
 
 from __future__ import annotations
 
-import subprocess
-import time
-import threading
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
 from app.config.schema import AppConfig
-from app.services.proxy import ProxyService, ProxyState
 from app.services.benchmark import BenchmarkService
-
+from app.services.proxy import ProxyService, ProxyState
 
 # --- Proxy Service Tests ---------------------------------------------
 
@@ -231,8 +227,10 @@ class TestBenchmarkService:
 
     def test_run_handles_subprocess_error(self):
         svc = BenchmarkService()
-        with patch("pathlib.Path.exists", return_value=True), \
-             patch("subprocess.Popen", side_effect=OSError("exec failed")):
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("subprocess.Popen", side_effect=OSError("exec failed")),
+        ):
             svc._state.running = True
             svc._run()
 

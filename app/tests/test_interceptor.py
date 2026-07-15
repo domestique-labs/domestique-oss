@@ -13,27 +13,26 @@ from __future__ import annotations
 import os
 import sys
 import types
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services.interceptor import (
+    INTERCEPTED_DOMAINS,
+    add_custom_domain,
+    disable_system_proxy,
+    enable_system_proxy,
     generate_ca,
     generate_pac_file,
     get_intercepted_domains,
-    add_custom_domain,
-    enable_system_proxy,
-    disable_system_proxy,
-    INTERCEPTED_DOMAINS,
 )
 from app.services.mitm_addon import (
-    _extract_openai_content,
     _extract_anthropic_content,
-    _extract_google_content,
     _extract_generic_content,
+    _extract_google_content,
+    _extract_openai_content,
 )
 from app.services.proxy import BrowserProxyService
-
 
 # --- CA Generation Tests ---------------------------------------------
 
@@ -44,9 +43,11 @@ class TestCAGeneration:
     def test_generate_ca_creates_files(self, tmp_path):
         key_path = tmp_path / "ca.key"
         cert_path = tmp_path / "ca.pem"
-        with patch("app.services.interceptor.CA_DIR", tmp_path), \
-             patch("app.services.interceptor.CA_KEY_PATH", key_path), \
-             patch("app.services.interceptor.CA_CERT_PATH", cert_path):
+        with (
+            patch("app.services.interceptor.CA_DIR", tmp_path),
+            patch("app.services.interceptor.CA_KEY_PATH", key_path),
+            patch("app.services.interceptor.CA_CERT_PATH", cert_path),
+        ):
             result_cert, result_key = generate_ca()
             assert result_cert.exists()
             assert result_key.exists()
@@ -61,9 +62,11 @@ class TestCAGeneration:
         key_path.write_text("existing key")
         cert_path.write_text("existing cert")
 
-        with patch("app.services.interceptor.CA_DIR", tmp_path), \
-             patch("app.services.interceptor.CA_KEY_PATH", key_path), \
-             patch("app.services.interceptor.CA_CERT_PATH", cert_path):
+        with (
+            patch("app.services.interceptor.CA_DIR", tmp_path),
+            patch("app.services.interceptor.CA_KEY_PATH", key_path),
+            patch("app.services.interceptor.CA_CERT_PATH", cert_path),
+        ):
             result_cert, result_key = generate_ca()
             # Should return existing paths without regenerating
             assert result_cert.read_text() == "existing cert"
@@ -155,10 +158,13 @@ class TestContentExtraction:
     def test_openai_multimodal(self):
         body = {
             "messages": [
-                {"role": "user", "content": [
-                    {"type": "text", "text": "What's in this image?"},
-                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
-                ]},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What's in this image?"},
+                        {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}},
+                    ],
+                },
             ],
         }
         result = _extract_openai_content(body)
@@ -182,9 +188,12 @@ class TestContentExtraction:
     def test_anthropic_block_format(self):
         body = {
             "messages": [
-                {"role": "user", "content": [
-                    {"type": "text", "text": "Here's my API key: sk-abc123"},
-                ]},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Here's my API key: sk-abc123"},
+                    ],
+                },
             ],
         }
         result = _extract_anthropic_content(body)
@@ -234,11 +243,13 @@ class TestBrowserProxyService:
 
     def test_setup_generates_ca(self, tmp_path):
         svc = BrowserProxyService()
-        with patch("app.services.interceptor.CA_DIR", tmp_path), \
-             patch("app.services.interceptor.CA_KEY_PATH", tmp_path / "ca.key"), \
-             patch("app.services.interceptor.CA_CERT_PATH", tmp_path / "ca.pem"), \
-             patch("app.services.interceptor.PAC_PATH", tmp_path / "proxy.pac"), \
-             patch("app.services.interceptor.is_ca_installed", return_value=True):
+        with (
+            patch("app.services.interceptor.CA_DIR", tmp_path),
+            patch("app.services.interceptor.CA_KEY_PATH", tmp_path / "ca.key"),
+            patch("app.services.interceptor.CA_CERT_PATH", tmp_path / "ca.pem"),
+            patch("app.services.interceptor.PAC_PATH", tmp_path / "proxy.pac"),
+            patch("app.services.interceptor.is_ca_installed", return_value=True),
+        ):
             results = svc.setup()
             assert results["ca_generated"] is True
             assert results["pac_generated"] is True
@@ -358,9 +369,7 @@ class TestWindowsSystemProxyPACOnly:
         assert store["ProxyEnable"]["value"] == 1
         assert "ProxyServer" not in store
 
-    def test_disable_with_no_prior_settings_clears_autoconfigurl(
-        self, tmp_path, monkeypatch
-    ):
+    def test_disable_with_no_prior_settings_clears_autoconfigurl(self, tmp_path, monkeypatch):
         store = _install_fake_winreg(monkeypatch)
         self._patch_platform(monkeypatch, tmp_path)
 
@@ -374,9 +383,7 @@ class TestWindowsSystemProxyPACOnly:
         assert "ProxyEnable" not in store
         assert "ProxyServer" not in store
 
-    def test_enable_clears_stale_blanket_proxy_from_prior_install(
-        self, tmp_path, monkeypatch
-    ):
+    def test_enable_clears_stale_blanket_proxy_from_prior_install(self, tmp_path, monkeypatch):
         """Regression test for the merge-blocking bug: a machine that already
         has a blanket proxy configured (e.g. left over from a pre-PAC-only
         LLMGuard install, especially one whose process was killed before its
@@ -404,9 +411,7 @@ class TestWindowsSystemProxyPACOnly:
         assert "ProxyServer" not in store
         assert "ProxyOverride" not in store
 
-    def test_enable_clears_stale_blanket_is_noop_on_fresh_install(
-        self, tmp_path, monkeypatch
-    ):
+    def test_enable_clears_stale_blanket_is_noop_on_fresh_install(self, tmp_path, monkeypatch):
         """Fresh install (ProxyServer/ProxyOverride never set) must not
         error and must not introduce them - the delete is a pure no-op."""
         store = _install_fake_winreg(monkeypatch)
@@ -429,9 +434,7 @@ class TestMacOSSystemProxyPACOnly:
             "app.services.interceptor._get_all_active_interfaces", lambda: ["Wi-Fi"]
         )
 
-    def test_enable_sets_autoproxy_only_no_blanket_webproxy(
-        self, tmp_path, monkeypatch
-    ):
+    def test_enable_sets_autoproxy_only_no_blanket_webproxy(self, tmp_path, monkeypatch):
         self._patch_platform(monkeypatch)
         monkeypatch.setattr("app.services.interceptor.PAC_PATH", tmp_path / "proxy.pac")
 
@@ -442,9 +445,7 @@ class TestMacOSSystemProxyPACOnly:
             result = MagicMock()
             result.returncode = 0
             if "-getautoproxyurl" in cmd:
-                result.stdout = (
-                    "URL: http://127.0.0.1:9876/proxy.pac\nEnabled: Yes\n"
-                )
+                result.stdout = "URL: http://127.0.0.1:9876/proxy.pac\nEnabled: Yes\n"
             else:
                 result.stdout = ""
             return result
@@ -487,9 +488,7 @@ class TestMacOSSystemProxyPACOnly:
         joined = [" ".join(c) for c in calls]
         assert any("-setautoproxystate" in c and " off" in c for c in joined)
 
-    def test_enable_clears_stale_blanket_webproxy_from_prior_install(
-        self, monkeypatch
-    ):
+    def test_enable_clears_stale_blanket_webproxy_from_prior_install(self, monkeypatch):
         """Regression test for the merge-blocking bug: a machine that already
         has a blanket web proxy configured (e.g. left over from a pre-PAC-only
         LLMGuard install, especially one whose process was killed before its
@@ -507,9 +506,7 @@ class TestMacOSSystemProxyPACOnly:
             result = MagicMock()
             result.returncode = 0
             if "-getautoproxyurl" in cmd:
-                result.stdout = (
-                    "URL: http://127.0.0.1:9876/proxy.pac\nEnabled: Yes\n"
-                )
+                result.stdout = "URL: http://127.0.0.1:9876/proxy.pac\nEnabled: Yes\n"
             else:
                 result.stdout = ""
             return result

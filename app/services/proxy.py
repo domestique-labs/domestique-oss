@@ -16,7 +16,6 @@ import sys
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from app.config.schema import AppConfig
 from app.config.store import APP_DATA_DIR
@@ -45,7 +44,7 @@ if not (PROJECT_ROOT / ".venv").exists():
 class ProxyState:
     """Current state of the firewall proxy process."""
 
-    pid: Optional[int] = None
+    pid: int | None = None
     port: int = 8000
     running: bool = False
 
@@ -64,7 +63,7 @@ class ProxyService:
     """
 
     def __init__(self) -> None:
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
         self._log_file = None
 
     @property
@@ -75,7 +74,7 @@ class ProxyService:
         return self._process.poll() is None
 
     @property
-    def pid(self) -> Optional[int]:
+    def pid(self) -> int | None:
         """PID of the running proxy process, or None."""
         if self.is_running:
             return self._process.pid
@@ -99,11 +98,15 @@ class ProxyService:
 
         self._process = subprocess.Popen(
             [
-                sys.executable, "-m", "uvicorn",
+                sys.executable,
+                "-m",
+                "uvicorn",
                 "llmguard.app:create_app",
                 "--factory",
-                "--host", "0.0.0.0",
-                "--port", str(config.proxy_port),
+                "--host",
+                "0.0.0.0",
+                "--port",
+                str(config.proxy_port),
             ],
             cwd=str(PROJECT_ROOT),
             env=env,
@@ -157,6 +160,7 @@ class ProxyService:
         # Select the LLM model based on priority
         if stack.gemma4_e2b:
             from llmguard.detectors.local_llm import _resolve_gemma_model
+
             env["LLMGUARD_LOCAL_LLM_MODEL"] = _resolve_gemma_model()
         elif stack.qwen3_1_7b:
             env["LLMGUARD_LOCAL_LLM_MODEL"] = "qwen3:1.7b"
@@ -205,9 +209,7 @@ def _refresh_mitm_confdir(ca_cert_path: Path, ca_key_path: Path, confdir: Path) 
 
     source_mtime = ca_cert_path.stat().st_mtime
     stale = (
-        not mitm_cert.exists()
-        or not mitm_key.exists()
-        or mitm_cert.stat().st_mtime < source_mtime
+        not mitm_cert.exists() or not mitm_key.exists() or mitm_cert.stat().st_mtime < source_mtime
     )
     if not stale:
         return False
@@ -242,7 +244,7 @@ class BrowserProxyService:
     PROXY_PORT = 8080
 
     def __init__(self) -> None:
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
         self._setup_complete = False
 
     @property
@@ -256,6 +258,7 @@ class BrowserProxyService:
     def is_setup(self) -> bool:
         """Check if CA cert is generated and installed."""
         from app.services.interceptor import CA_CERT_PATH, is_ca_installed
+
         return CA_CERT_PATH.exists() and is_ca_installed()
 
     def setup(self) -> dict:
@@ -266,8 +269,8 @@ class BrowserProxyService:
         """
         from app.services.interceptor import (
             generate_ca,
-            install_ca_to_keychain,
             generate_pac_file,
+            install_ca_to_keychain,
             is_ca_installed,
         )
 
@@ -305,7 +308,10 @@ class BrowserProxyService:
             raise RuntimeError("Browser proxy is already running")
 
         from app.services.interceptor import (
-            CA_DIR, CA_CERT_PATH, CA_KEY_PATH, enable_system_proxy,
+            CA_CERT_PATH,
+            CA_DIR,
+            CA_KEY_PATH,
+            enable_system_proxy,
         )
 
         if not CA_CERT_PATH.exists():
@@ -329,6 +335,7 @@ class BrowserProxyService:
         # PATH contamination on macOS), then PATH, then alongside the running
         # interpreter (covers Windows ``Scripts\mitmdump.exe`` layouts).
         import shutil
+
         venv_candidates = [
             PROJECT_ROOT / ".venv" / "bin" / "mitmdump",
             PROJECT_ROOT / ".venv" / "Scripts" / "mitmdump.exe",
@@ -377,10 +384,14 @@ class BrowserProxyService:
                 if key in os.environ:
                     env[key] = os.environ[key]
             cmd = [
-                venv_python, str(mitmdump_bin),
-                "--listen-port", str(self.PROXY_PORT),
-                "--set", f"confdir={mitmproxy_confdir}",
-                "-s", str(addon_path),
+                venv_python,
+                str(mitmdump_bin),
+                "--listen-port",
+                str(self.PROXY_PORT),
+                "--set",
+                f"confdir={mitmproxy_confdir}",
+                "-s",
+                str(addon_path),
                 "--quiet",
             ]
         else:
@@ -388,9 +399,12 @@ class BrowserProxyService:
             env["PYTHONPATH"] = str(PROJECT_ROOT)
             cmd = [
                 str(mitmdump_bin),
-                "--listen-port", str(self.PROXY_PORT),
-                "--set", f"confdir={mitmproxy_confdir}",
-                "-s", str(addon_path),
+                "--listen-port",
+                str(self.PROXY_PORT),
+                "--set",
+                f"confdir={mitmproxy_confdir}",
+                "-s",
+                str(addon_path),
                 "--quiet",
             ]
 
@@ -410,6 +424,7 @@ class BrowserProxyService:
         # machine. Poll generously (up to ~30s) and only fail if mitmdump
         # actually dies; a slow-but-alive process must not be killed prematurely.
         import time
+
         readiness_timeout_s = 30
         attempts = readiness_timeout_s * 5  # 0.2s per attempt
         hinted = False
@@ -420,8 +435,8 @@ class BrowserProxyService:
                 log_path = APP_DATA_DIR / "browser_proxy.log"
                 err = ""
                 try:
-                    err = log_path.read_text().split('\n')[-3:]
-                    err = '\n'.join(err)
+                    err = log_path.read_text().split("\n")[-3:]
+                    err = "\n".join(err)
                 except Exception:
                     pass
                 self._process = None
@@ -441,15 +456,14 @@ class BrowserProxyService:
             if proc is not None:
                 proc.terminate()
             self._process = None
-            raise RuntimeError(
-                f"mitmdump started but not listening after {readiness_timeout_s}s"
-            )
+            raise RuntimeError(f"mitmdump started but not listening after {readiness_timeout_s}s")
 
         # Enable system proxy to route LLM traffic through us
         enable_system_proxy(port=self.PROXY_PORT)
 
         # Verify interception in background (don't block the API response)
         import threading
+
         threading.Thread(target=self._verify_interception, daemon=True).start()
 
     def _verify_interception(self) -> None:
@@ -458,15 +472,19 @@ class BrowserProxyService:
         Sends a test request through the proxy to confirm it's working.
         Logs a warning if verification fails but doesn't raise.
         """
-        import urllib.request
         import logging
+        import urllib.request
+
         logger = logging.getLogger(__name__)
 
         try:
-            proxy_handler = urllib.request.ProxyHandler({
-                "https": f"http://127.0.0.1:{self.PROXY_PORT}",
-            })
+            proxy_handler = urllib.request.ProxyHandler(
+                {
+                    "https": f"http://127.0.0.1:{self.PROXY_PORT}",
+                }
+            )
             import ssl
+
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
@@ -489,6 +507,7 @@ class BrowserProxyService:
     def _clear_port(self) -> None:
         """Kill any stale process occupying our proxy port."""
         import time
+
         if not is_port_listening(self.PROXY_PORT):
             return
         if is_windows():
@@ -504,10 +523,11 @@ class BrowserProxyService:
         try:
             result = subprocess.run(
                 ["lsof", "-ti", f":{self.PROXY_PORT}", "-sTCP:LISTEN"],
-                capture_output=True, text=True,
+                capture_output=True,
+                text=True,
             )
             if result.returncode == 0 and result.stdout.strip():
-                for pid_str in result.stdout.strip().split('\n'):
+                for pid_str in result.stdout.strip().split("\n"):
                     pid = int(pid_str.strip())
                     os.kill(pid, signal.SIGTERM)
                 time.sleep(1)
@@ -591,4 +611,3 @@ class BrowserProxyService:
                 self._process.kill()
                 self._process.wait(timeout=2)
             self._process = None
-

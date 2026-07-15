@@ -32,12 +32,11 @@ Usage:
 
 from __future__ import annotations
 
-import time
 import threading
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class RiskLevel(str, Enum):
@@ -106,14 +105,14 @@ class UserProfile:
         self._lock = threading.Lock()
         self._total_requests = 0
         self._total_blocked = 0
-        self._first_seen: Optional[float] = None
+        self._first_seen: float | None = None
 
     def record_request(
         self,
         destination: str,
         content_length: int,
         was_blocked: bool = False,
-        categories: Optional[list[str]] = None,
+        categories: list[str] | None = None,
     ) -> None:
         """Record a new request event.
 
@@ -138,7 +137,7 @@ class UserProfile:
             if was_blocked:
                 self._total_blocked += 1
 
-    def get_recent(self, seconds: Optional[float] = None) -> list[RequestRecord]:
+    def get_recent(self, seconds: float | None = None) -> list[RequestRecord]:
         """Get records within the specified time window.
 
         Args:
@@ -233,46 +232,54 @@ class AnomalyDetector:
         # Check request rate
         rpm = profile.request_rate
         if rpm > self._max_rpm:
-            anomalies.append(Anomaly(
-                signal="high_request_rate",
-                description=f"Request rate ({rpm:.0f}/min) exceeds threshold ({self._max_rpm:.0f}/min)",
-                severity=min(1.0, rpm / (self._max_rpm * 2)),
-                current_value=rpm,
-                baseline_value=self._max_rpm,
-            ))
+            anomalies.append(
+                Anomaly(
+                    signal="high_request_rate",
+                    description=f"Request rate ({rpm:.0f}/min) exceeds threshold ({self._max_rpm:.0f}/min)",
+                    severity=min(1.0, rpm / (self._max_rpm * 2)),
+                    current_value=rpm,
+                    baseline_value=self._max_rpm,
+                )
+            )
 
         # Check block rate
         block_rate = profile.block_rate
         if block_rate > self._max_block_rate:
-            anomalies.append(Anomaly(
-                signal="high_block_rate",
-                description=f"Block rate ({block_rate:.1%}) exceeds threshold ({self._max_block_rate:.1%})",
-                severity=min(1.0, block_rate / self._max_block_rate),
-                current_value=block_rate,
-                baseline_value=self._max_block_rate,
-            ))
+            anomalies.append(
+                Anomaly(
+                    signal="high_block_rate",
+                    description=f"Block rate ({block_rate:.1%}) exceeds threshold ({self._max_block_rate:.1%})",
+                    severity=min(1.0, block_rate / self._max_block_rate),
+                    current_value=block_rate,
+                    baseline_value=self._max_block_rate,
+                )
+            )
 
         # Check total volume
         volume = profile.total_volume
         if volume > self._max_volume:
-            anomalies.append(Anomaly(
-                signal="high_volume",
-                description=f"Data volume ({volume:,} bytes) exceeds threshold ({self._max_volume:,})",
-                severity=min(1.0, volume / (self._max_volume * 2)),
-                current_value=volume,
-                baseline_value=self._max_volume,
-            ))
+            anomalies.append(
+                Anomaly(
+                    signal="high_volume",
+                    description=f"Data volume ({volume:,} bytes) exceeds threshold ({self._max_volume:,})",
+                    severity=min(1.0, volume / (self._max_volume * 2)),
+                    current_value=volume,
+                    baseline_value=self._max_volume,
+                )
+            )
 
         # Check average content size
         avg = profile.avg_content_length
         if avg > self._max_content:
-            anomalies.append(Anomaly(
-                signal="large_payloads",
-                description=f"Average payload ({avg:.0f} bytes) exceeds threshold ({self._max_content:.0f})",
-                severity=min(1.0, avg / (self._max_content * 2)),
-                current_value=avg,
-                baseline_value=self._max_content,
-            ))
+            anomalies.append(
+                Anomaly(
+                    signal="large_payloads",
+                    description=f"Average payload ({avg:.0f} bytes) exceeds threshold ({self._max_content:.0f})",
+                    severity=min(1.0, avg / (self._max_content * 2)),
+                    current_value=avg,
+                    baseline_value=self._max_content,
+                )
+            )
 
         return anomalies
 
@@ -294,7 +301,7 @@ class RiskScorer:
         "anomaly_count": 0.2,
     }
 
-    def __init__(self, detector: Optional[AnomalyDetector] = None) -> None:
+    def __init__(self, detector: AnomalyDetector | None = None) -> None:
         self._detector = detector or AnomalyDetector()
 
     def score(self, profile: UserProfile) -> RiskScore:

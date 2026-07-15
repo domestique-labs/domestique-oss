@@ -1,8 +1,10 @@
 """Tests for multi-turn context awareness."""
 
 import time
+
 import pytest
-from app.services.context import SessionTracker, ContextAnalyzer, Message
+
+from app.services.context import ContextAnalyzer, Message, SessionTracker
 
 
 @pytest.fixture

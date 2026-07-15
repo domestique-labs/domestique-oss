@@ -31,16 +31,15 @@ import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class RedactionAction(Enum):
     """What to do when sensitive data is detected."""
 
-    BLOCK = "block"       # Reject the entire request
-    REDACT = "redact"     # Replace with token and forward
-    ALLOW = "allow"       # Let it through (log only)
-    MASK = "mask"         # Replace with asterisks (irreversible)
+    BLOCK = "block"  # Reject the entire request
+    REDACT = "redact"  # Replace with token and forward
+    ALLOW = "allow"  # Let it through (log only)
+    MASK = "mask"  # Replace with asterisks (irreversible)
 
 
 @dataclass
@@ -90,7 +89,7 @@ class TokenStore:
     always maps to the same token (enables consistent conversation).
     """
 
-    def __init__(self, session_id: Optional[str] = None, ttl: float = 3600.0) -> None:
+    def __init__(self, session_id: str | None = None, ttl: float = 3600.0) -> None:
         """Initialize a token store.
 
         Args:
@@ -174,7 +173,8 @@ class TokenStore:
         removed = 0
         with self._lock:
             expired_tokens = [
-                token for token, mapping in self._reverse.items()
+                token
+                for token, mapping in self._reverse.items()
                 if now - mapping.created_at > self._ttl
             ]
             for token in expired_tokens:
@@ -209,26 +209,27 @@ class RedactionEngine:
         ("phone", r"\b(?:\+1[-.]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
         ("API_key", r"\b(?:sk-|pk_live_|sk_live_)[a-zA-Z0-9_-]{20,}\b"),
         ("AWS_key", r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
-        ("private_key", r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----"),
+        (
+            "private_key",
+            r"-----BEGIN (?:RSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA )?PRIVATE KEY-----",
+        ),
     ]
 
     def __init__(
         self,
-        rules: Optional[list[RedactionRule]] = None,
-        token_store: Optional[TokenStore] = None,
+        rules: list[RedactionRule] | None = None,
+        token_store: TokenStore | None = None,
     ) -> None:
         self._rules = {r.category: r for r in (rules or DEFAULT_RULES)}
         self._token_store = token_store or TokenStore()
-        self._compiled_patterns = [
-            (cat, re.compile(pattern)) for cat, pattern in self.PATTERNS
-        ]
+        self._compiled_patterns = [(cat, re.compile(pattern)) for cat, pattern in self.PATTERNS]
 
     @property
     def token_store(self) -> TokenStore:
         """Access the underlying token store."""
         return self._token_store
 
-    def redact(self, text: str) -> "RedactionResult":
+    def redact(self, text: str) -> RedactionResult:
         """Scan text and apply redaction rules.
 
         Returns a RedactionResult with the processed text and metadata.
@@ -262,13 +263,15 @@ class RedactionEngine:
             elif action == RedactionAction.REDACT and overall_action != RedactionAction.BLOCK:
                 overall_action = RedactionAction.REDACT
 
-            finding_details.append(RedactionFinding(
-                category=category,
-                value=value,
-                start=start,
-                end=end,
-                action=action,
-            ))
+            finding_details.append(
+                RedactionFinding(
+                    category=category,
+                    value=value,
+                    start=start,
+                    end=end,
+                    action=action,
+                )
+            )
 
         # If blocking, return immediately (no redaction needed)
         if overall_action == RedactionAction.BLOCK:
@@ -289,11 +292,9 @@ class RedactionEngine:
                 if finding.action == RedactionAction.MASK:
                     replacement = "*" * len(finding.value)
                 else:
-                    replacement = self._token_store.tokenize(
-                        finding.value, finding.category
-                    )
+                    replacement = self._token_store.tokenize(finding.value, finding.category)
                     token_count += 1
-                redacted = redacted[:finding.start] + replacement + redacted[finding.end:]
+                redacted = redacted[: finding.start] + replacement + redacted[finding.end :]
 
         return RedactionResult(
             original_text=text,
@@ -307,7 +308,7 @@ class RedactionEngine:
         """Replace tokens in LLM response with original values."""
         return self._token_store.detokenize(text)
 
-    def get_rule(self, category: str) -> Optional[RedactionRule]:
+    def get_rule(self, category: str) -> RedactionRule | None:
         """Get the redaction rule for a category."""
         return self._rules.get(category)
 

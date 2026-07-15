@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.services.redaction import (
-    RedactionEngine,
     RedactionAction,
+    RedactionEngine,
     RedactionRule,
     TokenStore,
-    DEFAULT_RULES,
 )
 
 
@@ -82,6 +79,7 @@ class TestTokenStore:
         store = TokenStore(ttl=0.0)  # Expire immediately
         store.tokenize("123-45-6789", "SSN")
         import time
+
         time.sleep(0.01)
         removed = store.cleanup_expired()
         assert removed == 1

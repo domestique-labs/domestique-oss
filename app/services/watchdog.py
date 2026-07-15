@@ -23,9 +23,9 @@ import logging
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
 
 from app.services.runtime import is_macos, is_port_listening, is_windows
 
@@ -70,8 +70,8 @@ class Watchdog:
     def __init__(
         self,
         restart_proxy: Callable[[], bool],
-        on_state_change: Optional[Callable[[ProtectionState], None]] = None,
-        config: Optional[WatchdogConfig] = None,
+        on_state_change: Callable[[ProtectionState], None] | None = None,
+        config: WatchdogConfig | None = None,
     ) -> None:
         """Initialize the watchdog.
 
@@ -85,7 +85,7 @@ class Watchdog:
         self._config = config or WatchdogConfig()
         self._state = ProtectionState.STOPPED
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._restart_count = 0
         self._last_restart_time = 0.0
         self._known_interfaces: set[str] = set()
@@ -157,6 +157,7 @@ class Watchdog:
         """Check if the PAC server is responding correctly."""
         try:
             import urllib.request
+
             # Use a no-proxy handler to avoid routing through our own proxy
             no_proxy = urllib.request.ProxyHandler({})
             opener = urllib.request.build_opener(no_proxy)
@@ -189,7 +190,7 @@ class Watchdog:
 
             # Exponential backoff
             backoff = min(
-                self._config.BACKOFF_BASE ** self._restart_count,
+                self._config.BACKOFF_BASE**self._restart_count,
                 self._config.BACKOFF_MAX,
             )
             elapsed = time.time() - self._last_restart_time
@@ -200,8 +201,7 @@ class Watchdog:
             self._last_restart_time = time.time()
 
         logger.info(
-            f"Attempting proxy restart ({self._restart_count}/"
-            f"{self._config.MAX_RESTART_ATTEMPTS})"
+            f"Attempting proxy restart ({self._restart_count}/{self._config.MAX_RESTART_ATTEMPTS})"
         )
         self._set_state(ProtectionState.DEGRADED)
 
@@ -239,11 +239,13 @@ class Watchdog:
     def _get_active_interfaces(self) -> list[str]:
         """Get list of active network interfaces."""
         from app.services.interceptor import _get_all_active_interfaces
+
         return _get_all_active_interfaces()
 
     def _reapply_pac(self) -> None:
         """Re-apply PAC settings to all current interfaces."""
         from app.services.interceptor import enable_system_proxy
+
         try:
             enable_system_proxy(port=self._config.PROXY_PORT)
             logger.info("PAC re-applied to all active interfaces")
@@ -297,9 +299,7 @@ class Watchdog:
                 for line in result.stdout.strip().split("\n"):
                     line = line.strip()
                     if line and not line.endswith("."):
-                        rules.append(
-                            f"block drop out proto tcp from any to {line} port 443"
-                        )
+                        rules.append(f"block drop out proto tcp from any to {line} port 443")
             except Exception:
                 pass
 
@@ -351,9 +351,7 @@ def _verify_system_proxy_config() -> str:
             import winreg
 
             key_path = r"Software\Microsoft\Windows\CurrentVersion\Internet Settings"
-            with winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ
-            ) as key:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_READ) as key:
                 try:
                     configured_url, _ = winreg.QueryValueEx(key, "AutoConfigURL")
                 except FileNotFoundError:
@@ -390,6 +388,7 @@ def verify_interception_chain(proxy_port: int = 8080) -> dict:
     # 1. PAC server
     try:
         import urllib.request
+
         req = urllib.request.Request("http://127.0.0.1:9876/proxy.pac")
         resp = urllib.request.urlopen(req, timeout=3)
         pac_content = resp.read().decode()
@@ -405,14 +404,21 @@ def verify_interception_chain(proxy_port: int = 8080) -> dict:
 
     # 4. Actual interception test (via explicit proxy to verify addon works)
     try:
-        import urllib.request
         import ssl
-        ca_path = Path.home() / ".llmguard" / "ca" / "llmguard-ca.pem"
-        ctx = ssl.create_default_context(cafile=str(ca_path)) if ca_path.exists() else ssl.create_default_context()
+        import urllib.request
 
-        proxy_handler = urllib.request.ProxyHandler({
-            "https": f"http://127.0.0.1:{proxy_port}",
-        })
+        ca_path = Path.home() / ".llmguard" / "ca" / "llmguard-ca.pem"
+        ctx = (
+            ssl.create_default_context(cafile=str(ca_path))
+            if ca_path.exists()
+            else ssl.create_default_context()
+        )
+
+        proxy_handler = urllib.request.ProxyHandler(
+            {
+                "https": f"http://127.0.0.1:{proxy_port}",
+            }
+        )
         opener = urllib.request.build_opener(
             proxy_handler,
             urllib.request.HTTPSHandler(context=ctx),
@@ -434,8 +440,6 @@ def verify_interception_chain(proxy_port: int = 8080) -> dict:
     except Exception as e:
         results["proxy_forwarding"] = f"fail: {e}"
 
-    results["overall"] = "ok" if all(
-        v == "ok" for v in results.values()
-    ) else "degraded"
+    results["overall"] = "ok" if all(v == "ok" for v in results.values()) else "degraded"
 
     return results

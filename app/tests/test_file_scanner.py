@@ -2,30 +2,22 @@
 
 from __future__ import annotations
 
-import csv
 import io
-import json
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
-import pytest
 from PIL import Image, ImageDraw
 
 from app.services.file_scanner import (
     FileType,
-    ScanResult,
-    ExtractionResult,
+    _default_detector,
     detect_file_type,
     extract_text,
-    extract_text_from_image,
     extract_text_from_code,
-    extract_text_from_text,
+    extract_text_from_image,
     extract_text_from_spreadsheet,
-    scan_file,
     scan_base64,
-    _default_detector,
+    scan_file,
 )
-
 
 # ---------------------------------------------------------------------------
 # File type detection
@@ -180,8 +172,7 @@ class TestDefaultDetector:
         detections = _default_detector("The weather is nice today. Let's go for a walk.")
         # Should not have high-confidence detections
         # (phone regex might match some numbers, but no SSN/email/api_key)
-        high_confidence = [d for d in detections
-                          if d["category"] in ("email", "SSN", "api_key")]
+        high_confidence = [d for d in detections if d["category"] in ("email", "SSN", "api_key")]
         assert len(high_confidence) == 0
 
 
@@ -226,6 +217,7 @@ class TestScanFile:
 class TestScanBase64:
     def test_scan_base64_text(self):
         import base64
+
         content = b"My SSN is 111-22-3333"
         encoded = base64.b64encode(content).decode()
         result = scan_base64(encoded, filename="note.txt")
@@ -234,6 +226,7 @@ class TestScanBase64:
 
     def test_scan_base64_with_data_uri(self):
         import base64
+
         content = b"email: test@corp.com"
         encoded = "data:text/plain;base64," + base64.b64encode(content).decode()
         result = scan_base64(encoded, filename="data.txt")

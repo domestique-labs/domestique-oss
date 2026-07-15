@@ -6,7 +6,7 @@ This serves as the single source of truth for what the app can be configured to 
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from typing import Literal
 
 
@@ -32,7 +32,6 @@ class DetectionStackConfig:
     legacy_cpu: bool = False
     """Tier 3: Llama 3.2 1B via Ollama. CPU-only fallback, ~2GB RAM. Used by the
     installer's 'legacy-cpu' preset for machines with no usable GPU."""
-
 
 
 @dataclass
@@ -131,34 +130,53 @@ class AppConfig:
     disabled_builtin_patterns: list = field(default_factory=list)
     """Names of built-in regex patterns to disable (e.g. ["phone_number", "email_address"])."""
 
-    gliner_labels: list = field(default_factory=lambda: [
-        "person", "email", "phone_number", "address", "date_of_birth",
-        "social_security_number", "credit_card", "password", "ip_address",
-    ])
+    gliner_labels: list = field(
+        default_factory=lambda: [
+            "person",
+            "email",
+            "phone_number",
+            "address",
+            "date_of_birth",
+            "social_security_number",
+            "credit_card",
+            "password",
+            "ip_address",
+        ]
+    )
     """Entity labels GLiNER will detect. Remove labels to reduce false positives."""
 
     gliner_threshold: float = 0.5
     """Minimum GLiNER confidence score (0.0-1.0). Higher = fewer false positives."""
 
-    monitored_domains: list = field(default_factory=lambda: [
-        "chatgpt.com", "chat.openai.com", "api.openai.com",
-        "claude.ai", "api.anthropic.com",
-        "gemini.google.com", "generativelanguage.googleapis.com",
-        "copilot.microsoft.com", "github.com/copilot",
-        "grok.x.ai", "api.x.ai",
-    ])
+    monitored_domains: list = field(
+        default_factory=lambda: [
+            "chatgpt.com",
+            "chat.openai.com",
+            "api.openai.com",
+            "claude.ai",
+            "api.anthropic.com",
+            "gemini.google.com",
+            "generativelanguage.googleapis.com",
+            "copilot.microsoft.com",
+            "github.com/copilot",
+            "grok.x.ai",
+            "api.x.ai",
+        ]
+    )
     """LLM domains routed through the interception proxy via PAC file."""
 
     allowed_domains: list = field(default_factory=list)
     """Domains explicitly excluded from interception (bypass list)."""
 
-    policy_rules: list = field(default_factory=lambda: [
-        {"category": "CREDENTIALS", "action": "block", "min_confidence": 0.8},
-        {"category": "CUSTOMER_DATA", "action": "block", "min_confidence": 0.7},
-        {"category": "PROPRIETARY_CODE", "action": "approve", "min_confidence": 0.6},
-        {"category": "INTERNAL_COMMS", "action": "log", "min_confidence": 0.5},
-        {"category": "BUSINESS_STRATEGY", "action": "block", "min_confidence": 0.9},
-    ])
+    policy_rules: list = field(
+        default_factory=lambda: [
+            {"category": "CREDENTIALS", "action": "block", "min_confidence": 0.8},
+            {"category": "CUSTOMER_DATA", "action": "block", "min_confidence": 0.7},
+            {"category": "PROPRIETARY_CODE", "action": "approve", "min_confidence": 0.6},
+            {"category": "INTERNAL_COMMS", "action": "log", "min_confidence": 0.5},
+            {"category": "BUSINESS_STRATEGY", "action": "block", "min_confidence": 0.9},
+        ]
+    )
     """Per-category policy rules determining action when sensitive content is detected.
     
     Each entry: {"category": str, "action": "block"|"approve"|"log", "min_confidence": float}
@@ -181,15 +199,19 @@ class AppConfig:
         """Deserialize from a dictionary, with graceful handling of missing fields."""
         stack_data = data.pop("detection_stack", {})
         if isinstance(stack_data, dict):
-            stack = DetectionStackConfig(**{
-                k: v for k, v in stack_data.items()
-                if k in DetectionStackConfig.__dataclass_fields__
-            })
+            stack = DetectionStackConfig(
+                **{
+                    k: v
+                    for k, v in stack_data.items()
+                    if k in DetectionStackConfig.__dataclass_fields__
+                }
+            )
         else:
             stack = DetectionStackConfig()
 
         valid_fields = {
-            k: v for k, v in data.items()
+            k: v
+            for k, v in data.items()
             if k in cls.__dataclass_fields__ and k != "detection_stack"
         }
 

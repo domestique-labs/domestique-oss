@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import json
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -29,8 +29,10 @@ from app.server.api import APIHandler, start_api_server
 def reset_state(tmp_path):
     """Reset all state before each test."""
     ConfigStore.reset()
-    with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-         patch("app.config.store.APP_DATA_DIR", tmp_path):
+    with (
+        patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+        patch("app.config.store.APP_DATA_DIR", tmp_path),
+    ):
         ConfigStore.load()
         yield
 
@@ -73,15 +75,19 @@ class TestAPIEndpoints:
         assert data["proxy_running"] is False
 
     def test_get_config(self, api_server, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.save(AppConfig(proxy_port=7777))
             data = self._get(api_server, "/api/config")
             assert data["proxy_port"] == 7777
 
     def test_post_config(self, api_server, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             status, data = self._post(api_server, "/api/config", {"proxy_port": 4444})
             assert status == 200
             assert data["ok"] is True

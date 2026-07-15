@@ -25,9 +25,8 @@ from __future__ import annotations
 import secrets
 import threading
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Optional
 
 
 class ApprovalStatus(str, Enum):
@@ -71,16 +70,14 @@ class PendingApproval:
     status: ApprovalStatus = ApprovalStatus.PENDING
     """Current state in the approval lifecycle."""
 
-    decided_at: Optional[float] = None
+    decided_at: float | None = None
     """Unix timestamp when the decision was made (or expired)."""
 
     def to_dict(self) -> dict:
         """Serialize for API responses."""
         d = asdict(self)
         d["status"] = self.status.value
-        d["remaining_seconds"] = max(
-            0, self.timeout_seconds - (time.time() - self.created_at)
-        )
+        d["remaining_seconds"] = max(0, self.timeout_seconds - (time.time() - self.created_at))
         return d
 
     @property
@@ -142,7 +139,7 @@ class ApprovalManager:
 
         return approval
 
-    def get(self, approval_id: str) -> Optional[PendingApproval]:
+    def get(self, approval_id: str) -> PendingApproval | None:
         """Get an approval by ID, expiring it if past timeout.
 
         Returns None if not found.
@@ -153,18 +150,13 @@ class ApprovalManager:
                 return None
 
             # Auto-expire if past timeout
-            if (
-                approval.status == ApprovalStatus.PENDING
-                and approval.is_expired
-            ):
+            if approval.status == ApprovalStatus.PENDING and approval.is_expired:
                 approval.status = ApprovalStatus.EXPIRED
                 approval.decided_at = time.time()
 
             return approval
 
-    def decide(
-        self, approval_id: str, decision: ApprovalStatus
-    ) -> Optional[PendingApproval]:
+    def decide(self, approval_id: str, decision: ApprovalStatus) -> PendingApproval | None:
         """Record a decision (approve or deny) for a pending approval.
 
         Atomic transition: only PENDING -> APPROVED/DENIED is allowed.
@@ -181,17 +173,13 @@ class ApprovalManager:
 
             # Check if already decided or expired
             if approval.status != ApprovalStatus.PENDING:
-                raise ValueError(
-                    f"Approval {approval_id} is already {approval.status.value}"
-                )
+                raise ValueError(f"Approval {approval_id} is already {approval.status.value}")
 
             # Check timeout before accepting decision
             if approval.is_expired:
                 approval.status = ApprovalStatus.EXPIRED
                 approval.decided_at = time.time()
-                raise ValueError(
-                    f"Approval {approval_id} has expired"
-                )
+                raise ValueError(f"Approval {approval_id} has expired")
 
             approval.status = decision
             approval.decided_at = time.time()
@@ -202,11 +190,7 @@ class ApprovalManager:
         with self._lock:
             self._cleanup_expired_locked()
             return sorted(
-                [
-                    a
-                    for a in self._pending.values()
-                    if a.status == ApprovalStatus.PENDING
-                ],
+                [a for a in self._pending.values() if a.status == ApprovalStatus.PENDING],
                 key=lambda a: a.created_at,
                 reverse=True,
             )
@@ -225,11 +209,7 @@ class ApprovalManager:
         """Number of currently pending approvals."""
         with self._lock:
             self._cleanup_expired_locked()
-            return sum(
-                1
-                for a in self._pending.values()
-                if a.status == ApprovalStatus.PENDING
-            )
+            return sum(1 for a in self._pending.values() if a.status == ApprovalStatus.PENDING)
 
     def _cleanup_expired_locked(self) -> None:
         """Mark expired approvals and remove old decided ones.
@@ -239,10 +219,7 @@ class ApprovalManager:
         now = time.time()
 
         for approval in self._pending.values():
-            if (
-                approval.status == ApprovalStatus.PENDING
-                and approval.is_expired
-            ):
+            if approval.status == ApprovalStatus.PENDING and approval.is_expired:
                 approval.status = ApprovalStatus.EXPIRED
                 approval.decided_at = now
 
@@ -251,8 +228,7 @@ class ApprovalManager:
         to_remove = [
             aid
             for aid, a in self._pending.items()
-            if a.status != ApprovalStatus.PENDING and a.decided_at
-            and a.decided_at < cutoff
+            if a.status != ApprovalStatus.PENDING and a.decided_at and a.decided_at < cutoff
         ]
         for aid in to_remove:
             del self._pending[aid]
@@ -260,7 +236,7 @@ class ApprovalManager:
 
 # --- Singleton --------------------------------------------------------
 
-_manager: Optional[ApprovalManager] = None
+_manager: ApprovalManager | None = None
 _manager_lock = threading.Lock()
 
 

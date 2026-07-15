@@ -114,9 +114,7 @@ class NotificationCoalescer:
         if count <= 0:
             return
         message = (
-            f"Blocked a leak to {host}"
-            if count == 1
-            else f"Blocked {count} requests to {host}"
+            f"Blocked a leak to {host}" if count == 1 else f"Blocked {count} requests to {host}"
         )
         try:
             self._notify_fn("LLMGuard", message)
@@ -125,7 +123,7 @@ class NotificationCoalescer:
             logger.debug("Desktop notification failed", exc_info=True)
 
 
-_default_coalescer: "NotificationCoalescer | None" = None
+_default_coalescer: NotificationCoalescer | None = None
 _default_coalescer_lock = threading.Lock()
 
 
