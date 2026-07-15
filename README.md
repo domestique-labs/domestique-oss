@@ -20,6 +20,9 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:8000
 # secrets get redacted, the response streams back, nothing else changes.
 ```
 
+Per-tool setup guides live in [`docs/recipes/`](./docs/recipes/) (Claude Code, Codex,
+Cursor, aider, and any OpenAI/Anthropic SDK).
+
 Want to see it work first, with no API key and nothing to configure?
 
 ```bash
