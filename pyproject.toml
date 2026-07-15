@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llmguard"
+name = "domestique"
 version = "0.1.0"
 description = "Transparent enterprise firewall for LLM API traffic"
 requires-python = ">=3.11"
@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-llmguard = "llmguard.cli:main"
+domestique = "domestique.cli:main"
 
 [project.optional-dependencies]
 pii = [
@@ -57,19 +57,19 @@ macos-native = [
     "py2app>=0.28,<1",
 ]
 desktop = [
-    "llmguard[browser-proxy,file-scanning]",
+    "domestique[browser-proxy,file-scanning]",
     "pystray>=0.19,<1",
     "pillow>=10,<12",
 ]
 bench = [
-    "llmguard[pii,semantic,ner,local-llm]",
+    "domestique[pii,semantic,ner,local-llm]",
     "datasets>=3.0,<4",
 ]
 all = [
-    "llmguard[pii,semantic,ner,local-llm,browser-proxy,file-scanning]",
+    "domestique[pii,semantic,ner,local-llm,browser-proxy,file-scanning]",
 ]
 workshop = [
-    "llmguard[bench]",
+    "domestique[bench]",
 ]
 dev = [
     "pytest>=8,<9",
@@ -82,10 +82,10 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["llmguard*"]
+include = ["domestique*"]
 
 [tool.setuptools.package-data]
-"llmguard.policy" = ["*.yaml"]
+"domestique.policy" = ["*.yaml"]
 
 [tool.ruff]
 line-length = 99
@@ -101,7 +101,7 @@ strict = true
 warn_return_any = true
 
 [[tool.mypy.overrides]]
-# Third-party libraries used by llmguard that ship no type stubs / py.typed marker,
+# Third-party libraries used by domestique that ship no type stubs / py.typed marker,
 # OR that live in optional extras not installed in the core `types` CI job (which
 # runs `pip install -e ".[dev]"` only). The core type gate must not depend on which
 # ML extras happen to be present in the environment.
@@ -125,10 +125,10 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# app/ is a separate package, out of scope for this task (which covers llmguard/ only).
-# It surfaces here only because mypy follows llmguard's imports of it (llmguard/callback.py,
-# llmguard/sdk.py). Suppress errors originating in app/ itself without disabling type
-# checking of the llmguard code that uses it.
+# app/ is a separate package, out of scope for this task (which covers domestique/ only).
+# It surfaces here only because mypy follows domestique's imports of it (domestique/callback.py,
+# domestique/sdk.py). Suppress errors originating in app/ itself without disabling type
+# checking of the domestique code that uses it.
 module = ["app.*"]
 follow_imports = "silent"
 
@@ -136,13 +136,13 @@ follow_imports = "silent"
 # BASELINE: pre-existing type debt. Ratchet DOWN — never add modules here.
 # Remove a line once its module type-checks clean.
 module = [
-    "llmguard.debug_trace",
-    "llmguard.sdk",
-    "llmguard.detectors.local_llm",
-    "llmguard.audit",
-    "llmguard.transport",
-    "llmguard.detectors.pii",
-    "llmguard.detectors.registry",
+    "domestique.debug_trace",
+    "domestique.sdk",
+    "domestique.detectors.local_llm",
+    "domestique.audit",
+    "domestique.transport",
+    "domestique.detectors.pii",
+    "domestique.detectors.registry",
 ]
 ignore_errors = true
 

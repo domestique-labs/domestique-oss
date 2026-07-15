@@ -1,4 +1,4 @@
-"""LLMGuard hardware-aware installer.
+"""Domestique hardware-aware installer.
 
 Detects OS / RAM / GPU / Ollama, asks which features to enable, recommends a
 local-LLM preset that fits the available VRAM, then performs only the work
@@ -28,7 +28,7 @@ from typing import Iterable
 
 
 ROOT = Path(__file__).resolve().parent.parent
-LLMGUARD_HOME = Path.home() / ".llmguard"
+DOMESTIQUE_HOME = Path.home() / ".domestique"
 
 PRESET_TO_STACK_KEY: dict[str, str] = {
     "minimal": "qwen3_1_7b",
@@ -67,7 +67,7 @@ FEATURE_EXTRAS: dict[str, dict[str, object]] = {
     },
 }
 
-# Per-preset Tier-3 model — keep in sync with llmguard/detectors/local_llm.py
+# Per-preset Tier-3 model — keep in sync with domestique/detectors/local_llm.py
 LLM_PRESETS: dict[str, dict[str, object]] = {
     "minimal": {
         "model": "qwen3:1.7b",
@@ -291,18 +291,18 @@ def pull_ollama_model(model: str, already_pulled: set[str]) -> None:
 
 
 def align_dashboard_config(preset: str) -> tuple[bool, str]:
-    """Update ~/.llmguard/config.json so the dashboard runs the installed preset.
+    """Update ~/.domestique/config.json so the dashboard runs the installed preset.
 
     The dashboard persists which Tier-3 model is active in its detection_stack
-    independently of LLMGUARD_* env vars, so without this the dashboard keeps
+    independently of DOMESTIQUE_* env vars, so without this the dashboard keeps
     using its previously-saved model and ignores what we just pulled.
 
     Returns (config_changed, message).
     """
     stack_key = PRESET_TO_STACK_KEY.get(preset)
 
-    LLMGUARD_HOME.mkdir(parents=True, exist_ok=True)
-    cfg_path = LLMGUARD_HOME / "config.json"
+    DOMESTIQUE_HOME.mkdir(parents=True, exist_ok=True)
+    cfg_path = DOMESTIQUE_HOME / "config.json"
     if cfg_path.exists():
         try:
             data = json.loads(cfg_path.read_text())
@@ -375,7 +375,7 @@ def parse_features_arg(arg: str | None) -> set[str] | None:
 
 def banner() -> None:
     print("=" * 64)
-    print("  LLMGuard installer")
+    print("  Domestique installer")
     print("=" * 64)
 
 

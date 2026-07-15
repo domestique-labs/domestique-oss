@@ -621,7 +621,7 @@ def generate_dataset(output_dir: Path) -> list[dict]:
     # Write manifest
     manifest_path = output_dir / "manifest.json"
     manifest = {
-        "name": "LLMGuard File Scanning Benchmark v1.0",
+        "name": "Domestique File Scanning Benchmark v1.0",
         "total_samples": len(all_samples),
         "positive_samples": sum(1 for s in all_samples if s["contains_sensitive"]),
         "negative_samples": sum(1 for s in all_samples if not s["contains_sensitive"]),

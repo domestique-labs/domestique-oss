@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Generates and trusts the LLMGuard local CA certificate.
+    Generates and trusts the Domestique local CA certificate.
 
 .DESCRIPTION
     Works around the cert-setup gate failing on a fresh install: the dashboard's
@@ -8,11 +8,11 @@
     created until the proxy first starts. This script generates the CA (if
     missing) and adds it to the current user's Trusted Root store.
 
-    Run it from the project root as the same Windows user that runs LLMGuard:
+    Run it from the project root as the same Windows user that runs Domestique:
         .\infra\certs\fix-cert.ps1
 
     A Windows security dialog will appear asking to install the certificate from
-    "LLMGuard Local CA" - you must click Yes for trust to succeed.
+    "Domestique Local CA" - you must click Yes for trust to succeed.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -38,7 +38,7 @@ if (-not (Test-Path $Python)) {
     }
 }
 
-Write-Host "Generating and trusting the LLMGuard CA ..." -ForegroundColor Cyan
+Write-Host "Generating and trusting the Domestique CA ..." -ForegroundColor Cyan
 Write-Host "If a Windows security dialog appears, click Yes." -ForegroundColor Yellow
 
 $pyCode = @'
@@ -54,7 +54,7 @@ print("RESULT:", "trusted" if (ok and is_cert_trusted()) else "not-trusted")
 # Write to a temp file rather than passing multi-line code via -c, which
 # PowerShell mangles when it contains quotes and spaces. Write without a BOM
 # (PS 5.1's -Encoding utf8 adds one) to keep the Python source clean.
-$pyFile = Join-Path $env:TEMP "llmguard_fix_cert.py"
+$pyFile = Join-Path $env:TEMP "domestique_fix_cert.py"
 [System.IO.File]::WriteAllText($pyFile, $pyCode, (New-Object System.Text.UTF8Encoding($false)))
 try {
     & $Python $pyFile
@@ -67,7 +67,7 @@ finally {
 if ($code -ne 0) {
     Write-Host ""
     Write-Host "Failed to run the cert helper (exit $code)." -ForegroundColor Red
-    Write-Host "Make sure you ran install.ps1 and are in the llmguard folder." -ForegroundColor Red
+    Write-Host "Make sure you ran install.ps1 and are in the domestique folder." -ForegroundColor Red
     exit $code
 }
 

@@ -1,4 +1,4 @@
-"""Windows system tray icon for LLMGuard.
+"""Windows system tray icon for Domestique.
 
 Mirrors the macOS StatusBar: shows a shield icon in the notification area
 with a right-click menu for toggling protection, opening the dashboard,
@@ -79,13 +79,13 @@ class SystemTray:
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open Dashboard", self._handle_dashboard),
             pystray.Menu.SEPARATOR,
-            pystray.MenuItem("Quit LLMGuard", self._handle_quit),
+            pystray.MenuItem("Quit Domestique", self._handle_quit),
         )
 
         self._icon = pystray.Icon(
-            name="LLMGuard",
+            name="Domestique",
             icon=image,
-            title="LLMGuard — Protection Inactive",
+            title="Domestique — Protection Inactive",
             menu=menu,
         )
         self._icon.run()
@@ -95,7 +95,7 @@ class SystemTray:
         self._active = active
         if self._icon:
             status = "Active" if active else "Inactive"
-            self._icon.title = f"LLMGuard — Protection {status}"
+            self._icon.title = f"Domestique — Protection {status}"
 
     def stop(self) -> None:
         """Remove the tray icon."""

@@ -28,7 +28,7 @@ def _fmt(value: float) -> str:
 def to_markdown(current: Metrics, baseline: Metrics | None) -> str:
     cur = asdict(current)
     base = asdict(baseline) if baseline else None
-    lines = ["### LLMGuard eval scorecard", "", f"n = {current.n}", ""]
+    lines = ["### Domestique eval scorecard", "", f"n = {current.n}", ""]
     if base is None:
         lines += ["| metric | value |", "| --- | --- |"]
         for key, val in cur.items():

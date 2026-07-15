@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <!-- LLM Firewall Logo: Shield with neural network graph inside -->
-  <!-- Inspired by LLMGUARD shield+network concept -->
+  <!-- Inspired by DOMESTIQUE shield+network concept -->
   
   <!-- Outer shield -->
   <path d="M256 28 C256 28 80 80 80 80 C80 80 80 280 80 280 C80 400 256 484 256 484 C256 484 432 400 432 280 C432 280 432 80 432 80 C432 80 256 28 256 28 Z" 

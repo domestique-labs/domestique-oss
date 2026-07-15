@@ -43,5 +43,5 @@ body:
     id: logs
     attributes:
       label: Relevant logs / trace
-      description: "e.g. from ~/.llmguard/debug_trace.jsonl, firewall.log, or browser_proxy.log"
+      description: "e.g. from ~/.domestique/debug_trace.jsonl, firewall.log, or browser_proxy.log"
       render: shell

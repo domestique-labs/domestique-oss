@@ -22,7 +22,7 @@ function FindProxyForURL(url, host) {
     // Check exact domain matches
     for (var i = 0; i < llmDomains.length; i++) {
         if (dnsDomainIs(host, llmDomains[i])) {
-            return "PROXY llmguard.internal.company.com:8080; DIRECT";
+            return "PROXY domestique.internal.company.com:8080; DIRECT";
         }
     }
 
@@ -31,7 +31,7 @@ function FindProxyForURL(url, host) {
         var pattern = azurePatterns[j];
         var domain = pattern.substring(2); // Remove "*."
         if (dnsDomainIs(host, domain)) {
-            return "PROXY llmguard.internal.company.com:8080; DIRECT";
+            return "PROXY domestique.internal.company.com:8080; DIRECT";
         }
     }
 

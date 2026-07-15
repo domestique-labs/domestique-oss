@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 
 from bench.eval.mock_upstream import serve
-from llmguard.gateway import create_gateway
+from domestique.gateway import create_gateway
 
 
 def test_openai_secret_is_redacted_upstream(mock_openai):

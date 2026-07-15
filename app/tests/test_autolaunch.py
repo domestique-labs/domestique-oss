@@ -41,7 +41,7 @@ class TestAutoLaunchManager:
         monkeypatch.setattr("app.services.autolaunch.LAUNCH_AGENT_PLIST", plist_path)
 
         # Mock log dir creation
-        log_dir = Path.home() / ".llmguard" / "logs"
+        log_dir = Path.home() / ".domestique" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
 
         result = manager.enable()
@@ -102,6 +102,6 @@ class TestInstallerScripts:
 
     def test_installer_references_correct_paths(self):
         script = generate_installer_script()
-        assert "$HOME/.llmguard" in script
+        assert "$HOME/.domestique" in script
         assert "generate_ca" in script
         assert "AutoLaunchManager" in script

@@ -2,7 +2,7 @@
 
 Regression coverage for C4: the installer's `legacy-cpu` preset pulls
 `llama3.2:1b` via Ollama, and must align the dashboard config
-(~/.llmguard/config.json) to a `detection_stack` flag that runtime code
+(~/.domestique/config.json) to a `detection_stack` flag that runtime code
 actually maps to `llama3.2:1b` — not the unrelated `qwen3_1_7b` flag,
 which every runtime path hardcodes to `qwen3:1.7b`.
 """
@@ -42,9 +42,9 @@ class TestPresetToStackKey:
 class TestAlignDashboardConfig:
     @pytest.fixture(autouse=True)
     def _isolate_home(self, tmp_path, monkeypatch):
-        """Point LLMGUARD_HOME at a temp dir so we don't touch the real
-        ~/.llmguard/config.json."""
-        monkeypatch.setattr(install, "LLMGUARD_HOME", tmp_path)
+        """Point DOMESTIQUE_HOME at a temp dir so we don't touch the real
+        ~/.domestique/config.json."""
+        monkeypatch.setattr(install, "DOMESTIQUE_HOME", tmp_path)
         self.cfg_path = tmp_path / "config.json"
 
     def test_legacy_cpu_sets_legacy_cpu_flag_only(self):

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llmguard.redact import apply_field_redactions, set_by_path
+from domestique.redact import apply_field_redactions, set_by_path
 
 
 def test_set_by_path_nested_list_and_dict():

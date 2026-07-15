@@ -8,7 +8,7 @@ set EXIT_CODE=%ERRORLEVEL%
 
 if not "%EXIT_CODE%"=="0" (
     echo.
-    echo LLMGuard exited with error code %EXIT_CODE%.
+    echo Domestique exited with error code %EXIT_CODE%.
     pause
 )
 

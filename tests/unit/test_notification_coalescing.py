@@ -59,7 +59,7 @@ class TestNotificationCoalescing:
 
         _FakeTimer.instances[0].fire()
 
-        notify_fn.assert_called_once_with("LLMGuard", "Blocked a leak to chatgpt.com")
+        notify_fn.assert_called_once_with("Domestique", "Blocked a leak to chatgpt.com")
 
     def test_many_blocks_within_window_emit_one_notification(self):
         """N block events within the coalescing window -> exactly 1 notify() call."""
@@ -74,7 +74,7 @@ class TestNotificationCoalescing:
 
         _FakeTimer.instances[0].fire()
 
-        notify_fn.assert_called_once_with("LLMGuard", "Blocked 6 requests to chatgpt.com")
+        notify_fn.assert_called_once_with("Domestique", "Blocked 6 requests to chatgpt.com")
 
     def test_different_hosts_get_independent_windows(self):
         notify_fn = MagicMock()
@@ -89,8 +89,8 @@ class TestNotificationCoalescing:
             timer.fire()
 
         assert notify_fn.call_count == 2
-        notify_fn.assert_any_call("LLMGuard", "Blocked 2 requests to chatgpt.com")
-        notify_fn.assert_any_call("LLMGuard", "Blocked a leak to claude.ai")
+        notify_fn.assert_any_call("Domestique", "Blocked 2 requests to chatgpt.com")
+        notify_fn.assert_any_call("Domestique", "Blocked a leak to claude.ai")
 
     def test_new_window_opens_after_previous_flush(self):
         """After a window flushes, a fresh block should start a new window/notification."""
@@ -99,14 +99,14 @@ class TestNotificationCoalescing:
 
         coalescer.record_block("chatgpt.com")
         _FakeTimer.instances[0].fire()
-        notify_fn.assert_called_once_with("LLMGuard", "Blocked a leak to chatgpt.com")
+        notify_fn.assert_called_once_with("Domestique", "Blocked a leak to chatgpt.com")
 
         coalescer.record_block("chatgpt.com")
         assert len(_FakeTimer.instances) == 2
         _FakeTimer.instances[1].fire()
 
         assert notify_fn.call_count == 2
-        notify_fn.assert_called_with("LLMGuard", "Blocked a leak to chatgpt.com")
+        notify_fn.assert_called_with("Domestique", "Blocked a leak to chatgpt.com")
 
     def test_notify_failure_does_not_raise(self):
         """A notify() failure must never propagate - block path safety."""

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LLMGuard Prompt Engineering Competition Runner.
+"""Domestique Prompt Engineering Competition Runner.
 
 Evaluates a custom classifier prompt against the labeled dataset.
 Scores based on classification accuracy, latency, and prompt efficiency.
@@ -174,7 +174,7 @@ def print_results_table(results: list[dict]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="LLMGuard Prompt Engineering Competition")
+    parser = argparse.ArgumentParser(description="Domestique Prompt Engineering Competition")
     parser.add_argument("--prompt", type=str, help="Path to custom prompt file")
     parser.add_argument("--interactive", action="store_true", help="Enter prompt interactively")
     parser.add_argument("--model", default="qwen3:1.7b", help="Ollama model (default: qwen3:1.7b)")
@@ -200,7 +200,7 @@ def main():
         system_prompt = Path(args.prompt).read_text()
     else:
         # Naive baseline prompt (~60-70% accuracy). Participants should improve it.
-        # The production prompt in llmguard/detectors/local_llm.py scores ~90%.
+        # The production prompt in domestique/detectors/local_llm.py scores ~90%.
         system_prompt = """\
 You are a DLP classifier. Classify if text contains sensitive enterprise data.
 
@@ -224,7 +224,7 @@ Respond with JSON: {"c":"<CATEGORY>","v":<0.0-1.0>}"""
         samples = samples[:args.limit]
 
     prompt_tokens = len(system_prompt.split())
-    print(f"\n🏆 LLMGuard Prompt Engineering Competition")
+    print(f"\n🏆 Domestique Prompt Engineering Competition")
     print(f"{'═' * 50}")
     print(f"Model: {args.model}")
     print(f"Prompt length: {prompt_tokens} words / {len(system_prompt)} chars")

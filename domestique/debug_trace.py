@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-TRACE_PATH = Path.home() / ".llmguard" / "debug_trace.jsonl"
+TRACE_PATH = Path.home() / ".domestique" / "debug_trace.jsonl"
 MAX_TRACE_ENTRIES = 1000
 
 

@@ -2,18 +2,18 @@
 
 **Date:** 2026-07-13
 **Status:** Approved for planning
-**Product:** LLMGuard OSS (Community Edition) — code/package name unchanged (rebrand parked)
-**Scope:** The developer CLI/proxy wedge — `llmguard start` launches a redacting proxy on
+**Product:** Domestique OSS (Community Edition) — code/package name unchanged (rebrand parked)
+**Scope:** The developer CLI/proxy wedge — `domestique start` launches a redacting proxy on
 `localhost:8000` that a developer points their agent/app at via a base-URL env var, and watches
 it redact secrets, with zero system changes (no CA, no system proxy).
-**Related (strategy):** `LLMGuard-Notes/docs/superpowers/specs/2026-07-12-promptseal-positioning-architecture.md`
+**Related (strategy):** `Domestique-Notes/docs/superpowers/specs/2026-07-12-promptseal-positioning-architecture.md`
 (§3 CLI wedge leads; §7 Phase 1). Cross-thread status: `.superpowers/HANDOFF.md`.
 
 ---
 
 ## 1. Context & Goal
 
-LLMGuard is an AI firewall that scans/redacts/blocks sensitive data before it reaches an LLM.
+Domestique is an AI firewall that scans/redacts/blocks sensitive data before it reaches an LLM.
 The OSS adoption strategy is a **developer wedge**: friction = 0. A developer installs the tool,
 points their existing agent (Claude Code, aider, Cline, LangChain, the OpenAI/Anthropic SDKs) at
 a local endpoint via an env var, and immediately sees secrets get redacted before they leave the
@@ -21,19 +21,19 @@ machine — no CA install, no system proxy, cross-platform.
 
 The `localhost:8000` Python path already exists in the repo, but it is **not yet frictionless or
 real**:
-- The current forward path (`llmguard/transport` → `LLMProxy.forward`) is **non-streaming**
+- The current forward path (`domestique/transport` → `LLMProxy.forward`) is **non-streaming**
   (buffers a full `litellm.acompletion` and returns JSON). Real agents default to SSE streaming,
   so pointing a real agent at `:8000` today would hang/fail.
 - Only **OpenAI-compatible** endpoints exist (`/v1/chat/completions`, `/v1/completions`,
   `/v1/embeddings`). There is **no `/v1/messages`**, so `ANTHROPIC_BASE_URL` + Claude Code does
   not work.
-- The default policy (`llmguard/policy/rules.yaml`) is **block-everything**; the wedge story is
+- The default policy (`domestique/policy/rules.yaml`) is **block-everything**; the wedge story is
   "watch it *redact*".
 - There is **no console entry point** (`pyproject.toml` has no `[project.scripts]`) — no
-  `llmguard` command, no `start`, no `demo`.
+  `domestique` command, no `start`, no `demo`.
 
 **Goal:** make the CLI wedge genuinely real and frictionless — a streaming, multi-provider,
-redact-by-default reverse proxy behind a clean `llmguard start` command, plus a `llmguard demo`
+redact-by-default reverse proxy behind a clean `domestique start` command, plus a `domestique demo`
 first-run experience and an honest README rewrite around this hero.
 
 **North-star constraint (from the strategy spec):** speed to adoption over architectural purity.
@@ -47,13 +47,13 @@ is another thread's active surface.
 ## 2. The Developer Story (the contract)
 
 ```
-pipx install llmguard            # or: pip install llmguard
-llmguard start                   # launches the :8000 redacting proxy — one command
+pipx install domestique            # or: pip install domestique
+domestique start                   # launches the :8000 redacting proxy — one command
 export OPENAI_BASE_URL=http://localhost:8000/v1
 export ANTHROPIC_BASE_URL=http://localhost:8000
 # run Claude Code / aider / your app normally
 #   → secrets redacted in the outbound prompt, response streams back, zero system changes
-llmguard demo                    # instant before/after redaction, no key or agent needed
+domestique demo                    # instant before/after redaction, no key or agent needed
 ```
 
 `start` prints a banner with the exact export lines to copy. The developer's **own** provider API
@@ -64,21 +64,21 @@ key rides through in the request header — no server-side key, no `.env` requir
 ## 3. Architecture — transparent redacting reverse-proxy
 
 One new transport that **reuses the existing detection engine unchanged**
-(`llmguard/detectors/registry.py:build_detectors`, `llmguard/policy.PolicyEngine`,
-`llmguard/models.Action`). New modules live entirely within the agreed surface: `llmguard/` +
+(`domestique/detectors/registry.py:build_detectors`, `domestique/policy.PolicyEngine`,
+`domestique/models.Action`). New modules live entirely within the agreed surface: `domestique/` +
 `pyproject.toml` + `README.md`/`docs/`.
 
 ### 3.1 New modules
 
-- **`llmguard/cli.py`** — argparse entry point `main()`:
-  - `llmguard start [--host 127.0.0.1] [--port 8000]` — launch the proxy (uvicorn) in the
+- **`domestique/cli.py`** — argparse entry point `main()`:
+  - `domestique start [--host 127.0.0.1] [--port 8000]` — launch the proxy (uvicorn) in the
     foreground, print the copy-paste banner.
-  - `llmguard demo` — in-process before/after redaction (see §6).
-  - `llmguard --version`.
-- **`llmguard/gateway.py`** — the reverse-proxy FastAPI app (`create_gateway(settings)` factory,
-  mirroring the existing `create_app` pattern in `llmguard/app.py`). This is what `start` serves.
+  - `domestique demo` — in-process before/after redaction (see §6).
+  - `domestique --version`.
+- **`domestique/gateway.py`** — the reverse-proxy FastAPI app (`create_gateway(settings)` factory,
+  mirroring the existing `create_app` pattern in `domestique/app.py`). This is what `start` serves.
 
-The existing `llmguard/app.py` (litellm round-trip) is **left in place** for backward
+The existing `domestique/app.py` (litellm round-trip) is **left in place** for backward
 compatibility (docker-compose, existing tests). The wedge is a new, focused app so we do not
 destabilize the current path. Shared redaction/extraction logic is factored into a small reusable
 module (see §3.4) and consumed by both.
@@ -93,7 +93,7 @@ module (see §3.4) and consumed by both.
    - Any other path/method → **transparent passthrough** (no scanning), so agent probes like
      `GET /v1/models` still work.
 2. **Extract prompt text** as `(field_path, text)` pairs:
-   - OpenAI: reuse the extraction already in `llmguard/app.py:_extract_texts`.
+   - OpenAI: reuse the extraction already in `domestique/app.py:_extract_texts`.
    - Anthropic: new extraction for `system` (str or content-block list) + `messages[].content`
      (str or content-block list, `type == "text"`).
 3. **Scan** with `build_detectors(settings)` run concurrently (reuse the `_run_detectors`
@@ -101,7 +101,7 @@ module (see §3.4) and consumed by both.
 4. **Act — redact by default:** The wedge ships a **redact-first default policy** (a
    wedge-specific `rules.yaml`, or a redact-default applied when a finding matches no explicit
    rule) so detected secrets/PII are redacted rather than blocked. The current
-   `llmguard/policy/rules.yaml` (block-everything) is **not** changed in place — the enterprise
+   `domestique/policy/rules.yaml` (block-everything) is **not** changed in place — the enterprise
    path keeps it; the wedge selects its own policy via `Settings.policy_path`. Only the loudest
    categories (e.g. private keys) stay `block` in the wedge policy.
    - `REDACT` (default for detected secrets/PII): replace detected spans with
@@ -127,8 +127,8 @@ module (see §3.4) and consumed by both.
 
 Provider → upstream base URL is a small map with env overrides so tests and a mock upstream can
 redirect without touching real providers:
-- `LLMGUARD_OPENAI_UPSTREAM` (default `https://api.openai.com`)
-- `LLMGUARD_ANTHROPIC_UPSTREAM` (default `https://api.anthropic.com`)
+- `DOMESTIQUE_OPENAI_UPSTREAM` (default `https://api.openai.com`)
+- `DOMESTIQUE_ANTHROPIC_UPSTREAM` (default `https://api.anthropic.com`)
 
 ### 3.4 Shared logic (factored for reuse, no behavior change)
 
@@ -149,7 +149,7 @@ this is the zero-config promise. Env keys (`OPENAI_API_KEY`/`ANTHROPIC_API_KEY`)
 only when the client sends none. `start` inherits the launching shell, so a dev who already
 exported their key for their agent is done.
 
-Settings reuse `llmguard/config.py:Settings`. `start` defaults bind to **127.0.0.1** (single-dev
+Settings reuse `domestique/config.py:Settings`. `start` defaults bind to **127.0.0.1** (single-dev
 safe; the current `Settings.host` default of `0.0.0.0` is not used for the wedge unless `--host`
 overrides it).
 
@@ -160,7 +160,7 @@ overrides it).
 **Only** the `gateway.py` reverse proxy via uvicorn, foreground, with a friendly banner:
 
 ```
-LLMGuard proxy running on http://127.0.0.1:8000
+Domestique proxy running on http://127.0.0.1:8000
 Point your agent at it:
   export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
   export ANTHROPIC_BASE_URL=http://127.0.0.1:8000
@@ -171,7 +171,7 @@ No dashboard, no mitmproxy, no browser/PAC/CA code. Cross-platform, zero system 
 
 ---
 
-## 6. The demo (`llmguard demo`)
+## 6. The demo (`domestique demo`)
 
 Runs the **detect → redact pipeline in-process** on a canned prompt containing a fake AWS key, an
 email, and an SSN, and prints a colored **before/after diff** showing the redactions. No network,
@@ -185,14 +185,14 @@ proxied round-trip to show it end-to-end. The in-process transform is the guaran
 
 ## 7. Packaging & README
 
-- **`pyproject.toml`:** add `[project.scripts]` → `llmguard = "llmguard.cli:main"`. Ensure
+- **`pyproject.toml`:** add `[project.scripts]` → `domestique = "domestique.cli:main"`. Ensure
   runtime deps for the wedge (`fastapi`, `uvicorn`, `httpx` — already present) are in the core
-  dependency set, not an extra, so `pip install llmguard` yields a working `start`.
-- **Install path:** `pipx install llmguard` / `pip install llmguard` now. **No `brew install`
+  dependency set, not an extra, so `pip install domestique` yields a working `start`.
+- **Install path:** `pipx install domestique` / `pip install domestique` now. **No `brew install`
   promise** — brew is a Rust-era concern (strategy spec §5). README stays honest: only real,
   working commands.
 - **README rewrite** around the §2 hero: install → `start` → two exports → run agent → redaction;
-  plus `llmguard demo`. The enterprise/browser/dashboard content is trimmed and moved below the
+  plus `domestique demo`. The enterprise/browser/dashboard content is trimmed and moved below the
   fold (kept accurate, not deleted). No overpromising.
 
 ---
@@ -221,14 +221,14 @@ Write tests first for each unit:
 - Streaming passthrough and buffered passthrough against a **mock upstream** (reuse
   `bench/eval/mock_upstream.py`), asserting the redacted body reaches upstream and the response
   streams back unmodified.
-- `llmguard demo` output contains the placeholders and not the raw fake secret.
+- `domestique demo` output contains the placeholders and not the raw fake secret.
 - `cli.py` arg parsing (`start`/`demo`/`--version`).
 
 The existing `bench/eval` harness already validates redaction **quality** deterministically —
 reference it, do not duplicate it.
 
-**Verification (end-to-end):** `pip install -e .` then `llmguard --version`, `llmguard demo`
-(shows redaction), and `llmguard start` against the mock upstream with a scripted OpenAI and an
+**Verification (end-to-end):** `pip install -e .` then `domestique --version`, `domestique demo`
+(shows redaction), and `domestique start` against the mock upstream with a scripted OpenAI and an
 Anthropic streaming request → assert the fake secret is redacted upstream and the stream returns.
 
 ---

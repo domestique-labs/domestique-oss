@@ -1,4 +1,4 @@
-"""Hermetic end-to-end smoke test for `llmguard demo`.
+"""Hermetic end-to-end smoke test for `domestique demo`.
 
 Unlike test_wedge_cli.py (which calls ``main()`` in-process), this runs the CLI as a
 real subprocess — exercising the packaged console entry point when installed, or the
@@ -17,10 +17,10 @@ _SECRET = "AKIAIOSFODNN7EXAMPLE"
 
 def _demo_argv() -> list[str]:
     # Prefer the installed console script (proves packaging); fall back to the module.
-    script = shutil.which("llmguard")
+    script = shutil.which("domestique")
     if script:
         return [script, "demo"]
-    return [sys.executable, "-m", "llmguard.cli", "demo"]
+    return [sys.executable, "-m", "domestique.cli", "demo"]
 
 
 def test_demo_subprocess_redacts_secret():

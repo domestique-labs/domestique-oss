@@ -127,11 +127,11 @@ class TestPathEscaping:
     """Verify Windows backslash paths are properly escaped in inline scripts."""
 
     @pytest.mark.parametrize("path", [
-        r"C:\Users\david\llmguard",
+        r"C:\Users\david\domestique",
         r"C:\Program Files\Python311",
         r"D:\projects\my app\src",
-        "/home/user/llmguard",  # Unix paths should also work
-        "/Users/david/Projects/llmguard",
+        "/home/user/domestique",  # Unix paths should also work
+        "/Users/david/Projects/domestique",
     ])
     def test_escaped_path_in_inline_script(self, path: str):
         """An escaped path embedded in a Python -c script must be importable."""

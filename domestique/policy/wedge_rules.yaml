@@ -1,4 +1,4 @@
-# LLMGuard OSS CLI Wedge - redact-first policy.
+# Domestique OSS CLI Wedge - redact-first policy.
 #
 # The wedge protects a solo developer's outbound prompts WITHOUT breaking their
 # flow: detected secrets/PII are REDACTED in place and the (sanitized) request

@@ -32,12 +32,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "llmguard/gateway.py"
-      - "llmguard/extract.py"
-      - "llmguard/redact.py"
-      - "llmguard/models.py"
-      - "llmguard/detectors/**"
-      - "llmguard/policy/**"
+      - "domestique/gateway.py"
+      - "domestique/extract.py"
+      - "domestique/redact.py"
+      - "domestique/models.py"
+      - "domestique/detectors/**"
+      - "domestique/policy/**"
       - "tests/integration/**"
       - ".github/workflows/live-providers.yml"
   schedule:
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Never run on forks (they have no secrets and shouldn't try).
-    if: github.repository == 'LLM-Guard/LLMGuard-OSS'
+    if: github.repository == 'domestique-labs/domestique-oss'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -70,8 +70,8 @@ jobs:
           pip install -e ".[dev]"
       - name: Run live provider tests
         env:
-          LLMGUARD_LIVE_OPENAI_KEY: ${{ secrets.LLMGUARD_LIVE_OPENAI_KEY }}
-          LLMGUARD_LIVE_ANTHROPIC_KEY: ${{ secrets.LLMGUARD_LIVE_ANTHROPIC_KEY }}
+          DOMESTIQUE_LIVE_OPENAI_KEY: ${{ secrets.DOMESTIQUE_LIVE_OPENAI_KEY }}
+          DOMESTIQUE_LIVE_ANTHROPIC_KEY: ${{ secrets.DOMESTIQUE_LIVE_ANTHROPIC_KEY }}
         run: |
           door="${{ github.event.inputs.door }}"
           if [ -n "$door" ] && [ "$door" != "both" ]; then

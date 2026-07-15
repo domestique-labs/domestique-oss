@@ -13,7 +13,7 @@ RUN apt-get update && \
 COPY pyproject.toml .
 RUN pip install ".[pii]" && python -m spacy download en_core_web_lg
 
-COPY llmguard/ llmguard/
+COPY domestique/ domestique/
 RUN mkdir -p /app/logs
 
 EXPOSE 8000
@@ -21,4 +21,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://127.0.0.1:8000/health').raise_for_status()"
 
-CMD ["uvicorn", "llmguard.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "domestique.app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

@@ -51,9 +51,9 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            let body = "### LLMGuard eval scorecard\n_(scorecard unavailable)_";
+            let body = "### Domestique eval scorecard\n_(scorecard unavailable)_";
             try { body = fs.readFileSync('scorecard.md', 'utf8'); } catch (e) {}
-            const marker = "<!-- llmguard-eval-scorecard -->";
+            const marker = "<!-- domestique-eval-scorecard -->";
             body = marker + "\n" + body;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo,

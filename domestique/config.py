@@ -1,6 +1,6 @@
-"""LLMGuard - Configuration.
+"""Domestique - Configuration.
 
-All settings are driven by environment variables prefixed with ``LLMGUARD_``.
+All settings are driven by environment variables prefixed with ``DOMESTIQUE_``.
 Defaults are safe for development; override for production.
 """
 
@@ -99,7 +99,7 @@ class Settings(BaseSettings):
 
     # --- Policy ---
     policy_path: str = Field(
-        default="llmguard/policy/rules.yaml",
+        default="domestique/policy/rules.yaml",
         description="Path to the YAML policy file.",
     )
 
@@ -125,4 +125,4 @@ class Settings(BaseSettings):
         ]
     )
 
-    model_config = {"env_prefix": "LLMGUARD_", "env_file": ".env"}
+    model_config = {"env_prefix": "DOMESTIQUE_", "env_file": ".env"}

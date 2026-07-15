@@ -104,8 +104,8 @@ class TestProxyService:
             svc.start(config)
 
         env = mock_popen.call_args[1]["env"]
-        assert env["LLMGUARD_LOCAL_LLM_MODEL"] == "qwen3:1.7b"
-        assert env["LLMGUARD_ENABLE_LOCAL_LLM"] == "true"
+        assert env["DOMESTIQUE_LOCAL_LLM_MODEL"] == "qwen3:1.7b"
+        assert env["DOMESTIQUE_ENABLE_LOCAL_LLM"] == "true"
 
     @patch("subprocess.Popen")
     def test_build_env_gemma4(self, mock_popen):
@@ -122,7 +122,7 @@ class TestProxyService:
             svc.start(config)
 
         env = mock_popen.call_args[1]["env"]
-        assert env["LLMGUARD_LOCAL_LLM_MODEL"].startswith("gemma4:e2b")
+        assert env["DOMESTIQUE_LOCAL_LLM_MODEL"].startswith("gemma4:e2b")
 
     @patch("subprocess.Popen")
     def test_build_env_no_llm(self, mock_popen):
@@ -139,7 +139,7 @@ class TestProxyService:
             svc.start(config)
 
         env = mock_popen.call_args[1]["env"]
-        assert env["LLMGUARD_ENABLE_LOCAL_LLM"] == "false"
+        assert env["DOMESTIQUE_ENABLE_LOCAL_LLM"] == "false"
 
     @patch("subprocess.Popen")
     def test_build_env_legacy_cpu(self, mock_popen):
@@ -159,8 +159,8 @@ class TestProxyService:
             svc.start(config)
 
         env = mock_popen.call_args[1]["env"]
-        assert env["LLMGUARD_LOCAL_LLM_MODEL"] == "llama3.2:1b"
-        assert env["LLMGUARD_ENABLE_LOCAL_LLM"] == "true"
+        assert env["DOMESTIQUE_LOCAL_LLM_MODEL"] == "llama3.2:1b"
+        assert env["DOMESTIQUE_ENABLE_LOCAL_LLM"] == "true"
 
 
 # --- Benchmark Service Tests -----------------------------------------

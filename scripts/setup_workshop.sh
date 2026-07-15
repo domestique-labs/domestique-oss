@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# LLMGuard Workshop Setup — run ONCE before the workshop to pre-download
+# Domestique Workshop Setup — run ONCE before the workshop to pre-download
 # all models and dependencies. After this, everything runs fully offline.
 #
 # Usage:
-#   cd llmguard
+#   cd domestique
 #   bash scripts/setup_workshop.sh
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -14,7 +14,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "══════════════════════════════════════════════════════════════"
-echo "  LLMGuard Workshop Setup"
+echo "  Domestique Workshop Setup"
 echo "══════════════════════════════════════════════════════════════"
 echo ""
 

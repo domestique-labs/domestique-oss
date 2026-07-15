@@ -1,6 +1,6 @@
 """Menu bar (status bar) icon and dropdown menu.
 
-Displays the LLMGuard shield icon in the macOS menu bar - solid when
+Displays the Domestique shield icon in the macOS menu bar - solid when
 active, faded when disabled - like Notion and other native macOS apps.
 """
 
@@ -102,7 +102,7 @@ class StatusBar:
         menu = NSMenu.new()
 
         # App name header (non-interactive)
-        header = self._add_item(menu, "LLMGuard", action=None, enabled=False)
+        header = self._add_item(menu, "Domestique", action=None, enabled=False)
 
         # Status label
         self._status_label = self._add_item(
@@ -125,7 +125,7 @@ class StatusBar:
 
         # Quit
         quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            "Quit LLMGuard", "terminate:", "q"
+            "Quit Domestique", "terminate:", "q"
         )
         menu.addItem_(quit_item)
 

@@ -48,6 +48,6 @@ class MockProvider:
 def mock_openai(monkeypatch: pytest.MonkeyPatch) -> Iterator[MockProvider]:
     provider = MockProvider()
     with serve(provider.build_app()) as base:
-        monkeypatch.setenv("LLMGUARD_OPENAI_UPSTREAM", base)
-        monkeypatch.setenv("LLMGUARD_ANTHROPIC_UPSTREAM", base)
+        monkeypatch.setenv("DOMESTIQUE_OPENAI_UPSTREAM", base)
+        monkeypatch.setenv("DOMESTIQUE_ANTHROPIC_UPSTREAM", base)
         yield provider

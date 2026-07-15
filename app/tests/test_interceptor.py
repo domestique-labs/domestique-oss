@@ -386,7 +386,7 @@ class TestWindowsSystemProxyPACOnly:
     def test_enable_clears_stale_blanket_proxy_from_prior_install(self, tmp_path, monkeypatch):
         """Regression test for the merge-blocking bug: a machine that already
         has a blanket proxy configured (e.g. left over from a pre-PAC-only
-        LLMGuard install, especially one whose process was killed before its
+        Domestique install, especially one whose process was killed before its
         normal disable/atexit cleanup ran) must have that blanket proxy
         cleared when enable_system_proxy() runs - not just left in place
         alongside the new PAC. Previously only disable_system_proxy() (on
@@ -491,7 +491,7 @@ class TestMacOSSystemProxyPACOnly:
     def test_enable_clears_stale_blanket_webproxy_from_prior_install(self, monkeypatch):
         """Regression test for the merge-blocking bug: a machine that already
         has a blanket web proxy configured (e.g. left over from a pre-PAC-only
-        LLMGuard install, especially one whose process was killed before its
+        Domestique install, especially one whose process was killed before its
         normal disable/atexit cleanup ran) must have it turned off by
         enable_system_proxy() - not just left active until an eventual
         disable. Previously only disable_system_proxy() (on explicit

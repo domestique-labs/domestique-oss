@@ -1,13 +1,13 @@
-# Cursor CLI → LLMGuard
+# Cursor CLI → Domestique
 
 **Status:** ⚗️ Setup documented — end-to-end pass pending.
 
-Cursor's CLI can target an OpenAI-compatible endpoint. Point that endpoint at LLMGuard.
+Cursor's CLI can target an OpenAI-compatible endpoint. Point that endpoint at Domestique.
 
 ## Setup
 
 ```bash
-llmguard start
+domestique start
 export OPENAI_BASE_URL=http://127.0.0.1:8000/v1
 export OPENAI_API_KEY=sk-...
 ```
@@ -27,5 +27,5 @@ OpenAI base URL must resolve to the proxy's `/v1`.
 ## Verify
 
 ```bash
-llmguard demo
+domestique demo
 ```

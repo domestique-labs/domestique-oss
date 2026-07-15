@@ -1,5 +1,5 @@
 {
-  "name": "LLMGuard benchmark (combined 262 samples)",
+  "name": "Domestique benchmark (combined 262 samples)",
   "samples": [
     {
       "text": "CREATE TABLE users (\n  id UUID PRIMARY KEY,\n  email VARCHAR(255) UNIQUE,\n  password_hash BYTEA NOT NULL,\n  stripe_customer_id VARCHAR(50),\n  role ENUM('admin','user','billing')\n);",

@@ -1,14 +1,14 @@
-# LLMGuard
+# Domestique
 
-**A local AI firewall for developers.** Point your agent or app at LLMGuard and it
+**A local AI firewall for developers.** Point your agent or app at Domestique and it
 redacts secrets and PII out of your prompts *before* they reach OpenAI, Anthropic, or
 any LLM — with zero system changes. No CA to install, no system proxy, cross-platform.
 
 ## Quick start
 
 ```bash
-pipx install llmguard            # or: pip install llmguard
-llmguard start                   # launches the redacting proxy on http://127.0.0.1:8000
+pipx install domestique            # or: pip install domestique
+domestique start                   # launches the redacting proxy on http://127.0.0.1:8000
 ```
 
 Point your tool at it and keep using your own API key:
@@ -26,7 +26,7 @@ Cursor, aider, and any OpenAI/Anthropic SDK).
 Want to see it work first, with no API key and nothing to configure?
 
 ```bash
-llmguard demo
+domestique demo
 ```
 
 It runs a prompt full of fake secrets through the firewall and shows you the
@@ -39,7 +39,7 @@ AFTER:   Here is my AWS key [AWS_ACCESS_KEY_REDACTED] and email [EMAIL_ADDRESS_R
 
 ## How it works
 
-LLMGuard runs a local reverse proxy. For each request it scans the prompt with a
+Domestique runs a local reverse proxy. For each request it scans the prompt with a
 tiered detection engine (fast regex first; optional NLP/NER and a local LLM classifier
 for nuance), redacts anything sensitive in place, then forwards the sanitized request
 to the real provider using **your** API key. The response streams straight back — only
@@ -70,7 +70,7 @@ nuanced content, install the optional detectors:
 
 ## Browser mode (optional) & Enterprise
 
-LLMGuard also has an optional **browser mode** — it can intercept web LLM UIs
+Domestique also has an optional **browser mode** — it can intercept web LLM UIs
 (ChatGPT, Claude, Gemini, Copilot, and others) through a local proxy — and commercial
 **Enterprise** editions for fleets. The developer CLI wedge above is the fastest way to
 get value with zero system changes; the sections below cover the broader deployment.
@@ -78,7 +78,7 @@ get value with zero system changes; the sections below cover the broader deploym
 ### How transparent (browser) interception works
 
 ```
-User / App  -->  System Proxy (PAC)  -->  LLMGuard (mitmproxy)  -->  LLM API
+User / App  -->  System Proxy (PAC)  -->  Domestique (mitmproxy)  -->  LLM API
                  Routes only LLM          Inspect + Decide           OpenAI,
                  domains through           (<5ms p99 regex)          Claude, etc.
                  the firewall
@@ -128,8 +128,8 @@ browser policy and by blocking outbound UDP/443 at the firewall.
 ### Project layout
 
 ```
-llmguard/
-  cli.py              # CLI entry point: `llmguard start` / `llmguard demo`
+domestique/
+  cli.py              # CLI entry point: `domestique start` / `domestique demo`
   gateway.py          # Transparent redacting reverse proxy (the CLI wedge)
   extract.py          # Provider-aware prompt-text extraction (OpenAI + Anthropic)
   redact.py           # Dot-path body redaction helpers
@@ -152,6 +152,6 @@ app/                  # Browser mode + native desktop app + dashboard
 back. See [`NOTICE`](./NOTICE).
 
 This is the **Community Edition**: the full single-device LLM firewall, free and open. The
-commercial LLMGuard editions — fleet management, non-bypassable MDM enforcement, compliance
-automation, analytics, and support — are separate proprietary products. "LLMGuard" is a
-trademark of LLM-Guard; the license covers the code, not the name.
+commercial Domestique editions — fleet management, non-bypassable MDM enforcement, compliance
+automation, analytics, and support — are separate proprietary products. "Domestique" is a
+trademark of Domestique Labs; the license covers the code, not the name.

@@ -40,7 +40,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger("llmguard.policy")
+logger = logging.getLogger("domestique.policy")
 
 
 class PolicyAction(Enum):

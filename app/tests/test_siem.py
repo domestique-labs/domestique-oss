@@ -43,7 +43,7 @@ class TestSyslogBackend:
         backend = SyslogBackend(host="127.0.0.1", port=9999)
         msg = backend._format_rfc5424(sample_event)
 
-        assert "llmguard" in msg
+        assert "domestique" in msg
         assert "api.openai.com" in msg
         assert "block" in msg
         assert "SSN" in msg
@@ -83,7 +83,7 @@ class TestCEFBackend:
         msg = backend._format_cef(sample_event)
 
         # CEF header format: CEF:version|vendor|product|version|id|name|severity|
-        assert msg.startswith("CEF:0|LLMGuard|Firewall|1.0|")
+        assert msg.startswith("CEF:0|Domestique|Firewall|1.0|")
         assert "block" in msg
         assert "Sensitive Data Blocked" in msg
 

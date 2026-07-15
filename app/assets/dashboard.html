@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LLMGuard — Dashboard</title>
+<title>Domestique — Dashboard</title>
 <style>
   :root {
     --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
@@ -320,7 +320,7 @@
       <div style="font-size:3rem;margin-bottom:16px">🔐</div>
       <h2 style="color:var(--text);font-size:1.2rem;margin-bottom:12px;text-transform:none;letter-spacing:0" id="setupTitle">Certificate Setup</h2>
       <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px" id="setupMsg">
-        LLMGuard needs a local CA certificate to inspect LLM traffic. Click below to install it automatically (no password required).
+        Domestique needs a local CA certificate to inspect LLM traffic. Click below to install it automatically (no password required).
       </p>
       <button class="btn btn-primary" id="certInstallBtn" style="font-size:1rem;padding:14px 32px">
         🔑 Install Certificate
@@ -837,7 +837,7 @@ DeepSeek  Cohere  Together  Fireworks  Replicate  HuggingFace  Cursor</code>
   </div><!-- /mainApp -->
 
   <footer>
-    LLMGuard v1.0 — Enterprise Data Loss Prevention for AI<br>
+    Domestique v1.0 — Enterprise Data Loss Prevention for AI<br>
     Regex · GLiNER · Presidio · Gemma 3 · Qwen3
   </footer>
 </div>
@@ -921,7 +921,7 @@ function switchTab(tabId) {
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const CONFIG_KEY = 'llmguard_config';
+const CONFIG_KEY = 'domestique_config';
 let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || {
   proxy_enabled: false,
   detection_stack: {
@@ -1168,7 +1168,7 @@ async function refreshResources() {
     cpuBar.style.width = Math.max(cpuPct, 1) + '%';
     cpuBar.style.background = cpuPct > 80 ? 'var(--red)' : cpuPct > 30 ? 'var(--yellow)' : 'var(--green)';
 
-    // Aggregate memory: LLMGuard + Ollama processes
+    // Aggregate memory: Domestique + Ollama processes
     const ollama = r.ollama || {};
     const ollamaMem = ollama.mem_mb || 0;
     const totalMem = r.mem_rss_mb + ollamaMem;

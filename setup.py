@@ -1,10 +1,10 @@
-"""py2app build configuration for LLMGuard.app.
+"""py2app build configuration for Domestique.app.
 
 This file is ONLY the macOS app-bundle build. Normal installs (pip / pipx /
 ``python -m build``) are driven entirely by ``pyproject.toml`` — so unless the
 ``py2app`` command is explicitly invoked, we fall through to a bare ``setup()``
 that lets setuptools read pyproject (packages, entry points, package-data).
-This keeps ``pipx install llmguard`` clean while preserving
+This keeps ``pipx install domestique`` clean while preserving
 ``python setup.py py2app`` for the native build.
 """
 
@@ -38,15 +38,15 @@ else:
         "argv_emulation": False,
         "iconfile": "app/assets/icon.icns",
         "plist": {
-            "CFBundleName": "LLMGuard",
-            "CFBundleDisplayName": "LLMGuard",
-            "CFBundleIdentifier": "com.enterprise.llmguard",
+            "CFBundleName": "Domestique",
+            "CFBundleDisplayName": "Domestique",
+            "CFBundleIdentifier": "com.enterprise.domestique",
             "CFBundleVersion": "1.0.0",
             "CFBundleShortVersionString": "1.0",
             "LSUIElement": False,  # Show in Dock with our icon
             "NSHighResolutionCapable": True,
         },
-        "packages": ["rumps", "app", "llmguard"],
+        "packages": ["rumps", "app", "domestique"],
         "excludes": [
             "mitmproxy",
             "pytest",
@@ -69,7 +69,7 @@ else:
     }
 
     setup(
-        name="LLMGuard",
+        name="Domestique",
         app=APP,
         data_files=DATA_FILES,
         options={"py2app": OPTIONS},

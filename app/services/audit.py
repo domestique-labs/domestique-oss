@@ -28,7 +28,7 @@ from pathlib import Path
 from queue import Full, Queue
 from typing import Any
 
-logger = logging.getLogger("llmguard.audit")
+logger = logging.getLogger("domestique.audit")
 
 
 class AuditAction(Enum):
@@ -114,7 +114,7 @@ class AuditStore:
         data_dir: Path | None = None,
         retention: RetentionPolicy | None = None,
     ) -> None:
-        self._data_dir = data_dir or (Path.home() / ".llmguard" / "audit")
+        self._data_dir = data_dir or (Path.home() / ".domestique" / "audit")
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._retention = retention or RetentionPolicy()
         self._queue: Queue[AuditEvent | None] = Queue(maxsize=self.QUEUE_MAX)

@@ -1,5 +1,5 @@
 {
-  "name": "LLMGuard File Scanning Benchmark v1.0",
+  "name": "Domestique File Scanning Benchmark v1.0",
   "total_samples": 29,
   "positive_samples": 22,
   "negative_samples": 7,

@@ -10,10 +10,10 @@ repos:
       - id: ruff
         name: ruff (lint, core)
         args: [--fix]
-        files: ^llmguard/
+        files: ^domestique/
       - id: ruff-format
         name: ruff (format, core)
-        files: ^llmguard/
+        files: ^domestique/
   - repo: local
     hooks:
       - id: pytest-fast

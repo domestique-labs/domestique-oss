@@ -1,5 +1,5 @@
 {
-  "name": "LLMGuard benchmark v2 (300 samples)",
+  "name": "Domestique benchmark v2 (300 samples)",
   "description": "Comprehensive DLP benchmark with diverse PII, credentials, code, strategy, comms, and adversarial NONE samples",
   "samples": [
     {

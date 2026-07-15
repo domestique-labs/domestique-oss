@@ -2,36 +2,36 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship a frictionless developer CLI wedge — `llmguard start` launches a streaming, redact-by-default reverse proxy on `localhost:8000` that a dev points their agent at (OpenAI + Anthropic) to redact secrets before they leave the machine, plus `llmguard demo` and an honest README rewrite.
+**Goal:** Ship a frictionless developer CLI wedge — `domestique start` launches a streaming, redact-by-default reverse proxy on `localhost:8000` that a dev points their agent at (OpenAI + Anthropic) to redact secrets before they leave the machine, plus `domestique demo` and an honest README rewrite.
 
-**Architecture:** A new transparent redacting reverse-proxy (`llmguard/gateway.py`) routes by request path to a provider (OpenAI/Anthropic), extracts prompt text, runs the **existing** detection pipeline (`DetectorPipeline.inspect`) per field, redacts detected spans in place (or blocks the loudest categories), then forwards the redacted raw bytes to the real upstream via streaming `httpx` — passing the client's own API key through in the request header. Responses stream back untouched. A small `llmguard/cli.py` exposes `start`/`demo`/`--version`, wired as a console script.
+**Architecture:** A new transparent redacting reverse-proxy (`domestique/gateway.py`) routes by request path to a provider (OpenAI/Anthropic), extracts prompt text, runs the **existing** detection pipeline (`DetectorPipeline.inspect`) per field, redacts detected spans in place (or blocks the loudest categories), then forwards the redacted raw bytes to the real upstream via streaming `httpx` — passing the client's own API key through in the request header. Responses stream back untouched. A small `domestique/cli.py` exposes `start`/`demo`/`--version`, wired as a console script.
 
-**Tech Stack:** Python 3.11+, FastAPI, uvicorn, httpx (all already core deps), pytest / pytest-asyncio. Reuses `llmguard.detectors.registry` (`build_detectors`, `DetectorPipeline`, `create_detector_pipeline`), `llmguard.policy.PolicyEngine`, `llmguard.config.Settings`, `llmguard.models.Action`.
+**Tech Stack:** Python 3.11+, FastAPI, uvicorn, httpx (all already core deps), pytest / pytest-asyncio. Reuses `domestique.detectors.registry` (`build_detectors`, `DetectorPipeline`, `create_detector_pipeline`), `domestique.policy.PolicyEngine`, `domestique.config.Settings`, `domestique.models.Action`.
 
 ## Global Constraints
 
 - **Python floor:** `requires-python = ">=3.11"`. Target `py311`.
-- **No rename:** package/repo stay `llmguard`. Do NOT rename anything (rebrand parked).
+- **No rename:** package/repo stay `domestique`. Do NOT rename anything (rebrand parked).
 - **Off-limits files:** do not touch `app/services/{mitm_addon,proxy,interceptor}.py`, `app/main.py`, `app/config/schema.py` (another thread's active surface).
-- **Core deps only:** the wedge must work on a bare `pip install llmguard` — use only `fastapi`, `uvicorn`, `httpx`, `pydantic`, `structlog`, `pyyaml` (all already in `[project].dependencies`). No new runtime deps.
+- **Core deps only:** the wedge must work on a bare `pip install domestique` — use only `fastapi`, `uvicorn`, `httpx`, `pydantic`, `structlog`, `pyyaml` (all already in `[project].dependencies`). No new runtime deps.
 - **Redact by default; bind 127.0.0.1** for `start` (override via `--host`).
 - **Honest README:** only real, working commands. `pipx install` / `pip install` now — NO `brew install` promise.
-- **mypy strict:** new modules `llmguard/cli.py`, `llmguard/gateway.py`, `llmguard/extract.py` are NOT in the mypy baseline-ignore list — they must be fully type-annotated and pass `mypy --strict`. Do NOT add them to the baseline ignore.
+- **mypy strict:** new modules `domestique/cli.py`, `domestique/gateway.py`, `domestique/extract.py` are NOT in the mypy baseline-ignore list — they must be fully type-annotated and pass `mypy --strict`. Do NOT add them to the baseline ignore.
 - **Lint:** ruff must pass (`ruff check`, `ruff format`). Line length 99.
 - **Detector default:** only the regex `SecretDetector` is on by default (`enable_secret_detection=True`); PII/GLiNER/LLM tiers are opt-in. The wedge + demo must work with regex-only detection — sample data and tests must use secrets the regex tier catches (AWS keys, tokens, emails, SSNs).
 
 ---
 
-### Task 1: Provider-aware text extraction (`llmguard/extract.py`)
+### Task 1: Provider-aware text extraction (`domestique/extract.py`)
 
-Factor prompt-text extraction into a shared, provider-aware module. Reuses the OpenAI logic currently inline in `llmguard/app.py:_extract_texts` (lines 321-357) and adds Anthropic Messages extraction.
+Factor prompt-text extraction into a shared, provider-aware module. Reuses the OpenAI logic currently inline in `domestique/app.py:_extract_texts` (lines 321-357) and adds Anthropic Messages extraction.
 
 **Files:**
-- Create: `llmguard/extract.py`
+- Create: `domestique/extract.py`
 - Test: `tests/unit/test_extract.py`
 
 **Interfaces:**
-- Consumes: `llmguard.models` (none directly; pure dict parsing).
+- Consumes: `domestique.models` (none directly; pure dict parsing).
 - Produces:
   - `extract_texts(body: dict[str, Any], kind: str) -> list[tuple[str, str]]` where `kind` ∈ `{"openai_chat", "openai_completions", "openai_embeddings", "anthropic_messages"}`. Returns `(field_path, text)` pairs, dot-notation paths (e.g. `messages.0.content`, `system`, `messages.1.content.0.text`).
 
@@ -41,7 +41,7 @@ Factor prompt-text extraction into a shared, provider-aware module. Reuses the O
 # tests/unit/test_extract.py
 from __future__ import annotations
 
-from llmguard.extract import extract_texts
+from domestique.extract import extract_texts
 
 
 def test_openai_chat_string_content():
@@ -97,12 +97,12 @@ def test_unknown_kind_returns_empty():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/unit/test_extract.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'llmguard.extract'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'domestique.extract'`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# llmguard/extract.py
+# domestique/extract.py
 """Provider-aware extraction of scannable prompt text from request bodies.
 
 Returns ``(field_path, text)`` pairs where ``field_path`` is a dot-notation
@@ -173,24 +173,24 @@ Expected: PASS (8 passed)
 
 - [ ] **Step 5: Lint + typecheck the new module**
 
-Run: `ruff check llmguard/extract.py && ruff format --check llmguard/extract.py && mypy llmguard/extract.py`
+Run: `ruff check domestique/extract.py && ruff format --check domestique/extract.py && mypy domestique/extract.py`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add llmguard/extract.py tests/unit/test_extract.py
+git add domestique/extract.py tests/unit/test_extract.py
 git commit -m "feat(wedge): provider-aware prompt-text extraction (OpenAI + Anthropic)"
 ```
 
 ---
 
-### Task 2: Set-by-path body redaction helper (`llmguard/redact.py`)
+### Task 2: Set-by-path body redaction helper (`domestique/redact.py`)
 
-The gateway must write redacted text back into the exact nested field it came from. Factor the path-write helper (mirrors `llmguard/app.py:_set_by_path` lines 388-397) into a reusable module and add a body-level redactor that consumes `(field_path, redacted_text)` pairs.
+The gateway must write redacted text back into the exact nested field it came from. Factor the path-write helper (mirrors `domestique/app.py:_set_by_path` lines 388-397) into a reusable module and add a body-level redactor that consumes `(field_path, redacted_text)` pairs.
 
 **Files:**
-- Create: `llmguard/redact.py`
+- Create: `domestique/redact.py`
 - Test: `tests/unit/test_redact_body.py`
 
 **Interfaces:**
@@ -205,7 +205,7 @@ The gateway must write redacted text back into the exact nested field it came fr
 # tests/unit/test_redact_body.py
 from __future__ import annotations
 
-from llmguard.redact import apply_field_redactions, set_by_path
+from domestique.redact import apply_field_redactions, set_by_path
 
 
 def test_set_by_path_nested_list_and_dict():
@@ -233,12 +233,12 @@ def test_apply_field_redactions_does_not_mutate_input():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/unit/test_redact_body.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'llmguard.redact'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'domestique.redact'`
 
 - [ ] **Step 3: Write the implementation**
 
 ```python
-# llmguard/redact.py
+# domestique/redact.py
 """Write redacted text back into nested request-body fields by dot-path."""
 
 from __future__ import annotations
@@ -276,24 +276,24 @@ Expected: PASS (3 passed)
 
 - [ ] **Step 5: Lint + typecheck**
 
-Run: `ruff check llmguard/redact.py && ruff format --check llmguard/redact.py && mypy llmguard/redact.py`
+Run: `ruff check domestique/redact.py && ruff format --check domestique/redact.py && mypy domestique/redact.py`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add llmguard/redact.py tests/unit/test_redact_body.py
+git add domestique/redact.py tests/unit/test_redact_body.py
 git commit -m "feat(wedge): dot-path body redaction helper"
 ```
 
 ---
 
-### Task 3: Redact-first wedge policy (`llmguard/policy/wedge_rules.yaml`)
+### Task 3: Redact-first wedge policy (`domestique/policy/wedge_rules.yaml`)
 
 The enterprise `rules.yaml` blocks everything. The wedge needs a redact-first policy: redact most secrets/PII (so the agent keeps working) and block only the crown-jewel categories. Ships as package data so `pip install` works.
 
 **Files:**
-- Create: `llmguard/policy/wedge_rules.yaml`
+- Create: `domestique/policy/wedge_rules.yaml`
 - Create: `tests/unit/test_wedge_policy.py`
 
 **Interfaces:**
@@ -309,12 +309,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from llmguard.detectors.registry import DetectorPipeline, build_detectors
-from llmguard.config import Settings
-from llmguard.models import Action
-from llmguard.policy import PolicyEngine
+from domestique.detectors.registry import DetectorPipeline, build_detectors
+from domestique.config import Settings
+from domestique.models import Action
+from domestique.policy import PolicyEngine
 
-_WEDGE = Path("llmguard/policy/wedge_rules.yaml")
+_WEDGE = Path("domestique/policy/wedge_rules.yaml")
 
 
 def _pipeline() -> DetectorPipeline:
@@ -350,8 +350,8 @@ Expected: FAIL (`test_wedge_policy_file_exists` fails; redact tests fail — fil
 - [ ] **Step 3: Write the policy file**
 
 ```yaml
-# llmguard/policy/wedge_rules.yaml
-# LLMGuard OSS CLI Wedge - redact-first policy.
+# domestique/policy/wedge_rules.yaml
+# Domestique OSS CLI Wedge - redact-first policy.
 #
 # The wedge protects a solo developer's outbound prompts WITHOUT breaking their
 # flow: detected secrets/PII are REDACTED in place and the (sanitized) request
@@ -415,31 +415,31 @@ rules:
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `python -m pytest tests/unit/test_wedge_policy.py -q`
-Expected: PASS (3 passed). If a category name mismatches, inspect `llmguard/detectors/secrets.py` for the exact `category` strings the regex patterns emit and align the YAML.
+Expected: PASS (3 passed). If a category name mismatches, inspect `domestique/detectors/secrets.py` for the exact `category` strings the regex patterns emit and align the YAML.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add llmguard/policy/wedge_rules.yaml tests/unit/test_wedge_policy.py
+git add domestique/policy/wedge_rules.yaml tests/unit/test_wedge_policy.py
 git commit -m "feat(wedge): redact-first wedge policy"
 ```
 
 ---
 
-### Task 4: Gateway routing + wedge pipeline factory (`llmguard/gateway.py`, part 1)
+### Task 4: Gateway routing + wedge pipeline factory (`domestique/gateway.py`, part 1)
 
 Create the gateway module skeleton: provider routing table, upstream resolution (with env override), and the wedge pipeline factory. No forwarding yet — this task establishes the map + factory + `/health` and is independently testable.
 
 **Files:**
-- Create: `llmguard/gateway.py`
+- Create: `domestique/gateway.py`
 - Test: `tests/unit/test_gateway_routing.py`
 
 **Interfaces:**
-- Consumes: `llmguard.config.Settings`, `llmguard.detectors.registry` (`build_detectors`, `DetectorPipeline`), `llmguard.policy.PolicyEngine`.
+- Consumes: `domestique.config.Settings`, `domestique.detectors.registry` (`build_detectors`, `DetectorPipeline`), `domestique.policy.PolicyEngine`.
 - Produces:
   - `ROUTES: dict[str, tuple[str, str]]` mapping request path → `(provider, kind)`.
-  - `upstream_base(provider: str) -> str` — resolves upstream base URL, honoring env `LLMGUARD_OPENAI_UPSTREAM` / `LLMGUARD_ANTHROPIC_UPSTREAM`.
-  - `build_wedge_pipeline(settings: Settings | None = None) -> DetectorPipeline` — builds detectors + the wedge policy (`llmguard/policy/wedge_rules.yaml` resolved relative to this package).
+  - `upstream_base(provider: str) -> str` — resolves upstream base URL, honoring env `DOMESTIQUE_OPENAI_UPSTREAM` / `DOMESTIQUE_ANTHROPIC_UPSTREAM`.
+  - `build_wedge_pipeline(settings: Settings | None = None) -> DetectorPipeline` — builds detectors + the wedge policy (`domestique/policy/wedge_rules.yaml` resolved relative to this package).
   - `create_gateway(settings: Settings | None = None, *, pipeline: DetectorPipeline | None = None) -> FastAPI` — app factory (routes added in Task 5). For now it exposes `GET /health`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -452,7 +452,7 @@ import os
 
 from fastapi.testclient import TestClient
 
-from llmguard.gateway import ROUTES, build_wedge_pipeline, create_gateway, upstream_base
+from domestique.gateway import ROUTES, build_wedge_pipeline, create_gateway, upstream_base
 
 
 def test_routes_cover_openai_and_anthropic():
@@ -468,13 +468,13 @@ def test_upstream_base_defaults():
 
 
 def test_upstream_base_env_override(monkeypatch):
-    monkeypatch.setenv("LLMGUARD_OPENAI_UPSTREAM", "http://127.0.0.1:9999")
+    monkeypatch.setenv("DOMESTIQUE_OPENAI_UPSTREAM", "http://127.0.0.1:9999")
     assert upstream_base("openai") == "http://127.0.0.1:9999"
 
 
 def test_build_wedge_pipeline_uses_redact_policy():
     import asyncio
-    from llmguard.models import Action
+    from domestique.models import Action
     pipe = build_wedge_pipeline()
     result = asyncio.run(pipe.inspect("key AKIAIOSFODNN7EXAMPLE here"))
     assert result.action is Action.REDACT
@@ -490,13 +490,13 @@ def test_health_endpoint():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/unit/test_gateway_routing.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'llmguard.gateway'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'domestique.gateway'`
 
 - [ ] **Step 3: Write the gateway skeleton**
 
 ```python
-# llmguard/gateway.py
-"""LLMGuard OSS CLI wedge - transparent redacting reverse proxy.
+# domestique/gateway.py
+"""Domestique OSS CLI wedge - transparent redacting reverse proxy.
 
 Routes a request by path to a provider (OpenAI/Anthropic), scans+redacts the
 prompt text using the existing detection pipeline, then forwards the redacted
@@ -512,9 +512,9 @@ from pathlib import Path
 import structlog
 from fastapi import FastAPI
 
-from llmguard.config import Settings
-from llmguard.detectors.registry import DetectorPipeline, build_detectors
-from llmguard.policy import PolicyEngine
+from domestique.config import Settings
+from domestique.detectors.registry import DetectorPipeline, build_detectors
+from domestique.policy import PolicyEngine
 
 logger = structlog.get_logger()
 
@@ -531,8 +531,8 @@ _DEFAULT_UPSTREAMS = {
     "anthropic": "https://api.anthropic.com",
 }
 _UPSTREAM_ENV = {
-    "openai": "LLMGUARD_OPENAI_UPSTREAM",
-    "anthropic": "LLMGUARD_ANTHROPIC_UPSTREAM",
+    "openai": "DOMESTIQUE_OPENAI_UPSTREAM",
+    "anthropic": "DOMESTIQUE_ANTHROPIC_UPSTREAM",
 }
 
 _WEDGE_POLICY = Path(__file__).resolve().parent / "policy" / "wedge_rules.yaml"
@@ -558,7 +558,7 @@ def create_gateway(
 ) -> FastAPI:
     """Construct the reverse-proxy app. (Proxy routes added in Task 5.)"""
     settings = settings or Settings()
-    app = FastAPI(title="LLMGuard Proxy", version="0.1.0")
+    app = FastAPI(title="Domestique Proxy", version="0.1.0")
     app.state.settings = settings
     app.state.pipeline = pipeline or build_wedge_pipeline(settings)
 
@@ -576,29 +576,29 @@ Expected: PASS (5 passed)
 
 - [ ] **Step 5: Lint + typecheck**
 
-Run: `ruff check llmguard/gateway.py && ruff format --check llmguard/gateway.py && mypy llmguard/gateway.py`
+Run: `ruff check domestique/gateway.py && ruff format --check domestique/gateway.py && mypy domestique/gateway.py`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add llmguard/gateway.py tests/unit/test_gateway_routing.py
+git add domestique/gateway.py tests/unit/test_gateway_routing.py
 git commit -m "feat(wedge): gateway routing table + wedge pipeline factory"
 ```
 
 ---
 
-### Task 5: Redacting reverse-proxy forwarding + streaming (`llmguard/gateway.py`, part 2)
+### Task 5: Redacting reverse-proxy forwarding + streaming (`domestique/gateway.py`, part 2)
 
 Add the proxy handler: for each routed path, scan+redact the body per field, block the crown-jewels, then forward the redacted bytes to the real upstream via streaming `httpx`, passing the client's auth header through, and stream the response back. Unknown paths pass through untouched.
 
 **Files:**
-- Modify: `llmguard/gateway.py`
+- Modify: `domestique/gateway.py`
 - Create: `tests/unit/test_gateway_proxy.py`
 - Create: `tests/unit/conftest.py` (test mock `MockProvider` + `mock_openai` fixture — echo + streaming, OpenAI + Anthropic paths). Placed in conftest (not a `tests.support` package) because `tests/` has no `__init__.py`; a conftest is auto-discovered with zero import risk.
 
 **Interfaces:**
-- Consumes: `ROUTES`, `upstream_base`, `create_gateway` (Task 4); `extract_texts` (Task 1); `apply_field_redactions` (Task 2); `DetectorPipeline.inspect` → `InspectionResult(action, reason, redacted_text)` (existing, `llmguard/detectors/registry.py`); `llmguard.models.Action`.
+- Consumes: `ROUTES`, `upstream_base`, `create_gateway` (Task 4); `extract_texts` (Task 1); `apply_field_redactions` (Task 2); `DetectorPipeline.inspect` → `InspectionResult(action, reason, redacted_text)` (existing, `domestique/detectors/registry.py`); `domestique.models.Action`.
 - Produces: registered routes on the app: `POST` handlers for each path in `ROUTES`, a catch-all passthrough, and a shared `httpx.AsyncClient` on `app.state.http` created/closed in the FastAPI `lifespan`.
 
 - [ ] **Step 1: Write the test mock provider**
@@ -649,7 +649,7 @@ import httpx
 import pytest
 
 from bench.eval.mock_upstream import serve
-from llmguard.gateway import create_gateway
+from domestique.gateway import create_gateway
 from tests.support.mock_provider import MockProvider
 
 
@@ -657,8 +657,8 @@ from tests.support.mock_provider import MockProvider
 def mock_openai(monkeypatch):
     provider = MockProvider()
     with serve(provider.build_app()) as base:
-        monkeypatch.setenv("LLMGUARD_OPENAI_UPSTREAM", base)
-        monkeypatch.setenv("LLMGUARD_ANTHROPIC_UPSTREAM", base)
+        monkeypatch.setenv("DOMESTIQUE_OPENAI_UPSTREAM", base)
+        monkeypatch.setenv("DOMESTIQUE_ANTHROPIC_UPSTREAM", base)
         yield provider
 
 
@@ -740,10 +740,10 @@ Expected: FAIL (routes not registered → 404/405 on the proxy paths, redaction 
 
 - [ ] **Step 4: Implement forwarding + streaming**
 
-Add to `llmguard/gateway.py`: imports, a lifespan-managed `httpx.AsyncClient`, the scan/redact core, and the route registration. Replace the `create_gateway` body's app construction to include the lifespan and routes.
+Add to `domestique/gateway.py`: imports, a lifespan-managed `httpx.AsyncClient`, the scan/redact core, and the route registration. Replace the `create_gateway` body's app construction to include the lifespan and routes.
 
 ```python
-# --- add to imports at top of llmguard/gateway.py ---
+# --- add to imports at top of domestique/gateway.py ---
 import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -753,9 +753,9 @@ import httpx
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from llmguard.extract import extract_texts
-from llmguard.models import Action
-from llmguard.redact import apply_field_redactions
+from domestique.extract import extract_texts
+from domestique.models import Action
+from domestique.redact import apply_field_redactions
 
 # hop-by-hop headers that must not be forwarded (RFC 7230 §6.1) + host/length.
 _STRIP_REQUEST_HEADERS = {
@@ -791,11 +791,11 @@ def _block_response(provider: str, reason: str) -> JSONResponse:
             status_code=403,
             content={"type": "error",
                      "error": {"type": "firewall_block",
-                               "message": f"Blocked by LLMGuard: {reason}"}},
+                               "message": f"Blocked by Domestique: {reason}"}},
         )
     return JSONResponse(
         status_code=403,
-        content={"error": {"message": f"Blocked by LLMGuard: {reason}",
+        content={"error": {"message": f"Blocked by Domestique: {reason}",
                            "type": "firewall_block"}},
     )
 
@@ -889,7 +889,7 @@ def create_gateway(
         finally:
             await app.state.http.aclose()
 
-    app = FastAPI(title="LLMGuard Proxy", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Domestique Proxy", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.pipeline = pipeline or build_wedge_pipeline(settings)
 
@@ -924,28 +924,28 @@ Expected: PASS (5 passed). If `content-encoding` mismatches cause decode errors,
 
 - [ ] **Step 6: Full lint + typecheck + regression**
 
-Run: `ruff check llmguard tests && ruff format --check llmguard tests && mypy llmguard/gateway.py && python -m pytest tests/unit/test_extract.py tests/unit/test_redact_body.py tests/unit/test_wedge_policy.py tests/unit/test_gateway_routing.py tests/unit/test_gateway_proxy.py -q`
+Run: `ruff check domestique tests && ruff format --check domestique tests && mypy domestique/gateway.py && python -m pytest tests/unit/test_extract.py tests/unit/test_redact_body.py tests/unit/test_wedge_policy.py tests/unit/test_gateway_routing.py tests/unit/test_gateway_proxy.py -q`
 Expected: all pass, no lint/type errors.
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add llmguard/gateway.py tests/unit/test_gateway_proxy.py tests/support/mock_provider.py
+git add domestique/gateway.py tests/unit/test_gateway_proxy.py tests/support/mock_provider.py
 git commit -m "feat(wedge): redacting reverse-proxy with streaming passthrough (OpenAI + Anthropic)"
 ```
 
 ---
 
-### Task 6: CLI — `start`, `demo`, `--version` (`llmguard/cli.py`)
+### Task 6: CLI — `start`, `demo`, `--version` (`domestique/cli.py`)
 
 Add the console entry point. `start` prints the copy-paste banner and runs uvicorn on the gateway (default `127.0.0.1:8000`). `demo` runs the detect→redact pipeline in-process on a canned secret-laden prompt and prints a before/after diff.
 
 **Files:**
-- Create: `llmguard/cli.py`
+- Create: `domestique/cli.py`
 - Test: `tests/unit/test_cli.py`
 
 **Interfaces:**
-- Consumes: `create_gateway`, `build_wedge_pipeline` (Task 4); `llmguard.__version__` (add if missing — see Step 3).
+- Consumes: `create_gateway`, `build_wedge_pipeline` (Task 4); `domestique.__version__` (add if missing — see Step 3).
 - Produces: `main(argv: list[str] | None = None) -> int`; `run_demo() -> int` (async pipeline run, returns 0); the `start` path calls `uvicorn.run(create_gateway(...), host=..., port=...)`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -954,14 +954,14 @@ Add the console entry point. `start` prints the copy-paste banner and runs uvico
 # tests/unit/test_cli.py
 from __future__ import annotations
 
-from llmguard.cli import main
+from domestique.cli import main
 
 
 def test_version(capsys):
     rc = main(["--version"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert "llmguard" in out.lower()
+    assert "domestique" in out.lower()
 
 
 def test_demo_redacts_and_prints(capsys):
@@ -989,20 +989,20 @@ def test_start_is_wired(monkeypatch):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/unit/test_cli.py -q`
-Expected: FAIL with `ModuleNotFoundError: No module named 'llmguard.cli'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'domestique.cli'`
 
 - [ ] **Step 3: Implement the CLI**
 
-First ensure a version constant exists. In `llmguard/__init__.py` add (if not present) `__version__ = "0.1.0"` to the module and to `__all__`.
+First ensure a version constant exists. In `domestique/__init__.py` add (if not present) `__version__ = "0.1.0"` to the module and to `__all__`.
 
 ```python
-# llmguard/cli.py
-"""LLMGuard OSS CLI - the developer wedge entry point.
+# domestique/cli.py
+"""Domestique OSS CLI - the developer wedge entry point.
 
 Commands:
-    llmguard start [--host H] [--port P]   launch the :8000 redacting proxy
-    llmguard demo                          show a before/after redaction, no key needed
-    llmguard --version
+    domestique start [--host H] [--port P]   launch the :8000 redacting proxy
+    domestique demo                          show a before/after redaction, no key needed
+    domestique --version
 """
 
 from __future__ import annotations
@@ -1011,7 +1011,7 @@ import argparse
 import asyncio
 import sys
 
-from llmguard import __version__
+from domestique import __version__
 
 _DEMO_PROMPT = (
     "Here is my AWS key AKIAIOSFODNN7EXAMPLE and email jane.doe@corp.com, "
@@ -1021,7 +1021,7 @@ _DEMO_PROMPT = (
 
 def _banner(host: str, port: int) -> str:
     return (
-        f"\nLLMGuard proxy running on http://{host}:{port}\n"
+        f"\nDomestique proxy running on http://{host}:{port}\n"
         "Point your agent at it:\n"
         f"  export OPENAI_BASE_URL=http://{host}:{port}/v1\n"
         f"  export ANTHROPIC_BASE_URL=http://{host}:{port}\n"
@@ -1032,7 +1032,7 @@ def _banner(host: str, port: int) -> str:
 def _cmd_start(host: str, port: int) -> int:
     import uvicorn
 
-    from llmguard.gateway import create_gateway
+    from domestique.gateway import create_gateway
 
     print(_banner(host, port))
     uvicorn.run(create_gateway(), host=host, port=port)
@@ -1040,12 +1040,12 @@ def _cmd_start(host: str, port: int) -> int:
 
 
 def run_demo() -> int:
-    from llmguard.gateway import build_wedge_pipeline
+    from domestique.gateway import build_wedge_pipeline
 
     pipeline = build_wedge_pipeline()
     result = asyncio.run(pipeline.inspect(_DEMO_PROMPT))
     after = result.redacted_text or _DEMO_PROMPT
-    print("LLMGuard demo - watch it redact secrets before they reach the LLM.\n")
+    print("Domestique demo - watch it redact secrets before they reach the LLM.\n")
     print("BEFORE:\n" + _DEMO_PROMPT + "\n")
     print("AFTER (sent to the model):\n" + after + "\n")
     if result.findings:
@@ -1054,8 +1054,8 @@ def run_demo() -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="llmguard", description="LLMGuard OSS CLI wedge")
-    parser.add_argument("--version", action="version", version=f"llmguard {__version__}")
+    parser = argparse.ArgumentParser(prog="domestique", description="Domestique OSS CLI wedge")
+    parser.add_argument("--version", action="version", version=f"domestique {__version__}")
     sub = parser.add_subparsers(dest="cmd")
 
     start = sub.add_parser("start", help="launch the :8000 redacting proxy")
@@ -1080,33 +1080,33 @@ if __name__ == "__main__":
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `python -m pytest tests/unit/test_cli.py -q`
-Expected: PASS (3 passed). The `test_demo_redacts_and_prints` assertion assumes the AWS key + SSN + email are redacted under the wedge policy; if the AWS-key regex needs specific formatting, adjust `_DEMO_PROMPT` to a value `SecretDetector` matches (verify against `llmguard/detectors/secrets.py`).
+Expected: PASS (3 passed). The `test_demo_redacts_and_prints` assertion assumes the AWS key + SSN + email are redacted under the wedge policy; if the AWS-key regex needs specific formatting, adjust `_DEMO_PROMPT` to a value `SecretDetector` matches (verify against `domestique/detectors/secrets.py`).
 
 - [ ] **Step 5: Lint + typecheck**
 
-Run: `ruff check llmguard/cli.py llmguard/__init__.py && ruff format --check llmguard/cli.py && mypy llmguard/cli.py`
+Run: `ruff check domestique/cli.py domestique/__init__.py && ruff format --check domestique/cli.py && mypy domestique/cli.py`
 Expected: no errors.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add llmguard/cli.py llmguard/__init__.py tests/unit/test_cli.py
-git commit -m "feat(wedge): llmguard CLI - start, demo, --version"
+git add domestique/cli.py domestique/__init__.py tests/unit/test_cli.py
+git commit -m "feat(wedge): domestique CLI - start, demo, --version"
 ```
 
 ---
 
 ### Task 7: Packaging — console script + build config + package data (`pyproject.toml`)
 
-Wire the `llmguard` console command and make `pip install`/`pipx install` produce a working wedge with the policy YAML bundled. There is currently **no `[build-system]`** and `setup.py` is py2app-only — add an explicit setuptools build config scoped to not disturb the py2app path.
+Wire the `domestique` console command and make `pip install`/`pipx install` produce a working wedge with the policy YAML bundled. There is currently **no `[build-system]`** and `setup.py` is py2app-only — add an explicit setuptools build config scoped to not disturb the py2app path.
 
 **Files:**
 - Modify: `pyproject.toml`
 - Test: `tests/unit/test_packaging.py`
 
 **Interfaces:**
-- Consumes: `llmguard.cli:main` (Task 6); `llmguard/policy/wedge_rules.yaml` (Task 3).
-- Produces: a `llmguard` console script; `llmguard.policy` package includes `*.yaml` as data.
+- Consumes: `domestique.cli:main` (Task 6); `domestique/policy/wedge_rules.yaml` (Task 3).
+- Produces: a `domestique` console script; `domestique.policy` package includes `*.yaml` as data.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1124,7 +1124,7 @@ def _pyproject() -> dict:
 
 def test_console_script_declared():
     scripts = _pyproject()["project"]["scripts"]
-    assert scripts["llmguard"] == "llmguard.cli:main"
+    assert scripts["domestique"] == "domestique.cli:main"
 
 
 def test_build_system_declared():
@@ -1135,7 +1135,7 @@ def test_build_system_declared():
 def test_wedge_policy_shipped_as_package_data():
     # setuptools package-data must include the wedge policy yaml.
     data = _pyproject()["tool"]["setuptools"]["package-data"]
-    globs = data.get("llmguard.policy") or data.get("llmguard") or []
+    globs = data.get("domestique.policy") or data.get("domestique") or []
     assert any(g.endswith(".yaml") for g in globs)
 ```
 
@@ -1158,20 +1158,20 @@ Add the console script — insert directly after the `license = {text = "Apache-
 
 ```toml
 [project.scripts]
-llmguard = "llmguard.cli:main"
+domestique = "domestique.cli:main"
 ```
 
 Add setuptools package discovery + data near the other `[tool.*]` tables:
 
 ```toml
 [tool.setuptools]
-packages = ["llmguard", "llmguard.audit", "llmguard.detectors", "llmguard.policy", "llmguard.transport"]
+packages = ["domestique", "domestique.audit", "domestique.detectors", "domestique.policy", "domestique.transport"]
 
 [tool.setuptools.package-data]
-"llmguard.policy" = ["*.yaml"]
+"domestique.policy" = ["*.yaml"]
 ```
 
-Verify the `[project.scripts]` block is valid TOML in context (it is a top-level table, not nested under `[project]` — place it after the `[project.optional-dependencies]` block if that reads more cleanly; both are equivalent). Confirm the package list matches the actual subpackages under `llmguard/` (run `python -c "import pkgutil,llmguard; print([m.name for m in pkgutil.iter_modules(llmguard.__path__)])"` and include every subpackage that has an `__init__.py`).
+Verify the `[project.scripts]` block is valid TOML in context (it is a top-level table, not nested under `[project]` — place it after the `[project.optional-dependencies]` block if that reads more cleanly; both are equivalent). Confirm the package list matches the actual subpackages under `domestique/` (run `python -c "import pkgutil,domestique; print([m.name for m in pkgutil.iter_modules(domestique.__path__)])"` and include every subpackage that has an `__init__.py`).
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1182,10 +1182,10 @@ Expected: PASS (3 passed).
 
 ```bash
 pip install -e . -q
-llmguard --version
-llmguard demo
+domestique --version
+domestique demo
 ```
-Expected: `llmguard 0.1.0`; demo prints BEFORE/AFTER with the AWS key redacted in AFTER. If `pip install -e .` errors on package discovery, adjust `[tool.setuptools].packages` to the exact subpackage list.
+Expected: `domestique 0.1.0`; demo prints BEFORE/AFTER with the AWS key redacted in AFTER. If `pip install -e .` errors on package discovery, adjust `[tool.setuptools].packages` to the exact subpackage list.
 
 - [ ] **Step 6: Verify a built wheel bundles the policy YAML**
 
@@ -1195,18 +1195,18 @@ python - <<'PY'
 import glob, zipfile
 whl = sorted(glob.glob("dist_wedge_check/*.whl"))[-1]
 names = zipfile.ZipFile(whl).namelist()
-assert any(n.endswith("llmguard/policy/wedge_rules.yaml") for n in names), names
+assert any(n.endswith("domestique/policy/wedge_rules.yaml") for n in names), names
 print("wedge_rules.yaml present in wheel:", whl)
 PY
 rm -rf dist_wedge_check
 ```
-Expected: prints "wedge_rules.yaml present in wheel". This proves `pipx install llmguard` will find the policy at runtime.
+Expected: prints "wedge_rules.yaml present in wheel". This proves `pipx install domestique` will find the policy at runtime.
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add pyproject.toml tests/unit/test_packaging.py
-git commit -m "build(wedge): llmguard console script + setuptools build config + policy package-data"
+git commit -m "build(wedge): domestique console script + setuptools build config + policy package-data"
 ```
 
 ---
@@ -1225,17 +1225,17 @@ Rewrite `README.md` so the hero is the developer wedge (install → `start` → 
 Replace everything from the title through the end of the current "Quick Start" section with the wedge hero. Keep the existing "How Transparent Interception Works", "Project Layout", and "License" sections but move them under a new "## Browser mode (optional)" / "## Enterprise" framing lower down. New hero:
 
 ```markdown
-# LLMGuard
+# Domestique
 
-**A local AI firewall for developers.** Point your agent or app at LLMGuard and it
+**A local AI firewall for developers.** Point your agent or app at Domestique and it
 redacts secrets and PII out of your prompts *before* they reach OpenAI, Anthropic, or
 any LLM — with zero system changes. No CA to install, no system proxy, cross-platform.
 
 ## Quick start
 
 ```bash
-pipx install llmguard            # or: pip install llmguard
-llmguard start                   # launches the redacting proxy on http://127.0.0.1:8000
+pipx install domestique            # or: pip install domestique
+domestique start                   # launches the redacting proxy on http://127.0.0.1:8000
 ```
 
 Point your tool at it and keep using your own API key:
@@ -1250,7 +1250,7 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:8000
 Want to see it work first, with no API key and nothing to configure?
 
 ```bash
-llmguard demo
+domestique demo
 ```
 
 It runs a prompt full of fake secrets through the firewall and shows you the
@@ -1261,7 +1261,7 @@ before/after:
 
 ## How it works
 
-LLMGuard runs a local reverse proxy. For each request it scans the prompt with a
+Domestique runs a local reverse proxy. For each request it scans the prompt with a
 tiered detection engine (fast regex first; optional NLP/NER and a local LLM classifier
 for nuance), redacts anything sensitive in place, then forwards the sanitized request
 to the real provider using **your** API key. The response streams straight back — only
@@ -1273,11 +1273,11 @@ the outbound prompt is touched.
 - **Cross-platform** — macOS, Linux, Windows.
 ```
 
-Then keep the existing detection-presets table, "How Transparent Interception Works", "Project Layout", and "License" sections, introduced by a short line like: "LLMGuard also has an optional browser mode and enterprise editions — see below." Do NOT add any `brew install` line.
+Then keep the existing detection-presets table, "How Transparent Interception Works", "Project Layout", and "License" sections, introduced by a short line like: "Domestique also has an optional browser mode and enterprise editions — see below." Do NOT add any `brew install` line.
 
 - [ ] **Step 2: Verify the README claims match reality**
 
-Manually confirm every command in the new hero actually runs: `llmguard start`, the two exports, `llmguard demo`. Confirm the AFTER redaction placeholders match what `llmguard demo` actually prints (run it and copy the real output). Fix the sample to match real output exactly — honest README.
+Manually confirm every command in the new hero actually runs: `domestique start`, the two exports, `domestique demo`. Confirm the AFTER redaction placeholders match what `domestique demo` actually prints (run it and copy the real output). Fix the sample to match real output exactly — honest README.
 
 - [ ] **Step 3: Commit**
 
@@ -1301,7 +1301,7 @@ Expected: all pass (new wedge tests + pre-existing suite). Investigate any regre
 
 - [ ] **Step 2: Lint + typecheck the whole change**
 
-Run: `ruff check . && ruff format --check . && mypy llmguard/extract.py llmguard/redact.py llmguard/gateway.py llmguard/cli.py`
+Run: `ruff check . && ruff format --check . && mypy domestique/extract.py domestique/redact.py domestique/gateway.py domestique/cli.py`
 Expected: clean.
 
 - [ ] **Step 3: Live smoke against the mock provider**
@@ -1310,14 +1310,14 @@ Expected: clean.
 python - <<'PY'
 import os, threading, time, httpx, uvicorn
 from tests.support.mock_provider import MockProvider
-from llmguard.gateway import create_gateway
+from domestique.gateway import create_gateway
 
 prov = MockProvider()
 import socket
 def free():
     s=socket.socket(); s.bind(("127.0.0.1",0)); p=s.getsockname()[1]; s.close(); return p
 up=free(); gw=free()
-os.environ["LLMGUARD_OPENAI_UPSTREAM"]=f"http://127.0.0.1:{up}"
+os.environ["DOMESTIQUE_OPENAI_UPSTREAM"]=f"http://127.0.0.1:{up}"
 threading.Thread(target=lambda: uvicorn.run(prov.build_app(), host="127.0.0.1", port=up, log_level="error"), daemon=True).start()
 threading.Thread(target=lambda: uvicorn.run(create_gateway(), host="127.0.0.1", port=gw, log_level="error"), daemon=True).start()
 time.sleep(2)
@@ -1335,7 +1335,7 @@ Expected: prints "OK: secret redacted before upstream".
 - [ ] **Step 4: Confirm no off-limits files were touched**
 
 Run: `git diff --name-only main...HEAD`
-Expected: only `llmguard/**`, `tests/**`, `pyproject.toml`, `README.md`, `docs/superpowers/**`. NONE of `app/services/{mitm_addon,proxy,interceptor}.py`, `app/main.py`, `app/config/schema.py`.
+Expected: only `domestique/**`, `tests/**`, `pyproject.toml`, `README.md`, `docs/superpowers/**`. NONE of `app/services/{mitm_addon,proxy,interceptor}.py`, `app/main.py`, `app/config/schema.py`.
 
 - [ ] **Step 5: Push branch + open draft PR**
 
@@ -1358,15 +1358,15 @@ gh pr create --draft --title "feat: OSS CLI wedge (Phase 1)" --body "Implements 
 - §3.4 shared factored logic → T1/T2 (behavior-preserving; `app.py` left intact to avoid destabilizing — spec allowed either factoring or leaving it; we duplicate minimally rather than risk the existing strict-typed `app.py`).
 - §4 key passthrough + env fallback + 127.0.0.1 → T5 (`_forward_headers`), T6 (start default host).
 - §5 `start` launches only the proxy + banner → T6.
-- §6 `llmguard demo` in-process → T6.
+- §6 `domestique demo` in-process → T6.
 - §7 packaging + README → T7, T8.
 - §8 error handling (fail-closed, redact-error→block, upstream errors) → covered: block on detected crown-jewels (T5); non-JSON → passthrough; **Note:** the spec's "redaction error → block" is handled implicitly (detector errors already surface as a synthetic high-confidence `detector_error` Detection inside `DetectorPipeline.inspect`, which the wedge policy does not redact → falls through as ALLOW). **Gap fix:** the wedge policy (T3) does not treat `detector_error` as block. Add a `block-on-detector-error` rule to `wedge_rules.yaml` matching category `detector_error` (detector `pipeline`, action `block`, min_confidence 0.9) so a pipeline failure fails closed. Adjust T3 Step 3 to include it.
 - §9 testing → each task is TDD; mock provider (T5) reuses `serve()`; eval harness referenced not duplicated.
 - §10 out-of-scope items → none built (verified: no response mutation, no dashboard, no telemetry, no browser/CA, no rename).
 
-**Placeholder scan:** No TBD/TODO; every code step has complete code. Category-name alignment steps (T3 S4, T6 S4) reference the real source of truth (`llmguard/detectors/secrets.py`) rather than leaving a blank.
+**Placeholder scan:** No TBD/TODO; every code step has complete code. Category-name alignment steps (T3 S4, T6 S4) reference the real source of truth (`domestique/detectors/secrets.py`) rather than leaving a blank.
 
-**Type consistency:** `extract_texts(body, kind)` (T1) used identically in T5. `apply_field_redactions(body, redactions)` (T2) used in T5 `_scan_and_redact`. `InspectionResult.action/redacted_text/reason/findings` match the existing dataclass in `llmguard/detectors/registry.py`. `create_gateway`/`build_wedge_pipeline`/`upstream_base`/`ROUTES` signatures consistent across T4→T5→T6. `main(argv)` consistent T6→T7.
+**Type consistency:** `extract_texts(body, kind)` (T1) used identically in T5. `apply_field_redactions(body, redactions)` (T2) used in T5 `_scan_and_redact`. `InspectionResult.action/redacted_text/reason/findings` match the existing dataclass in `domestique/detectors/registry.py`. `create_gateway`/`build_wedge_pipeline`/`upstream_base`/`ROUTES` signatures consistent across T4→T5→T6. `main(argv)` consistent T6→T7.
 
 **Fold-in from self-review:** T3 Step 3 must also include the fail-closed `detector_error` rule:
 ```yaml

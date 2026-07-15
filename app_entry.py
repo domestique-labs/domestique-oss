@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LLMGuard app bundle entry point (py2app)."""
+"""Domestique app bundle entry point (py2app)."""
 import sys
 import os
 

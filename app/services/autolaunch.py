@@ -1,4 +1,4 @@
-"""Auto-launch management - register LLMGuard to start on login.
+"""Auto-launch management - register Domestique to start on login.
 
 Provides two mechanisms for automatic startup:
 1. SMAppService (macOS 13+) - modern login item API
@@ -25,10 +25,10 @@ from pathlib import Path
 
 from app.services.runtime import is_macos, is_windows, venv_python
 
-logger = logging.getLogger("llmguard.autolaunch")
+logger = logging.getLogger("domestique.autolaunch")
 
-BUNDLE_ID = "com.llmguard.agent"
-APP_NAME = "LLMGuard"
+BUNDLE_ID = "com.domestique.agent"
+APP_NAME = "Domestique"
 LAUNCH_AGENT_DIR = Path.home() / "Library" / "LaunchAgents"
 LAUNCH_AGENT_PLIST = LAUNCH_AGENT_DIR / f"{BUNDLE_ID}.plist"
 LAUNCH_DAEMON_PLIST = Path("/Library/LaunchDaemons") / f"{BUNDLE_ID}.plist"
@@ -36,7 +36,7 @@ WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
 class AutoLaunchManager:
-    """Manages LLMGuard's auto-launch on login.
+    """Manages Domestique's auto-launch on login.
 
     Tries SMAppService first (modern API), falls back to LaunchAgent plist.
     """
@@ -69,7 +69,7 @@ class AutoLaunchManager:
         return False
 
     def enable(self) -> bool:
-        """Register LLMGuard for auto-launch on login.
+        """Register Domestique for auto-launch on login.
 
         Returns True if registration succeeded.
         """
@@ -89,7 +89,7 @@ class AutoLaunchManager:
             return False
 
     def disable(self) -> bool:
-        """Remove LLMGuard from auto-launch.
+        """Remove Domestique from auto-launch.
 
         Returns True if removal succeeded.
         """
@@ -131,8 +131,8 @@ class AutoLaunchManager:
                 "SuccessfulExit": False,  # Restart on crash
             },
             "WorkingDirectory": str(self._project_root),
-            "StandardOutPath": str(Path.home() / ".llmguard" / "logs" / "stdout.log"),
-            "StandardErrorPath": str(Path.home() / ".llmguard" / "logs" / "stderr.log"),
+            "StandardOutPath": str(Path.home() / ".domestique" / "logs" / "stdout.log"),
+            "StandardErrorPath": str(Path.home() / ".domestique" / "logs" / "stderr.log"),
             "EnvironmentVariables": {
                 "PATH": "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin",
                 "PYTHONPATH": str(self._project_root),
@@ -142,7 +142,7 @@ class AutoLaunchManager:
         }
 
         # Ensure log directory exists
-        (Path.home() / ".llmguard" / "logs").mkdir(parents=True, exist_ok=True)
+        (Path.home() / ".domestique" / "logs").mkdir(parents=True, exist_ok=True)
 
         with open(LAUNCH_AGENT_PLIST, "wb") as f:
             plistlib.dump(plist, f)
@@ -185,7 +185,7 @@ class AutoLaunchManager:
             return False
 
     def _enable_windows_run_key(self) -> bool:
-        """Register LLMGuard in the current user's Windows Run key."""
+        """Register Domestique in the current user's Windows Run key."""
         import winreg
 
         python_bin = str(venv_python(self._project_root) or self._python)
@@ -204,7 +204,7 @@ class AutoLaunchManager:
         return True
 
     def _disable_windows_run_key(self) -> bool:
-        """Remove LLMGuard from the current user's Windows Run key."""
+        """Remove Domestique from the current user's Windows Run key."""
         import winreg
 
         with winreg.CreateKeyEx(
@@ -231,22 +231,22 @@ def generate_installer_script() -> str:
     Returns the script content as a string.
     """
     return """#!/bin/bash
-# LLMGuard Installer - One-line enterprise deployment
-# Usage: curl -sSL https://llmguard.dev/install | bash
+# Domestique Installer - One-line enterprise deployment
+# Usage: curl -sSL https://domestique.dev/install | bash
 set -euo pipefail
 
-INSTALL_DIR="$HOME/.llmguard/app"
-DATA_DIR="$HOME/.llmguard"
-REPO_URL="https://github.com/llmguard/llmguard.git"
+INSTALL_DIR="$HOME/.domestique/app"
+DATA_DIR="$HOME/.domestique"
+REPO_URL="https://github.com/domestique/domestique.git"
 
-echo "🛡️  Installing LLMGuard..."
+echo "🛡️  Installing Domestique..."
 
 # 1. Clone or update
 if [ -d "$INSTALL_DIR" ]; then
     echo "  -> Updating existing installation..."
     cd "$INSTALL_DIR" && git pull --quiet
 else
-    echo "  -> Downloading LLMGuard..."
+    echo "  -> Downloading Domestique..."
     git clone --quiet "$REPO_URL" "$INSTALL_DIR"
     cd "$INSTALL_DIR"
 fi
@@ -276,27 +276,27 @@ print('    Auto-launch enabled')
 "
 
 # 5. Start the app
-echo "  -> Starting LLMGuard..."
+echo "  -> Starting Domestique..."
 python3 -c "
 import sys; sys.path.insert(0, '.')
 from app.main import launch
 " &
 
 echo ""
-echo "✅ LLMGuard installed and running!"
+echo "✅ Domestique installed and running!"
 echo "   Menu bar icon should appear shortly."
 echo "   Data directory: $DATA_DIR"
-echo "   To uninstall: ~/.llmguard/app/scripts/uninstall.sh"
+echo "   To uninstall: ~/.domestique/app/scripts/uninstall.sh"
 """
 
 
 def generate_uninstaller_script() -> str:
     """Generate an uninstaller shell script."""
     return f"""#!/bin/bash
-# LLMGuard Uninstaller - Clean removal
+# Domestique Uninstaller - Clean removal
 set -euo pipefail
 
-echo "🗑️  Uninstalling LLMGuard..."
+echo "🗑️  Uninstalling Domestique..."
 
 # Stop the service
 launchctl unload ~/Library/LaunchAgents/{BUNDLE_ID}.plist 2>/dev/null || true
@@ -305,7 +305,7 @@ launchctl unload ~/Library/LaunchAgents/{BUNDLE_ID}.plist 2>/dev/null || true
 rm -f ~/Library/LaunchAgents/{BUNDLE_ID}.plist
 
 # Remove CA from keychain
-security delete-certificate -c "LLMGuard Local CA" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
+security delete-certificate -c "Domestique Local CA" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
 security delete-certificate -c "LLM Firewall Local CA" ~/Library/Keychains/login.keychain-db 2>/dev/null || true
 
 # Remove system proxy settings
@@ -314,14 +314,14 @@ for svc in "Wi-Fi" "Ethernet" "USB 10/100/1000 LAN" "Thunderbolt Bridge"; do
 done
 
 # Remove data
-rm -rf ~/.llmguard
+rm -rf ~/.domestique
 
 # Remove app (optional - keep for reinstall)
 read -p "Remove application code? [y/N] " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    rm -rf ~/.llmguard/app
+    rm -rf ~/.domestique/app
 fi
 
-echo "✅ LLMGuard uninstalled."
+echo "✅ Domestique uninstalled."
 """

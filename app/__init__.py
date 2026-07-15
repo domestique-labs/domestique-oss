@@ -1,4 +1,4 @@
-"""LLMGuard desktop application.
+"""Domestique desktop application.
 
 Provides enterprise-grade data loss prevention controls for LLM API traffic.
 On macOS it can use the native AppKit shell; on Windows and Linux it runs the

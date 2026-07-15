@@ -115,7 +115,7 @@ class _VenvScanner:
             "logging.basicConfig(stream=sys.stderr)\n"
             "import structlog; structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))\n"
             "from app.services.pipeline_config import load_config_dict, config_hash, settings_from_config\n"
-            "from llmguard.detectors.registry import create_detector_pipeline\n"
+            "from domestique.detectors.registry import create_detector_pipeline\n"
             "cfg = load_config_dict()\n"
             "cfg_hash = config_hash(cfg)\n"
             "settings = settings_from_config(cfg)\n"
@@ -206,7 +206,7 @@ _venv_scanner = _VenvScanner()
 
 
 class _ResourceMonitor:
-    """Tracks LLMGuard process CPU and memory usage (not system-wide).
+    """Tracks Domestique process CPU and memory usage (not system-wide).
 
     Uses cross-platform APIs:
     - CPU: time.process_time() (user + system, all platforms)
@@ -540,7 +540,7 @@ class APIHandler(BaseHTTPRequestHandler):
             from app.services.interceptor import get_intercepted_domains
 
             # Read live stats from the mitm addon
-            stats_file = Path.home() / ".llmguard" / "browser_stats.json"
+            stats_file = Path.home() / ".domestique" / "browser_stats.json"
             # `light_profile_active`: whether the addon auto-downgraded to
             # regex-only detection because it detected low-resource hardware
             # (see app/services/mitm_addon.py::_light_profile_active). This
@@ -582,7 +582,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/proxy.pac":
             # Serve PAC file via HTTP (Safari ignores file:// PAC in some cases)
-            pac_path = Path.home() / ".llmguard" / "proxy.pac"
+            pac_path = Path.home() / ".domestique" / "proxy.pac"
             if pac_path.exists():
                 content = pac_path.read_bytes()
                 try:
@@ -633,12 +633,12 @@ class APIHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/classifier-prompt/default":
             # Serve the built-in default classifier prompt
-            from llmguard.detectors.local_llm import _CLASSIFIER_SYSTEM_PROMPT
+            from domestique.detectors.local_llm import _CLASSIFIER_SYSTEM_PROMPT
 
             self._send_json({"prompt": _CLASSIFIER_SYSTEM_PROMPT})
 
         elif self.path == "/api/builtin-patterns":
-            from llmguard.detectors.secrets import _PATTERNS
+            from domestique.detectors.secrets import _PATTERNS
 
             self._send_json(
                 {
@@ -854,7 +854,7 @@ class APIHandler(BaseHTTPRequestHandler):
         limit = int(params.get("limit", ["100"])[0])
         action_filter = params.get("filter", [None])[0]
 
-        log_file = Path.home() / ".llmguard" / "request_log.jsonl"
+        log_file = Path.home() / ".domestique" / "request_log.jsonl"
         entries = []
         try:
             if log_file.exists():
@@ -880,7 +880,7 @@ class APIHandler(BaseHTTPRequestHandler):
         """Serve the raw prompt decision trace with optional filtering."""
         from urllib.parse import parse_qs, urlparse
 
-        from llmguard.debug_trace import read_debug_trace
+        from domestique.debug_trace import read_debug_trace
 
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
@@ -1032,7 +1032,7 @@ class APIHandler(BaseHTTPRequestHandler):
             from app.services.notifications import notify
 
             categories = ", ".join(approval.findings[:3])
-            title = "LLMGuard: Approval Needed"
+            title = "Domestique: Approval Needed"
             msg = f"{categories} detected in request to {approval.host}"
             notify(title, msg)
         except Exception:
@@ -1203,7 +1203,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 except Exception:
                     pass
         # Custom uploaded dataset
-        custom = Path.home() / ".llmguard" / "workshop" / "custom_dataset.json"
+        custom = Path.home() / ".domestique" / "workshop" / "custom_dataset.json"
         if custom.exists():
             try:
                 data = json.loads(custom.read_text(encoding="utf-8"))
@@ -1278,7 +1278,7 @@ class APIHandler(BaseHTTPRequestHandler):
                     s["difficulty"] = "medium"
 
             # Save custom dataset
-            custom_dir = Path.home() / ".llmguard" / "workshop"
+            custom_dir = Path.home() / ".domestique" / "workshop"
             custom_dir.mkdir(parents=True, exist_ok=True)
             custom_path = custom_dir / "custom_dataset.json"
             custom_data = {
@@ -1347,7 +1347,7 @@ class APIHandler(BaseHTTPRequestHandler):
                     return
 
             # Save as custom dataset
-            custom_dir = Path.home() / ".llmguard" / "workshop"
+            custom_dir = Path.home() / ".domestique" / "workshop"
             custom_dir.mkdir(parents=True, exist_ok=True)
             custom_path = custom_dir / "custom_dataset.json"
             custom_data = {
@@ -1395,7 +1395,7 @@ class APIHandler(BaseHTTPRequestHandler):
         if _workshop_bench["report"]:
             self._send_json({"ok": True, "running": False, "report": _workshop_bench["report"]})
             return
-        results_path = Path.home() / ".llmguard" / "workshop" / "last_benchmark.json"
+        results_path = Path.home() / ".domestique" / "workshop" / "last_benchmark.json"
         if results_path.exists():
             try:
                 data = json.loads(results_path.read_text(encoding="utf-8"))
@@ -1520,7 +1520,7 @@ class APIHandler(BaseHTTPRequestHandler):
                     "metrics": metrics,
                     "results": results,
                 }
-                results_dir = Path.home() / ".llmguard" / "workshop"
+                results_dir = Path.home() / ".domestique" / "workshop"
                 results_dir.mkdir(parents=True, exist_ok=True)
                 (results_dir / "last_benchmark.json").write_text(json.dumps(report, indent=2))
                 _workshop_bench["report"] = report
@@ -1672,7 +1672,7 @@ class APIHandler(BaseHTTPRequestHandler):
 
     def _get_active_dataset_path(self, prefer_custom: bool = False) -> Path:
         """Return path to the active dataset (custom if exists, else built-in)."""
-        custom_path = Path.home() / ".llmguard" / "workshop" / "custom_dataset.json"
+        custom_path = Path.home() / ".domestique" / "workshop" / "custom_dataset.json"
         # Resolve project root (handles py2app bundle where __file__ is inside .app)
         project_root = Path(__file__).parent.parent.parent
         if not (project_root / "workshop").exists():

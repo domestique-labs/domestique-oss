@@ -9,7 +9,7 @@ the transparent proxy. It:
 4. Blocks, redacts, or queues for approval before forwarding
 
 The addon is designed to be loaded via:
-    mitmdump --set confdir=~/.llmguard/ca -s app/services/mitm_addon.py
+    mitmdump --set confdir=~/.domestique/ca -s app/services/mitm_addon.py
 
 Architecture:
     Browser -> System Proxy -> mitmproxy (port 8080) -> this addon -> upstream LLM
@@ -46,7 +46,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-logger = logging.getLogger("llmguard.mitm")
+logger = logging.getLogger("domestique.mitm")
 
 
 # --- Hardware-aware detection profile ---------------------------------------
@@ -183,7 +183,7 @@ class _DetectorPipeline:
         )
 
 
-class LLMGuardAddon:
+class DomestiqueAddon:
     """Mitmproxy addon that inspects LLM API requests for sensitive data.
 
     Only processes requests to known LLM endpoints. All other traffic
@@ -268,7 +268,7 @@ class LLMGuardAddon:
 
     def __init__(self):
         self._detector = None
-        self._data_dir = Path.home() / ".llmguard"
+        self._data_dir = Path.home() / ".domestique"
         self._stats = {
             "inspected": 0,
             "blocked": 0,
@@ -294,7 +294,7 @@ class LLMGuardAddon:
         self._config_file = self._data_dir / "config.json"
         self._api_base = "http://127.0.0.1:9876"
         self._data_dir.mkdir(parents=True, exist_ok=True)
-        # Ready by default: tests/tools that construct LLMGuardAddon() and
+        # Ready by default: tests/tools that construct DomestiqueAddon() and
         # assign self._detector directly (bypassing load()) get immediate,
         # non-blocking behavior. load() clears this while the pipeline is
         # being built on a background thread.
@@ -414,7 +414,7 @@ class LLMGuardAddon:
             event["raw_body_preview"] = raw_body_preview
         if extra:
             event.update(extra)
-        from llmguard.debug_trace import append_debug_trace
+        from domestique.debug_trace import append_debug_trace
 
         append_debug_trace(event)
 
@@ -443,7 +443,7 @@ class LLMGuardAddon:
         intercepted LLM traffic until the pipeline is ready, and fails
         closed if it never becomes ready.
         """
-        ctx.log.info("LLMGuard addon loaded - inspecting LLM API traffic")
+        ctx.log.info("Domestique addon loaded - inspecting LLM API traffic")
         self._detector_ready.clear()
         self._detector_init_error = None
         threading.Thread(
@@ -532,7 +532,7 @@ class LLMGuardAddon:
             load_config_dict,
             settings_from_config,
         )
-        from llmguard.detectors.registry import create_detector_pipeline
+        from domestique.detectors.registry import create_detector_pipeline
 
         raw_config = load_config_dict()
         effective_config, profile_note = self._resolve_hardware_profile(raw_config)
@@ -611,7 +611,7 @@ class LLMGuardAddon:
         stack = config.get("detection_stack", {})
         model = None
         if stack.get("gemma4_e2b", False):
-            from llmguard.detectors.local_llm import _resolve_gemma_model
+            from domestique.detectors.local_llm import _resolve_gemma_model
 
             model = _resolve_gemma_model()
         elif stack.get("qwen3_1_7b", True):
@@ -821,7 +821,7 @@ class LLMGuardAddon:
                 json.dumps(
                     {
                         "error": {
-                            "message": "Request blocked by LLMGuard: sensitive data detected",
+                            "message": "Request blocked by Domestique: sensitive data detected",
                             "type": "firewall_block",
                             "details": reasons,
                         }
@@ -1451,15 +1451,15 @@ class LLMGuardAddon:
             return
 
         buf = bytearray()
-        flow.metadata["llmguard_streamed"] = True
-        flow.metadata["llmguard_response_buf"] = buf
+        flow.metadata["domestique_streamed"] = True
+        flow.metadata["domestique_response_buf"] = buf
         # The teed bytes are captured off the wire, BEFORE mitmproxy's
         # normal auto-decompression (which only happens when something
         # reads flow.response.content/.text -- never touched on this
         # streamed path, by design). Content-Encoding is known now, at
         # header time, so stash it for the background scan to decode with
         # (see _scan_response_bytes_async / _decode_response_body).
-        flow.metadata["llmguard_response_encoding"] = flow.response.headers.get(
+        flow.metadata["domestique_response_encoding"] = flow.response.headers.get(
             "content-encoding", ""
         )
 
@@ -1499,14 +1499,14 @@ class LLMGuardAddon:
             return
 
         metadata = getattr(flow, "metadata", None)
-        if isinstance(metadata, dict) and metadata.get("llmguard_streamed") is True:
-            buf = metadata.get("llmguard_response_buf")
+        if isinstance(metadata, dict) and metadata.get("domestique_streamed") is True:
+            buf = metadata.get("domestique_response_buf")
             if buf:
                 data = bytes(buf)
                 content_type = (
                     flow.response.headers.get("content-type", "") if flow.response else ""
                 )
-                content_encoding = metadata.get("llmguard_response_encoding", "")
+                content_encoding = metadata.get("domestique_response_encoding", "")
                 # Fire-and-forget: never await the scan here. The bytes
                 # are already gone to the browser, so there is nothing
                 # for this hook to block on. The task is kept alive via
@@ -1562,7 +1562,7 @@ class LLMGuardAddon:
             # Add warning header (doesn't block - alert mode). Only
             # possible on this fallback path: headers haven't reached
             # the client yet, unlike the streamed path above.
-            flow.response.headers["X-LLMGuard-Alert"] = (
+            flow.response.headers["X-Domestique-Alert"] = (
                 f"Sensitive data detected in response: {','.join(reasons)}"
             )
 
@@ -2030,4 +2030,4 @@ def _looks_like_base64(text: str) -> bool:
 
 
 # mitmproxy addon entry point
-addons = [LLMGuardAddon()]
+addons = [DomestiqueAddon()]

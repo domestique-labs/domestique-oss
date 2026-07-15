@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from llmguard.models import Detection, Span
+from domestique.models import Detection, Span
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

@@ -13,7 +13,7 @@ the firewall's core inspection path.
 Usage:
     dispatcher = SIEMDispatcher()
     dispatcher.add_backend(SyslogBackend(host="siem.corp.com", port=514))
-    dispatcher.add_backend(WebhookBackend(url="https://hooks.corp.com/llmguard"))
+    dispatcher.add_backend(WebhookBackend(url="https://hooks.corp.com/domestique"))
     dispatcher.dispatch(audit_event)
 """
 
@@ -31,7 +31,7 @@ from urllib.request import Request, urlopen
 
 from app.services.audit import AuditEvent
 
-logger = logging.getLogger("llmguard.siem")
+logger = logging.getLogger("domestique.siem")
 
 
 # --- Backend Interface ---------------------------------------------------
@@ -80,7 +80,7 @@ class SyslogBackend(SIEMBackend):
     elements for machine parsing.
 
     Example output:
-        <134>1 2026-05-22T10:30:00Z llmguard - firewall - [llmguard@49152
+        <134>1 2026-05-22T10:30:00Z domestique - firewall - [domestique@49152
         action="block" dst="api.openai.com" cat="SSN"] Request blocked
     """
 
@@ -89,7 +89,7 @@ class SyslogBackend(SIEMBackend):
         host: str = "127.0.0.1",
         port: int = 514,
         protocol: str = "udp",
-        app_name: str = "llmguard",
+        app_name: str = "domestique",
     ) -> None:
         self._host = host
         self._port = port
@@ -146,10 +146,10 @@ class SyslogBackend(SIEMBackend):
         if event.detectors_triggered:
             sd_params.append(f'detectors="{",".join(event.detectors_triggered)}"')
 
-        sd = f"[llmguard@49152 {' '.join(sd_params)}]"
+        sd = f"[domestique@49152 {' '.join(sd_params)}]"
 
         # Human-readable message
-        msg = f"LLMGuard {event.action}: {event.destination} ({event.method})"
+        msg = f"Domestique {event.action}: {event.destination} ({event.method})"
 
         return (
             f"<{priority}>1 {event.timestamp} "
@@ -165,7 +165,7 @@ class CEFBackend(SIEMBackend):
     """Common Event Format output for ArcSight and compatible SIEMs.
 
     Formats events according to CEF specification:
-        CEF:0|LLMGuard|Firewall|1.0|action|name|severity|extensions
+        CEF:0|Domestique|Firewall|1.0|action|name|severity|extensions
     """
 
     def __init__(
@@ -228,7 +228,7 @@ class CEFBackend(SIEMBackend):
         ]
 
         return (
-            f"CEF:0|LLMGuard|Firewall|1.0|{event.action}|"
+            f"CEF:0|Domestique|Firewall|1.0|{event.action}|"
             f"{event_name}|{severity}|{' '.join(extensions)}"
         )
 
@@ -266,7 +266,7 @@ class WebhookBackend(SIEMBackend):
                 data=data,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "LLMGuard/1.0",
+                    "User-Agent": "Domestique/1.0",
                     **self._headers,
                 },
                 method="POST",
@@ -288,8 +288,8 @@ class WebhookBackend(SIEMBackend):
                 data=data,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "LLMGuard/1.0",
-                    "X-LLMGuard-Batch-Size": str(len(events)),
+                    "User-Agent": "Domestique/1.0",
+                    "X-Domestique-Batch-Size": str(len(events)),
                     **self._headers,
                 },
                 method="POST",
@@ -313,7 +313,7 @@ class FileBackend(SIEMBackend):
     """
 
     def __init__(self, path: Path | None = None) -> None:
-        self._path = path or (Path.home() / ".llmguard" / "siem" / "events.jsonl")
+        self._path = path or (Path.home() / ".domestique" / "siem" / "events.jsonl")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._file = open(self._path, "a", buffering=1)
 

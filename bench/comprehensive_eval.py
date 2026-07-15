@@ -3,7 +3,7 @@
 Runs all detector configurations against real public datasets and generates
 an interactive HTML report with charts and tables.
 
-Usage (from llmguard/):
+Usage (from domestique/):
     .venv/bin/python bench/comprehensive_eval.py
 """
 
@@ -29,9 +29,9 @@ from bench.public_datasets import (
     load_secrets_benchmark,
     load_business_sensitive_benchmark,
 )
-from llmguard.detectors.secrets import SecretDetector
-from llmguard.detectors.semantic import SemanticDetector
-from llmguard.models import Detection, Span
+from domestique.detectors.secrets import SecretDetector
+from domestique.detectors.semantic import SemanticDetector
+from domestique.models import Detection, Span
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -802,7 +802,7 @@ async def main() -> None:
     # Try to load Presidio PII detector for NER-based PII detection
     pii_det = None
     try:
-        from llmguard.detectors.pii import PIIDetector
+        from domestique.detectors.pii import PIIDetector
         pii_det = PIIDetector()
         test_result = await pii_det.scan("Test SSN 123-45-6789")
         if test_result:

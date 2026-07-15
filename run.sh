@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch LLMGuard in the best mode for this OS
+# Launch Domestique in the best mode for this OS
 set -e
 cd "$(dirname "$0")"
 if [ -x ".venv/bin/python" ]; then

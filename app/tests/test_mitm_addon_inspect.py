@@ -7,7 +7,7 @@ Context: a live browser-testing session surfaced
 
 from a mitmproxy addon's ``request``/``response`` hook. That specific
 failure mode is what you get when an ``async def`` function (here,
-``LLMGuardAddon._inspect`` or ``DetectorPipeline.inspect``) is called
+``DomestiqueAddon._inspect`` or ``DetectorPipeline.inspect``) is called
 *without* ``await`` and the resulting coroutine object is then subscripted
 (``result["action"]``) as if it were the dict/result it eventually resolves
 to.
@@ -35,9 +35,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from mitmproxy.test import tflow, tutils
 
-from app.services.mitm_addon import LLMGuardAddon
-from llmguard.detectors.registry import Finding, InspectionResult
-from llmguard.models import Action
+from app.services.mitm_addon import DomestiqueAddon
+from domestique.detectors.registry import Finding, InspectionResult
+from domestique.models import Action
 
 
 class _StubPipeline:
@@ -88,16 +88,16 @@ def _make_request_flow(body: dict) -> tflow.HTTPFlow:
     return tflow.tflow(req=req)
 
 
-def _addon_with(pipeline: _StubPipeline) -> LLMGuardAddon:
+def _addon_with(pipeline: _StubPipeline) -> DomestiqueAddon:
     """Build an addon wired to *pipeline*, and pin the config-change
     fingerprint so ``_inspect()``'s hot-reload check (it rebuilds the real
-    pipeline from ``~/.llmguard/config.json`` whenever the config's mtime/hash
+    pipeline from ``~/.domestique/config.json`` whenever the config's mtime/hash
     differs from what it last saw) does not silently swap our stub back out
     for the real, environment-dependent pipeline.
     """
     from app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
 
-    addon = LLMGuardAddon()
+    addon = DomestiqueAddon()
     addon._detector = pipeline
     addon._config_mtime = config_mtime_ns()
     addon._config_hash = config_hash(load_config_dict())
@@ -105,7 +105,7 @@ def _addon_with(pipeline: _StubPipeline) -> LLMGuardAddon:
 
 
 class TestRequestInspectPath:
-    """Drives LLMGuardAddon.request() end-to-end against the real,
+    """Drives DomestiqueAddon.request() end-to-end against the real,
     awaited async pipeline contract - no TypeError, correct action."""
 
     @pytest.mark.asyncio
@@ -158,7 +158,7 @@ class TestRequestInspectPath:
 
 
 class TestResponseInspectPath:
-    """Drives LLMGuardAddon.response() end-to-end - the exact hook whose
+    """Drives DomestiqueAddon.response() end-to-end - the exact hook whose
     missing ``await`` produced the historical TypeError."""
 
     @pytest.mark.asyncio
@@ -182,7 +182,7 @@ class TestResponseInspectPath:
             flow
         )  # must not raise TypeError: 'coroutine' object is not subscriptable
 
-        assert "X-LLMGuard-Alert" in flow.response.headers
+        assert "X-Domestique-Alert" in flow.response.headers
 
     @pytest.mark.asyncio
     async def test_allow_action_on_response_leaves_headers_alone(self):
@@ -198,4 +198,4 @@ class TestResponseInspectPath:
 
         await addon.response(flow)
 
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
