@@ -144,7 +144,9 @@
   .log-badge-redacted { background: rgba(245,158,11,0.15); color: var(--yellow); }
   .log-badge-pass { background: rgba(148,163,184,0.1); color: var(--text-muted); }
   .log-badge-approved { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .log-badge-response_alert { background: rgba(139,92,246,0.15); color: var(--purple); }
   .log-blocked .log-host { color: var(--red); }
+  .log-alert .log-host { color: var(--purple); }
   .log-details {
     max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
     margin: 0 4px; border-radius: 8px; background: var(--surface2);
@@ -433,6 +435,14 @@
           <div class="stat-value" id="allowedCount" style="color:var(--green,#10b981)">0</div>
           <div class="stat-label">Allowed</div>
         </div>
+        <div class="stat-box" title="Sensitive data detected in an LLM's reply (response-side DLP). Detected and logged after the reply already streamed to the browser — not blocked.">
+          <div class="stat-value" id="responseAlertsCount" style="color:var(--purple,#8b5cf6)">0</div>
+          <div class="stat-label">Response Leaks</div>
+        </div>
+        <div class="stat-box" title="Response bodies that could not be decoded (e.g. an unsupported Content-Encoding), so they were NOT scanned for a leak. A non-zero value means a possible silent DLP gap worth investigating.">
+          <div class="stat-value" id="responseScanErrorsCount" style="color:var(--yellow,#f59e0b)">0</div>
+          <div class="stat-label">Scan Errors</div>
+        </div>
       </div>
     </div>
 
@@ -446,6 +456,7 @@
         <button class="btn btn-outline btn-sm log-filter" data-filter="blocked" onclick="filterLog('blocked')">Blocked</button>
         <button class="btn btn-outline btn-sm log-filter" data-filter="redacted" onclick="filterLog('redacted')">Redacted</button>
         <button class="btn btn-outline btn-sm log-filter" data-filter="allowed" onclick="filterLog('allowed')">Allowed</button>
+        <button class="btn btn-outline btn-sm log-filter" data-filter="response_alert" onclick="filterLog('response_alert')">Response Leaks</button>
         <button class="btn btn-outline btn-sm log-filter" data-filter="pass" onclick="filterLog('pass')">Passed</button>
         <span class="log-count" id="logCount"></span>
         <button class="btn btn-outline btn-sm" onclick="refreshLog()" title="Refresh">↻</button>
@@ -1278,6 +1289,8 @@ setInterval(async () => {
         document.getElementById('blockedCount').textContent = bp.stats.blocked || 0;
         document.getElementById('redactedCount').textContent = bp.stats.redacted || 0;
         document.getElementById('allowedCount').textContent = bp.stats.allowed || 0;
+        document.getElementById('responseAlertsCount').textContent = bp.stats.response_alerts || 0;
+        document.getElementById('responseScanErrorsCount').textContent = bp.stats.response_scan_errors || 0;
         // Status bar
         document.getElementById('sbInspected').textContent = bp.stats.inspected || 0;
         document.getElementById('sbBlocked').textContent = bp.stats.blocked || 0;
@@ -1540,7 +1553,17 @@ async function refreshLog() {
 // row, consecutive log entries to the same host within a short window are
 // grouped into a single expandable row. This is purely presentational -
 // it does not change what gets logged server-side.
-const LOG_GROUP_WINDOW_MS = 10000;
+//
+// 25s (not the original 10s): a real ChatGPT reply can take well over
+// 10s to finish streaming for a long answer, and the title-generation /
+// follow-up calls for that same turn land shortly *after* the reply
+// finishes -- with a 10s window those trailing calls fell outside it and
+// splintered one interaction into several groups. The comparison below
+// is pairwise (gap since the *previous* entry added to the group, not
+// since the group's first entry), so a longer window still doesn't merge
+// genuinely separate, far-apart interactions -- it just tolerates a
+// slower reply/trailing-call gap within one interaction.
+const LOG_GROUP_WINDOW_MS = 25000;
 
 function groupLogEntries(entries) {
   // `entries` is most-recent-first (see _handle_request_log in api.py).
@@ -1578,11 +1601,14 @@ function escapeHtml(value) {
 }
 
 function renderLogEntry(entry, idx) {
-  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅' };
-  const badgeCls = { blocked: 'log-badge-blocked', redacted: 'log-badge-redacted', allowed: 'log-badge-allowed', pass: 'log-badge-pass', approved: 'log-badge-approved' };
-  const entryCls = entry.action === 'blocked' ? ' log-blocked' : '';
+  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅', response_alert: '🔎', response_undecodable: '⚠️' };
+  const badgeCls = { blocked: 'log-badge-blocked', redacted: 'log-badge-redacted', allowed: 'log-badge-allowed', pass: 'log-badge-pass', approved: 'log-badge-approved', response_alert: 'log-badge-response_alert', response_undecodable: 'log-badge-redacted' };
+  // Friendlier badge text than the raw action key.
+  const badgeLabels = { response_alert: 'leak', response_undecodable: 'unscanned' };
+  const entryCls = entry.action === 'blocked' ? ' log-blocked' : (entry.action === 'response_alert' ? ' log-alert' : '');
   const icon = icons[entry.action] || '•';
   const badge = badgeCls[entry.action] || 'log-badge-pass';
+  const badgeLabel = badgeLabels[entry.action] || entry.action;
   const time = entry.ts ? entry.ts.split('T')[1] || '' : '';
   const host = entry.host || '—';
   const path = (entry.path || '').substring(0, 60);
@@ -1617,7 +1643,7 @@ function renderLogEntry(entry, idx) {
         <div class="log-path">${entry.method || ''} ${path}</div>
       </div>
       <div class="log-meta">
-        <span class="log-badge ${badge}">${entry.action}</span>
+        <span class="log-badge ${badge}">${badgeLabel}</span>
         <span class="log-time">${time}</span>
       </div>
     </div>
@@ -1650,9 +1676,9 @@ function renderLogGroup(group, gi) {
 
   const counts = {};
   group.entries.forEach(e => { counts[e.action] = (counts[e.action] || 0) + 1; });
-  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅' };
+  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅', response_alert: '🔎' };
   const anyBlocked = !!counts.blocked;
-  const icon = anyBlocked ? icons.blocked : (counts.redacted ? icons.redacted : (icons[group.entries[0].action] || '•'));
+  const icon = anyBlocked ? icons.blocked : (counts.redacted ? icons.redacted : (counts.response_alert ? icons.response_alert : (icons[group.entries[0].action] || '•')));
   const summary = Object.entries(counts)
     .map(([action, n]) => `${n} ${action}`)
     .join(', ');
