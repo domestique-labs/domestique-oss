@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import sys
 
 from domestique import __version__
 
@@ -18,14 +20,46 @@ _DEMO_PROMPT = (
     "SSN 123-45-6789. Please help me debug this."
 )
 
+# figlet "standard" rendering of "domestique"
+_LOGO = r"""
+     _                           _   _
+  __| | ___  _ __ ___   ___  ___| |_(_) __ _ _   _  ___
+ / _` |/ _ \| '_ ` _ \ / _ \/ __| __| |/ _` | | | |/ _ \
+| (_| | (_) | | | | | |  __/\__ \ |_| | (_| | |_| |  __/
+ \__,_|\___/|_| |_| |_|\___||___/\__|_|\__, |\__,_|\___|
+                                          |_|
+"""
+
+
+def _supports_unicode() -> bool:
+    """Whether stdout can encode the fancy banner glyphs (False on a cp1252 console)."""
+    enc = getattr(sys.stdout, "encoding", None) or ""
+    try:
+        "►✔→─".encode(enc)
+    except (LookupError, UnicodeError):
+        return False
+    return True
+
 
 def _banner(host: str, port: int) -> str:
+    url = f"http://{host}:{port}"
+    if _supports_unicode():
+        rule, active, check, arrow = "─" * 60, "►", "✔", "→"
+    else:
+        rule, active, check, arrow = "-" * 60, ">", "+", "->"
     return (
-        f"\nDomestique proxy running on http://{host}:{port}\n"
-        "Point your agent at it:\n"
-        f"  export OPENAI_BASE_URL=http://{host}:{port}/v1\n"
-        f"  export ANTHROPIC_BASE_URL=http://{host}:{port}\n"
-        "Redaction: ON (redact by default).  Press Ctrl-C to stop.\n"
+        _LOGO
+        + "  [OSS PROXY]\n"
+        + rule
+        + "\n"
+        + f"  [{active}] DomestiqueCore active on {url}\n"
+        + f"  [{check}] Intercepting outbound prompts {arrow} redacting secrets & PII\n"
+        + rule
+        + "\n"
+        + "  Point your agent at it (keep your own API key):\n"
+        + f"    export OPENAI_BASE_URL={url}/v1\n"
+        + f"    export ANTHROPIC_BASE_URL={url}\n"
+        + "  Redact by default.  Press Ctrl-C to stop.\n"
     )
 
 
@@ -33,6 +67,10 @@ def _cmd_start(host: str, port: int) -> int:
     import uvicorn
 
     from domestique.gateway import create_gateway
+
+    # Best effort: make the console UTF-8 so the banner glyphs render on Windows.
+    with contextlib.suppress(AttributeError, ValueError):
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
     print(_banner(host, port))
     uvicorn.run(create_gateway(), host=host, port=port)
