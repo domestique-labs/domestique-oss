@@ -1,8 +1,20 @@
-# Domestique
+<p align="center">
+  <img src=".github/assets/domestique-oss-logo.png" alt="Domestique — a local AI firewall for developers" width="420" />
+</p>
 
-**A local AI firewall for developers.** Point your agent or app at Domestique and it
-redacts secrets and PII out of your prompts *before* they reach OpenAI, Anthropic, or
-any LLM — with zero system changes. No CA to install, no system proxy, cross-platform.
+<p align="center">
+  <strong>A local AI firewall for developers.</strong>
+</p>
+
+<p align="center">
+  Point your agent or app at Domestique and it redacts secrets and PII out of your prompts
+  <em>before</em> they reach OpenAI, Anthropic, or any LLM — with zero system changes.<br>
+  No CA to install, no system proxy, cross-platform.
+</p>
+
+<!-- Badges are added in the README-badges change (#23); when merged they slot in here, centered. -->
+
+**Contents** · [Quick start](#quick-start) · [How it works](#how-it-works) · [Browser mode &amp; Enterprise](#browser-mode-optional--enterprise) · [License](#license)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/domestique-labs/domestique-oss/ci.yml?branch=main&label=CI)](https://github.com/domestique-labs/domestique-oss/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)

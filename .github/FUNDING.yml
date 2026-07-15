@@ -1,0 +1,5 @@
+# Enables the "Sponsor" button on the repo. Uncomment and fill in a handle to
+# activate it — leaving everything commented shows no button.
+# github: [your-github-sponsors-handle]
+# open_collective: your-collective
+# custom: ["https://your-site/sponsor"]
