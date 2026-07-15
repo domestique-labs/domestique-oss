@@ -9,6 +9,15 @@ All notable changes to this project are documented here. The format is based on
 Nothing yet published to a package index — the `0.1.0` items below ship from source
 (`pip install -e .`) while the PyPI package name is finalized.
 
+### Added — browser interception coverage
+- Qwen-cloud destinations (`chat.qwen.ai`, `dashscope.aliyuncs.com`,
+  `dashscope-intl.aliyuncs.com`) added to the intercepted-domain list. DashScope's
+  OpenAI-compatible endpoint is handled by the existing generic extraction. Qwen-cloud
+  (the destination) is distinct from the local `qwen3` classifier (detection).
+- DeepSeek API coverage confirmed (`api.deepseek.com` via the generic
+  `/chat/completions` path). Full web-UI (`chat.deepseek.com`, `chat.qwen.ai`)
+  prompt-extraction is a follow-up pending live-traffic captures.
+
 ### Added — the developer CLI wedge (0.1.0)
 - `domestique start` — a local redacting reverse proxy on `http://127.0.0.1:8000`.
   Point any OpenAI- or Anthropic-compatible tool at it via `OPENAI_BASE_URL` /

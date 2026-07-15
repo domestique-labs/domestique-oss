@@ -96,6 +96,10 @@ class TestPACFile:
             assert "api.openai.com" in content
             assert "claude.ai" in content
             assert "gemini.google.com" in content
+            # Qwen-cloud + DeepSeek (T11)
+            assert "chat.qwen.ai" in content
+            assert "dashscope.aliyuncs.com" in content
+            assert "api.deepseek.com" in content
 
     def test_pac_file_has_direct_fallback(self, tmp_path):
         pac_path = tmp_path / "proxy.pac"
@@ -124,6 +128,19 @@ class TestDomainManagement:
         assert "claude.ai" in domains
         assert "gemini.google.com" in domains
         assert len(domains) > 10  # Should have many domains
+
+    def test_qwen_and_deepseek_domains_intercepted(self):
+        # T11: Qwen-cloud (destination) + DeepSeek coverage. Qwen-cloud is
+        # distinct from the local `qwen3` classifier used for detection.
+        domains = get_intercepted_domains()
+        for host in (
+            "chat.qwen.ai",
+            "dashscope.aliyuncs.com",
+            "dashscope-intl.aliyuncs.com",
+            "api.deepseek.com",
+            "chat.deepseek.com",
+        ):
+            assert host in domains, f"{host} should be intercepted"
 
     def test_add_custom_domain(self):
         with patch("app.services.interceptor.generate_pac_file"):
