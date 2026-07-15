@@ -101,6 +101,22 @@ the project root:
 .\infra\certs\fix-cert.ps1       # Windows — generates + trusts the CA (click Yes on the prompt)
 ```
 
+#### Disable QUIC (HTTP/3) so traffic can't bypass the proxy
+
+Chromium browsers prefer **QUIC**, which runs over UDP/443 and skips the TCP proxy
+entirely — a silent DLP blind spot. For a reliable browser-mode test or deployment,
+turn QUIC off. A helper is included for the Chromium browsers:
+
+```powershell
+# Chrome / Brave / Edge — writes the standard QuicAllowed enterprise policy
+# (the same lever MDM pulls fleet-wide). Auto-elevates via UAC. -Enable to revert.
+scripts/toggle-quic.ps1 -Browser chrome        # or: brave | edge
+```
+
+For **Opera** and **Firefox** the script prints the correct manual step (they use
+different mechanisms). Enterprise editions enforce this fleet-wide automatically via
+browser policy and by blocking outbound UDP/443 at the firewall.
+
 ### Detection presets (Tier 3 LLM classifier)
 
 | Preset | Stack | VRAM | Latency | F1 | Notes |
