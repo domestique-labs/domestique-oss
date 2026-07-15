@@ -1,0 +1,21 @@
+# Cross-platform line-ending normalization (mac / Windows / Linux).
+# Without this, a Windows checkout (core.autocrlf) can smudge shell scripts to
+# CRLF, which then fail on mac/Linux with `/bin/bash^M: bad interpreter`.
+
+# Default: let Git decide text vs binary and store text as LF in the repo.
+* text=auto
+
+# Shell scripts MUST be LF on every platform, or they break on mac/Linux.
+*.sh   text eol=lf
+
+# Windows-only scripts stay CRLF.
+*.bat  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary assets — never touch line endings.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.icns  binary
+*.ico   binary
