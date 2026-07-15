@@ -196,7 +196,8 @@ async def _proxy(request: Request, path: str) -> Response:
 
     action, reason, out_body = await _scan_and_redact(pipeline, parsed, kind)
     if action is Action.BLOCK:
-        logger.warning("request_blocked", path=path, reason=reason)
+        # Expected policy enforcement, not an anomaly — info, not warning.
+        logger.info("request_blocked", outcome="block", path=path, reason=reason)
         return _block_response(provider, reason)
 
     payload = json.dumps(out_body).encode("utf-8")

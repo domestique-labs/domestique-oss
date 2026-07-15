@@ -200,8 +200,13 @@ async def _handle_request(request: Request, *, endpoint: str) -> JSONResponse:
             detections=all_detections,
             latency_ms=latency_ms,
         )
-        logger.warning(
+        # A block is the firewall enforcing policy as designed — an expected,
+        # successful outcome, not an operational anomaly. Log it at info so
+        # `warning` stays meaningful for things actually going wrong (fail-open,
+        # detector unavailable, upstream errors).
+        logger.info(
             "request_blocked",
+            outcome="block",
             user=user_id,
             reason=reason,
             findings=len(all_detections),

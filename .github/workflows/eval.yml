@@ -20,6 +20,10 @@ jobs:
       PYTHONHASHSEED: "0"
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Need base history so we can check out and measure `main` on the
+          # same runner (fair, environment-controlled latency comparison).
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -30,12 +34,32 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run eval + regression gate (vs committed baseline)
+      - name: Eval — PR head
         run: |
+          # Freeze the PR's corpus so both runs score against identical inputs,
+          # even if this PR edits the corpus.
+          cp bench/eval/data/corpus.jsonl "$RUNNER_TEMP/corpus.jsonl"
           python -m bench.eval run \
-            --out pr-results.json \
-            --baseline bench/eval/data/baseline.json \
-            --commit "${{ github.event.pull_request.head.sha }}" \
+            --corpus "$RUNNER_TEMP/corpus.jsonl" \
+            --out "$RUNNER_TEMP/pr-results.json" \
+            --commit "${{ github.event.pull_request.head.sha }}"
+
+      - name: Eval — main (same runner)
+        run: |
+          git checkout --quiet --detach "${{ github.event.pull_request.base.sha }}"
+          pip install -e ".[dev]"
+          python -m bench.eval run \
+            --corpus "$RUNNER_TEMP/corpus.jsonl" \
+            --out "$RUNNER_TEMP/main-results.json" \
+            --commit "${{ github.event.pull_request.base.sha }}"
+          # Return to PR head so the compare/render step uses this PR's harness.
+          git checkout --quiet --detach "${{ github.event.pull_request.head.sha }}"
+
+      - name: Compare + regression gate (main vs PR)
+        run: |
+          python -m bench.eval compare \
+            --main "$RUNNER_TEMP/main-results.json" \
+            --pr "$RUNNER_TEMP/pr-results.json" \
             --fail-on-regression | tee scorecard.md
 
       - name: Upload results
@@ -43,7 +67,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: eval-results
-          path: pr-results.json
+          path: |
+            ${{ runner.temp }}/pr-results.json
+            ${{ runner.temp }}/main-results.json
 
       - name: Comment scorecard on PR
         if: always() && github.event.pull_request.head.repo.full_name == github.repository
