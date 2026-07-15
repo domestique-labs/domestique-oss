@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.services.redaction import (
+from domestique.redaction import (
     RedactionAction,
     RedactionEngine,
     RedactionRule,

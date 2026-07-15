@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.services.redaction import (
+from domestique.redaction import (
     RedactionAction,
     RedactionEngine,
 )
