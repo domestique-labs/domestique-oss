@@ -6,7 +6,7 @@ LLMGuard is a security tool, so we take vulnerabilities in it seriously.
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report privately through **[GitHub Private Vulnerability Reporting](https://github.com/LLM-Guard/LLMGuard-OSS/security/advisories/new)** — or use the **Report a vulnerability** button under this repo's **Security** tab.
+Report privately through **[GitHub Private Vulnerability Reporting](https://github.com/domestique-labs/domestique-oss/security/advisories/new)** — or use the **Report a vulnerability** button under this repo's **Security** tab.
 
 Please include: a description, affected version/commit, reproduction steps or PoC, and impact.
 We aim to acknowledge within **3 business days** and to agree on a disclosure timeline with you.
