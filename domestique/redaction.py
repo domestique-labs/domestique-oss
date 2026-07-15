@@ -50,7 +50,7 @@ class RedactionRule:
     action: RedactionAction
     token_prefix: str = ""  # e.g., "PERSON", "SSN", "EMAIL"
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.token_prefix:
             self.token_prefix = self.category.upper()
 

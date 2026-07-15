@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from app.services.redaction import RedactionAction, RedactionEngine
+from domestique.redaction import RedactionAction, RedactionEngine
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -102,7 +102,7 @@ class DomestiqueCallback:
                     )
                 # In redact mode, force redaction even for BLOCK-category items
                 # Re-run with all rules set to REDACT
-                from app.services.redaction import RedactionRule
+                from domestique.redaction import RedactionRule
 
                 redact_rules = [
                     RedactionRule(cat, RedactionAction.REDACT)
