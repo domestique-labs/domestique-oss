@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import re
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services.mitm_addon import LLMGuardAddon
 from llmguard.detectors.registry import Finding, InspectionResult
 from llmguard.models import Action
-
 
 _TEST_PATTERNS = [
     (r"\b\d{3}-\d{2}-\d{4}\b", "us_ssn"),
@@ -33,9 +32,7 @@ class _StubPipeline:
         findings: list[Finding] = []
         for pattern, category in _TEST_PATTERNS:
             for _ in re.finditer(pattern, text):
-                findings.append(
-                    Finding(detector="stub", category=category, confidence=0.99)
-                )
+                findings.append(Finding(detector="stub", category=category, confidence=0.99))
         if not findings:
             return InspectionResult(action=Action.ALLOW, reason="clean")
         return InspectionResult(
@@ -77,7 +74,9 @@ def _make_flow(
     flow.response = MagicMock()
     flow.response.content = response_body
     # Use a real dict for headers so we can check writes
-    flow.response.headers = response_headers if response_headers is not None else {"content-type": "application/json"}
+    flow.response.headers = (
+        response_headers if response_headers is not None else {"content-type": "application/json"}
+    )
     flow.response.status_code = status_code
     return flow
 
@@ -88,12 +87,9 @@ class TestResponseScanning:
     async def test_alerts_on_ssn_in_response(self, addon):
         """SSN in LLM response should trigger alert."""
         body = {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": "The SSN on file is 123-45-6789."
-                }
-            }]
+            "choices": [
+                {"message": {"role": "assistant", "content": "The SSN on file is 123-45-6789."}}
+            ]
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
@@ -106,12 +102,9 @@ class TestResponseScanning:
     async def test_no_alert_on_clean_response(self, addon):
         """Clean response should pass without alert."""
         body = {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": "Hello! How can I help you today?"
-                }
-            }]
+            "choices": [
+                {"message": {"role": "assistant", "content": "Hello! How can I help you today?"}}
+            ]
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
@@ -123,12 +116,14 @@ class TestResponseScanning:
     async def test_alerts_on_api_key_in_response(self, addon):
         """API key leak in response should trigger alert."""
         body = {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": "Use this key: sk-proj-abc123def456ghi789jkl012mno345"
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Use this key: sk-proj-abc123def456ghi789jkl012mno345",
+                    }
                 }
-            }]
+            ]
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
@@ -139,12 +134,14 @@ class TestResponseScanning:
     async def test_alerts_on_private_key_in_response(self, addon):
         """Private key leak should trigger alert."""
         body = {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": "Here's the key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEow..."
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Here's the key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEow...",
+                    }
                 }
-            }]
+            ]
         }
         flow = _make_flow(response_body=json.dumps(body).encode())
 
@@ -185,7 +182,7 @@ class TestSSEResponseExtraction:
         sse_data = (
             'data: {"choices":[{"delta":{"content":"Hello "}}]}\n\n'
             'data: {"choices":[{"delta":{"content":"world"}}]}\n\n'
-            'data: [DONE]\n\n'
+            "data: [DONE]\n\n"
         )
         flow = _make_flow(
             response_body=sse_data.encode(),
@@ -214,31 +211,17 @@ class TestResponseTextExtraction:
     """Test extraction from various JSON response formats."""
 
     def test_openai_response_format(self, addon):
-        body = {
-            "choices": [{
-                "message": {"role": "assistant", "content": "The answer is 42."}
-            }]
-        }
+        body = {"choices": [{"message": {"role": "assistant", "content": "The answer is 42."}}]}
         text = addon._extract_response_text(body)
         assert text == "The answer is 42."
 
     def test_anthropic_response_format(self, addon):
-        body = {
-            "content": [
-                {"type": "text", "text": "Here is my analysis."}
-            ]
-        }
+        body = {"content": [{"type": "text", "text": "Here is my analysis."}]}
         text = addon._extract_response_text(body)
         assert text == "Here is my analysis."
 
     def test_google_response_format(self, addon):
-        body = {
-            "candidates": [{
-                "content": {
-                    "parts": [{"text": "Gemini says hello."}]
-                }
-            }]
-        }
+        body = {"candidates": [{"content": {"parts": [{"text": "Gemini says hello."}]}}]}
         text = addon._extract_response_text(body)
         assert text == "Gemini says hello."
 
@@ -264,11 +247,7 @@ class TestResponseAuditIntegration:
 
     @patch("app.services.mitm_addon.LLMGuardAddon._emit_audit_event")
     async def test_audit_event_emitted_on_alert(self, mock_emit, addon):
-        body = {
-            "choices": [{
-                "message": {"content": "SSN is 123-45-6789"}
-            }]
-        }
+        body = {"choices": [{"message": {"content": "SSN is 123-45-6789"}}]}
         flow = _make_flow(response_body=json.dumps(body).encode())
         await addon.response(flow)
 

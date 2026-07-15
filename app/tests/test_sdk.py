@@ -1,9 +1,10 @@
 """Tests for LLMGuard SDK - scan, redact, is_safe, and LiteLLM callback."""
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from llmguard.sdk import scan, redact, is_safe, ScanResult, RedactResult
+import pytest
+
+from llmguard.sdk import is_safe, redact, scan
 
 
 class TestScan:
@@ -118,6 +119,7 @@ class TestLLMGuardCallback:
 
     def test_import(self):
         from llmguard import LLMGuardCallback
+
         cb = LLMGuardCallback()
         assert cb is not None
 

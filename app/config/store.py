@@ -144,9 +144,7 @@ class ConfigStore:
                     current_dict["detection_stack_configured"] = True
                     break
         if "detection_stack_configured" in data:
-            current_dict["detection_stack_configured"] = bool(
-                data["detection_stack_configured"]
-            )
+            current_dict["detection_stack_configured"] = bool(data["detection_stack_configured"])
 
         config = AppConfig.from_dict(current_dict)
         cls.save(config)

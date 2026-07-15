@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -45,12 +44,28 @@ class OrgConfig:
     package_prefixes: list[str] = field(default_factory=list)
     project_codenames: list[str] = field(default_factory=list)
     internal_paths: list[str] = field(default_factory=list)
-    ip_ranges: list[str] = field(default_factory=lambda: [
-        "10.", "172.16.", "172.17.", "172.18.", "172.19.",
-        "172.20.", "172.21.", "172.22.", "172.23.", "172.24.",
-        "172.25.", "172.26.", "172.27.", "172.28.", "172.29.",
-        "172.30.", "172.31.", "192.168.",
-    ])
+    ip_ranges: list[str] = field(
+        default_factory=lambda: [
+            "10.",
+            "172.16.",
+            "172.17.",
+            "172.18.",
+            "172.19.",
+            "172.20.",
+            "172.21.",
+            "172.22.",
+            "172.23.",
+            "172.24.",
+            "172.25.",
+            "172.26.",
+            "172.27.",
+            "172.28.",
+            "172.29.",
+            "172.30.",
+            "172.31.",
+            "192.168.",
+        ]
+    )
 
 
 @dataclass(frozen=True)
@@ -133,11 +148,10 @@ class CodeDetector:
         org_config: Organization-specific detection config.
     """
 
-    def __init__(self, org_config: Optional[OrgConfig] = None) -> None:
+    def __init__(self, org_config: OrgConfig | None = None) -> None:
         self._config = org_config or OrgConfig()
         self._compiled_domains = [
-            re.compile(re.escape(d), re.IGNORECASE)
-            for d in self._config.internal_domains
+            re.compile(re.escape(d), re.IGNORECASE) for d in self._config.internal_domains
         ]
         self._compiled_codenames = [
             re.compile(r"\b" + re.escape(name) + r"\b", re.IGNORECASE)
@@ -193,53 +207,61 @@ class CodeDetector:
         """Detect internal/private URLs."""
         findings = []
         for match in _INTERNAL_URL_PATTERN.finditer(text):
-            findings.append(CodeFinding(
-                category="internal_url",
-                value=match.group(),
-                start=match.start(),
-                end=match.end(),
-                confidence=0.9,
-                description="Internal/private URL detected",
-            ))
-        # Check org-specific domains
-        for domain_pattern in self._compiled_domains:
-            for match in domain_pattern.finditer(text):
-                findings.append(CodeFinding(
-                    category="internal_domain",
+            findings.append(
+                CodeFinding(
+                    category="internal_url",
                     value=match.group(),
                     start=match.start(),
                     end=match.end(),
-                    confidence=0.95,
-                    description="Organization-specific internal domain",
-                ))
+                    confidence=0.9,
+                    description="Internal/private URL detected",
+                )
+            )
+        # Check org-specific domains
+        for domain_pattern in self._compiled_domains:
+            for match in domain_pattern.finditer(text):
+                findings.append(
+                    CodeFinding(
+                        category="internal_domain",
+                        value=match.group(),
+                        start=match.start(),
+                        end=match.end(),
+                        confidence=0.95,
+                        description="Organization-specific internal domain",
+                    )
+                )
         return findings
 
     def _check_private_ips(self, text: str) -> list[CodeFinding]:
         """Detect private/internal IP addresses."""
         findings = []
         for match in _PRIVATE_IP_PATTERN.finditer(text):
-            findings.append(CodeFinding(
-                category="private_ip",
-                value=match.group(),
-                start=match.start(),
-                end=match.end(),
-                confidence=0.7,
-                description="Private IP address",
-            ))
+            findings.append(
+                CodeFinding(
+                    category="private_ip",
+                    value=match.group(),
+                    start=match.start(),
+                    end=match.end(),
+                    confidence=0.7,
+                    description="Private IP address",
+                )
+            )
         return findings
 
     def _check_internal_hostnames(self, text: str) -> list[CodeFinding]:
         """Detect internal hostnames."""
         findings = []
         for match in _INTERNAL_HOSTNAME_PATTERN.finditer(text):
-            findings.append(CodeFinding(
-                category="internal_hostname",
-                value=match.group(),
-                start=match.start(),
-                end=match.end(),
-                confidence=0.8,
-                description="Internal hostname pattern",
-            ))
+            findings.append(
+                CodeFinding(
+                    category="internal_hostname",
+                    value=match.group(),
+                    start=match.start(),
+                    end=match.end(),
+                    confidence=0.8,
+                    description="Internal hostname pattern",
+                )
+            )
         return findings
 
     def _check_imports(self, text: str) -> list[CodeFinding]:
@@ -253,14 +275,16 @@ class CodeDetector:
                 import_path = match.group(1)
                 for prefix in self._config.package_prefixes:
                     if import_path.startswith(prefix):
-                        findings.append(CodeFinding(
-                            category="proprietary_import",
-                            value=import_path,
-                            start=match.start(),
-                            end=match.end(),
-                            confidence=0.95,
-                            description=f"Import of internal package ({prefix}...)",
-                        ))
+                        findings.append(
+                            CodeFinding(
+                                category="proprietary_import",
+                                value=import_path,
+                                start=match.start(),
+                                end=match.end(),
+                                confidence=0.95,
+                                description=f"Import of internal package ({prefix}...)",
+                            )
+                        )
                         break
         return findings
 
@@ -268,14 +292,16 @@ class CodeDetector:
         """Detect database/service connection strings."""
         findings = []
         for match in _CONNECTION_STRING_PATTERN.finditer(text):
-            findings.append(CodeFinding(
-                category="connection_string",
-                value=match.group(),
-                start=match.start(),
-                end=match.end(),
-                confidence=0.9,
-                description="Database/service connection string",
-            ))
+            findings.append(
+                CodeFinding(
+                    category="connection_string",
+                    value=match.group(),
+                    start=match.start(),
+                    end=match.end(),
+                    confidence=0.9,
+                    description="Database/service connection string",
+                )
+            )
         return findings
 
     def _check_codenames(self, text: str) -> list[CodeFinding]:
@@ -283,26 +309,30 @@ class CodeDetector:
         findings = []
         for pattern in self._compiled_codenames:
             for match in pattern.finditer(text):
-                findings.append(CodeFinding(
-                    category="project_codename",
-                    value=match.group(),
-                    start=match.start(),
-                    end=match.end(),
-                    confidence=0.85,
-                    description="Internal project codename",
-                ))
+                findings.append(
+                    CodeFinding(
+                        category="project_codename",
+                        value=match.group(),
+                        start=match.start(),
+                        end=match.end(),
+                        confidence=0.85,
+                        description="Internal project codename",
+                    )
+                )
         return findings
 
     def _check_file_paths(self, text: str) -> list[CodeFinding]:
         """Detect internal file system paths."""
         findings = []
         for match in _FILE_PATH_PATTERN.finditer(text):
-            findings.append(CodeFinding(
-                category="file_path",
-                value=match.group(),
-                start=match.start(),
-                end=match.end(),
-                confidence=0.6,
-                description="Internal file system path",
-            ))
+            findings.append(
+                CodeFinding(
+                    category="file_path",
+                    value=match.group(),
+                    start=match.start(),
+                    end=match.end(),
+                    confidence=0.6,
+                    description="Internal file system path",
+                )
+            )
         return findings

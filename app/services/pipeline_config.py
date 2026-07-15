@@ -71,6 +71,7 @@ def settings_from_config(config: dict | None = None):
     settings.enable_local_llm = llm_on
     if stack.get("gemma4_e2b"):
         from llmguard.detectors.local_llm import _resolve_gemma_model
+
         settings.local_llm_model = _resolve_gemma_model()
     elif stack.get("qwen3_1_7b"):
         settings.local_llm_model = "qwen3:1.7b"

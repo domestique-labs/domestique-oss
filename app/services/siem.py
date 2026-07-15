@@ -25,13 +25,9 @@ import socket
 import threading
 import time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
-from queue import Queue, Full, Empty
-from typing import Any, Optional
+from queue import Empty, Full, Queue
 from urllib.request import Request, urlopen
-from urllib.error import URLError
 
 from app.services.audit import AuditEvent
 
@@ -39,6 +35,7 @@ logger = logging.getLogger("llmguard.siem")
 
 
 # --- Backend Interface ---------------------------------------------------
+
 
 class SIEMBackend(ABC):
     """Abstract base for SIEM output backends."""
@@ -67,9 +64,9 @@ class SIEMBackend(ABC):
 
 # RFC 5424 severity mapping
 _SEVERITY_MAP = {
-    "info": 6,       # Informational
-    "warning": 4,    # Warning
-    "critical": 2,   # Critical
+    "info": 6,  # Informational
+    "warning": 4,  # Warning
+    "critical": 2,  # Critical
 }
 
 # RFC 5424 facility: local0 = 16
@@ -98,7 +95,7 @@ class SyslogBackend(SIEMBackend):
         self._port = port
         self._protocol = protocol
         self._app_name = app_name
-        self._socket: Optional[socket.socket] = None
+        self._socket: socket.socket | None = None
 
     @property
     def name(self) -> str:
@@ -147,11 +144,9 @@ class SyslogBackend(SIEMBackend):
         if event.pii_categories:
             sd_params.append(f'cat="{",".join(event.pii_categories)}"')
         if event.detectors_triggered:
-            sd_params.append(
-                f'detectors="{",".join(event.detectors_triggered)}"'
-            )
+            sd_params.append(f'detectors="{",".join(event.detectors_triggered)}"')
 
-        sd = f'[llmguard@49152 {" ".join(sd_params)}]'
+        sd = f"[llmguard@49152 {' '.join(sd_params)}]"
 
         # Human-readable message
         msg = f"LLMGuard {event.action}: {event.destination} ({event.method})"
@@ -164,6 +159,7 @@ class SyslogBackend(SIEMBackend):
 
 
 # --- CEF Backend (ArcSight) ---------------------------------------------
+
 
 class CEFBackend(SIEMBackend):
     """Common Event Format output for ArcSight and compatible SIEMs.
@@ -223,11 +219,11 @@ class CEFBackend(SIEMBackend):
             f"suser={event.user}",
             f"rt={event.timestamp}",
             f"cn1={int(event.latency_ms)}",
-            f"cn1Label=latencyMs",
+            "cn1Label=latencyMs",
             f"cs1={','.join(event.pii_categories)}",
-            f"cs1Label=piiCategories",
+            "cs1Label=piiCategories",
             f"cs2={','.join(event.detectors_triggered)}",
-            f"cs2Label=detectors",
+            "cs2Label=detectors",
             f"externalId={event.request_id}",
         ]
 
@@ -239,6 +235,7 @@ class CEFBackend(SIEMBackend):
 
 # --- Webhook Backend -----------------------------------------------------
 
+
 class WebhookBackend(SIEMBackend):
     """HTTP webhook output - POSTs JSON events to a URL.
 
@@ -248,7 +245,7 @@ class WebhookBackend(SIEMBackend):
     def __init__(
         self,
         url: str,
-        headers: Optional[dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: float = 5.0,
         batch_size: int = 10,
     ) -> None:
@@ -307,6 +304,7 @@ class WebhookBackend(SIEMBackend):
 
 # --- File Backend (for Filebeat/Fluentd) ---------------------------------
 
+
 class FileBackend(SIEMBackend):
     """JSONL file output for log shippers (Filebeat, Fluentd, Vector).
 
@@ -314,7 +312,7 @@ class FileBackend(SIEMBackend):
     for forwarding to any SIEM.
     """
 
-    def __init__(self, path: Optional[Path] = None) -> None:
+    def __init__(self, path: Path | None = None) -> None:
         self._path = path or (Path.home() / ".llmguard" / "siem" / "events.jsonl")
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._file = open(self._path, "a", buffering=1)
@@ -336,6 +334,7 @@ class FileBackend(SIEMBackend):
 
 # --- Dispatcher ----------------------------------------------------------
 
+
 class SIEMDispatcher:
     """Routes audit events to all configured SIEM backends.
 
@@ -349,9 +348,9 @@ class SIEMDispatcher:
 
     def __init__(self) -> None:
         self._backends: list[SIEMBackend] = []
-        self._queue: Queue[Optional[AuditEvent]] = Queue(maxsize=self.QUEUE_MAX)
+        self._queue: Queue[AuditEvent | None] = Queue(maxsize=self.QUEUE_MAX)
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._stats = {"dispatched": 0, "failed": 0, "dropped": 0}
 
@@ -420,8 +419,7 @@ class SIEMDispatcher:
 
             now = time.time()
             if batch and (
-                len(batch) >= self.BATCH_SIZE
-                or now - last_flush >= self.FLUSH_INTERVAL
+                len(batch) >= self.BATCH_SIZE or now - last_flush >= self.FLUSH_INTERVAL
             ):
                 self._send_batch(batch)
                 batch = []
@@ -444,7 +442,7 @@ class SIEMDispatcher:
 
 # --- Module-level singleton ----------------------------------------------
 
-_global_dispatcher: Optional[SIEMDispatcher] = None
+_global_dispatcher: SIEMDispatcher | None = None
 _dispatcher_lock = threading.Lock()
 
 

@@ -16,19 +16,17 @@ Architecture:
 from __future__ import annotations
 
 import json
-import os
+import logging
 import sqlite3
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone, timedelta
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from queue import Queue, Full
-from typing import Any, Optional
-
-import logging
+from queue import Full, Queue
+from typing import Any
 
 logger = logging.getLogger("llmguard.audit")
 
@@ -113,15 +111,15 @@ class AuditStore:
 
     def __init__(
         self,
-        data_dir: Optional[Path] = None,
-        retention: Optional[RetentionPolicy] = None,
+        data_dir: Path | None = None,
+        retention: RetentionPolicy | None = None,
     ) -> None:
         self._data_dir = data_dir or (Path.home() / ".llmguard" / "audit")
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._retention = retention or RetentionPolicy()
-        self._queue: Queue[Optional[AuditEvent]] = Queue(maxsize=self.QUEUE_MAX)
+        self._queue: Queue[AuditEvent | None] = Queue(maxsize=self.QUEUE_MAX)
         self._running = False
-        self._writer_thread: Optional[threading.Thread] = None
+        self._writer_thread: threading.Thread | None = None
         self._db_path = self._data_dir / "audit.db"
         self._jsonl_path = self._data_dir / "events.jsonl"
         self._last_rotation_check = 0.0
@@ -163,11 +161,11 @@ class AuditStore:
     def query(
         self,
         *,
-        since: Optional[datetime] = None,
-        until: Optional[datetime] = None,
-        action: Optional[AuditAction] = None,
-        destination: Optional[str] = None,
-        user: Optional[str] = None,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        action: AuditAction | None = None,
+        destination: str | None = None,
+        user: str | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -208,10 +206,7 @@ class AuditStore:
             params.append(user)
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        sql = (
-            f"SELECT * FROM audit_events {where} "
-            f"ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-        )
+        sql = f"SELECT * FROM audit_events {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         conn = sqlite3.connect(str(self._db_path))
@@ -224,14 +219,14 @@ class AuditStore:
 
     def get_stats(
         self,
-        since: Optional[datetime] = None,
+        since: datetime | None = None,
     ) -> dict[str, Any]:
         """Get aggregate statistics from the audit store.
 
         Returns counts by action, top destinations, and event volume.
         """
         if not since:
-            since = datetime.now(timezone.utc) - timedelta(hours=24)
+            since = datetime.now(UTC) - timedelta(hours=24)
 
         conn = sqlite3.connect(str(self._db_path))
         try:
@@ -312,18 +307,10 @@ class AuditStore:
             )
         """)
         # Indexes for common query patterns
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_timestamp ON audit_events(timestamp)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_action ON audit_events(action)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_destination ON audit_events(destination)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_user ON audit_events(user)"
-        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_timestamp ON audit_events(timestamp)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_action ON audit_events(action)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_destination ON audit_events(destination)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_user ON audit_events(user)")
         conn.commit()
         conn.close()
 
@@ -416,9 +403,7 @@ class AuditStore:
             conn = sqlite3.connect(str(self._db_path))
 
             # Delete events older than max_age_days
-            cutoff = (
-                datetime.now(timezone.utc) - timedelta(days=self._retention.max_age_days)
-            ).isoformat()
+            cutoff = (datetime.now(UTC) - timedelta(days=self._retention.max_age_days)).isoformat()
             conn.execute("DELETE FROM audit_events WHERE timestamp < ?", (cutoff,))
 
             # Enforce max_events
@@ -455,8 +440,8 @@ def create_audit_event(
     destination: str,
     method: str = "POST",
     path: str = "",
-    detectors: Optional[list[str]] = None,
-    categories: Optional[list[str]] = None,
+    detectors: list[str] | None = None,
+    categories: list[str] | None = None,
     latency_ms: float = 0.0,
     model: str = "",
     content_length: int = 0,
@@ -464,7 +449,7 @@ def create_audit_event(
     proxy_mode: str = "browser",
     user: str = "local",
     source_ip: str = "127.0.0.1",
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> AuditEvent:
     """Factory function to create an AuditEvent with defaults.
 
@@ -478,7 +463,7 @@ def create_audit_event(
 
     return AuditEvent(
         request_id=str(uuid.uuid4()),
-        timestamp=datetime.now(timezone.utc).isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         action=action.value,
         severity=severity.value,
         user=user,
@@ -499,7 +484,7 @@ def create_audit_event(
 
 # --- Module-level singleton ---------------------------------------------
 
-_global_store: Optional[AuditStore] = None
+_global_store: AuditStore | None = None
 _store_lock = threading.Lock()
 
 

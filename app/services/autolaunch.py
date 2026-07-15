@@ -22,7 +22,6 @@ import plistlib
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
 
 from app.services.runtime import is_macos, is_windows, venv_python
 
@@ -42,7 +41,7 @@ class AutoLaunchManager:
     Tries SMAppService first (modern API), falls back to LaunchAgent plist.
     """
 
-    def __init__(self, python_path: Optional[str] = None) -> None:
+    def __init__(self, python_path: str | None = None) -> None:
         """Initialize with the Python interpreter path.
 
         Args:
@@ -132,12 +131,8 @@ class AutoLaunchManager:
                 "SuccessfulExit": False,  # Restart on crash
             },
             "WorkingDirectory": str(self._project_root),
-            "StandardOutPath": str(
-                Path.home() / ".llmguard" / "logs" / "stdout.log"
-            ),
-            "StandardErrorPath": str(
-                Path.home() / ".llmguard" / "logs" / "stderr.log"
-            ),
+            "StandardOutPath": str(Path.home() / ".llmguard" / "logs" / "stdout.log"),
+            "StandardErrorPath": str(Path.home() / ".llmguard" / "logs" / "stderr.log"),
             "EnvironmentVariables": {
                 "PATH": "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin",
                 "PYTHONPATH": str(self._project_root),
@@ -235,7 +230,7 @@ def generate_installer_script() -> str:
 
     Returns the script content as a string.
     """
-    return '''#!/bin/bash
+    return """#!/bin/bash
 # LLMGuard Installer - One-line enterprise deployment
 # Usage: curl -sSL https://llmguard.dev/install | bash
 set -euo pipefail
@@ -292,12 +287,12 @@ echo "✅ LLMGuard installed and running!"
 echo "   Menu bar icon should appear shortly."
 echo "   Data directory: $DATA_DIR"
 echo "   To uninstall: ~/.llmguard/app/scripts/uninstall.sh"
-'''
+"""
 
 
 def generate_uninstaller_script() -> str:
     """Generate an uninstaller shell script."""
-    return f'''#!/bin/bash
+    return f"""#!/bin/bash
 # LLMGuard Uninstaller - Clean removal
 set -euo pipefail
 
@@ -329,4 +324,4 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 echo "✅ LLMGuard uninstalled."
-'''
+"""

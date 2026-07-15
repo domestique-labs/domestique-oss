@@ -1,13 +1,14 @@
 """Tests for behavioral analytics."""
 
 import time
+
 import pytest
+
 from app.services.analytics import (
-    UserProfile,
     AnomalyDetector,
-    RiskScorer,
     RiskLevel,
-    Anomaly,
+    RiskScorer,
+    UserProfile,
 )
 
 

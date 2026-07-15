@@ -12,11 +12,10 @@ from AppKit import (
     NSImage,
     NSMenu,
     NSMenuItem,
-    NSStatusBar,
     NSSquareStatusItemLength,
+    NSStatusBar,
 )
 from Foundation import NSSize
-
 
 _ASSETS = Path(__file__).parent.parent / "assets" / "images"
 _ICON_ACTIVE = _ASSETS / "menubar-icon@2x.png"
@@ -61,7 +60,7 @@ class StatusBar:
 
         self._build_menu()
 
-    def _load_icon(self, path: Path) -> "NSImage | None":
+    def _load_icon(self, path: Path) -> NSImage | None:
         """Load a template image for the menu bar.
 
         Template images let macOS handle rendering (solid/faded, light/dark).
@@ -113,9 +112,7 @@ class StatusBar:
         menu.addItem_(NSMenuItem.separatorItem())
 
         # Protection toggle
-        self._toggle_item = self._add_item(
-            menu, "Disable Protection", action="toggleFirewall:"
-        )
+        self._toggle_item = self._add_item(menu, "Disable Protection", action="toggleFirewall:")
 
         menu.addItem_(NSMenuItem.separatorItem())
 
@@ -152,9 +149,7 @@ class StatusBar:
         Returns:
             The created NSMenuItem.
         """
-        item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-            title, action, ""
-        )
+        item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, "")
         if action:
             item.setTarget_(self._delegate)
         item.setEnabled_(enabled)

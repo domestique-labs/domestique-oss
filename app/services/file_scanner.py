@@ -23,13 +23,10 @@ import base64
 import csv
 import io
 import logging
-import mimetypes
-import struct
 import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 class FileType(Enum):
     """Supported file types for scanning."""
+
     IMAGE = "image"
     PDF = "pdf"
     SPREADSHEET = "spreadsheet"
@@ -52,6 +50,7 @@ class FileType(Enum):
 @dataclass
 class ScanResult:
     """Result of scanning a file for sensitive content."""
+
     file_name: str
     file_type: FileType
     contains_sensitive: bool
@@ -61,12 +60,13 @@ class ScanResult:
     extraction_time_ms: float = 0.0
     detection_time_ms: float = 0.0
     total_time_ms: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class ExtractionResult:
     """Result of text extraction from a file."""
+
     text: str
     confidence: float = 1.0
     time_ms: float = 0.0
@@ -114,8 +114,23 @@ def detect_file_type(data: bytes, filename: str = "") -> FileType:
         return FileType.PDF
     if ext in (".csv", ".xlsx", ".xls", ".tsv"):
         return FileType.SPREADSHEET
-    if ext in (".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".env",
-               ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".sh"):
+    if ext in (
+        ".py",
+        ".js",
+        ".ts",
+        ".go",
+        ".rs",
+        ".java",
+        ".rb",
+        ".env",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".ini",
+        ".cfg",
+        ".conf",
+        ".sh",
+    ):
         return FileType.CODE
 
     # Handle dotfiles like ".env" where Path(".env").suffix is empty
@@ -151,8 +166,7 @@ def extract_text_from_image(data: bytes) -> ExtractionResult:
         text, confidence = _apple_vision_ocr(data)
         elapsed = (time.perf_counter() - start) * 1000
         return ExtractionResult(
-            text=text, confidence=confidence,
-            time_ms=elapsed, method="apple_vision"
+            text=text, confidence=confidence, time_ms=elapsed, method="apple_vision"
         )
     except Exception as e:
         logger.debug(f"Apple Vision OCR failed, trying Tesseract: {e}")
@@ -161,15 +175,11 @@ def extract_text_from_image(data: bytes) -> ExtractionResult:
     try:
         text = _tesseract_ocr(data)
         elapsed = (time.perf_counter() - start) * 1000
-        return ExtractionResult(
-            text=text, confidence=0.8,
-            time_ms=elapsed, method="tesseract"
-        )
+        return ExtractionResult(text=text, confidence=0.8, time_ms=elapsed, method="tesseract")
     except Exception as e:
         logger.warning(f"All OCR engines failed: {e}")
         elapsed = (time.perf_counter() - start) * 1000
-        return ExtractionResult(text="", confidence=0.0,
-                                time_ms=elapsed, method="failed")
+        return ExtractionResult(text="", confidence=0.0, time_ms=elapsed, method="failed")
 
 
 def _apple_vision_ocr(data: bytes) -> tuple[str, float]:
@@ -185,9 +195,7 @@ def _apple_vision_ocr(data: bytes) -> tuple[str, float]:
     ns_data = NSData.dataWithBytes_length_(data, len(data))
 
     # Create image request handler
-    handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(
-        ns_data, None
-    )
+    handler = Vision.VNImageRequestHandler.alloc().initWithData_options_(ns_data, None)
 
     # Create text recognition request
     request = Vision.VNRecognizeTextRequest.alloc().init()
@@ -230,14 +238,14 @@ def extract_text_from_pdf(data: bytes) -> ExtractionResult:
     start = time.perf_counter()
     try:
         from pdfminer.high_level import extract_text as pdf_extract
+
         text = pdf_extract(io.BytesIO(data))
         elapsed = (time.perf_counter() - start) * 1000
         return ExtractionResult(text=text, time_ms=elapsed, method="pdfminer")
     except Exception as e:
         elapsed = (time.perf_counter() - start) * 1000
         logger.warning(f"PDF extraction failed: {e}")
-        return ExtractionResult(text="", confidence=0.0,
-                                time_ms=elapsed, method="failed")
+        return ExtractionResult(text="", confidence=0.0, time_ms=elapsed, method="failed")
 
 
 def extract_text_from_spreadsheet(data: bytes, filename: str = "") -> ExtractionResult:
@@ -258,13 +266,13 @@ def extract_text_from_spreadsheet(data: bytes, filename: str = "") -> Extraction
     except Exception as e:
         elapsed = (time.perf_counter() - start) * 1000
         logger.warning(f"Spreadsheet extraction failed: {e}")
-        return ExtractionResult(text="", confidence=0.0,
-                                time_ms=elapsed, method="failed")
+        return ExtractionResult(text="", confidence=0.0, time_ms=elapsed, method="failed")
 
 
 def _extract_xlsx(data: bytes) -> str:
     """Extract all cell values from Excel workbook."""
     from openpyxl import load_workbook
+
     wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
     lines = []
     for sheet in wb.worksheets:
@@ -344,8 +352,7 @@ def extract_text(data: bytes, filename: str = "") -> ExtractionResult:
 # ---------------------------------------------------------------------------
 
 
-def scan_file(data: bytes, filename: str = "",
-              detector_fn=None) -> ScanResult:
+def scan_file(data: bytes, filename: str = "", detector_fn=None) -> ScanResult:
     """Scan a file for sensitive content.
 
     This is the main entry point. It:
@@ -407,8 +414,7 @@ def scan_file(data: bytes, filename: str = "",
     )
 
 
-def scan_base64(encoded: str, filename: str = "",
-                detector_fn=None) -> ScanResult:
+def scan_base64(encoded: str, filename: str = "", detector_fn=None) -> ScanResult:
     """Scan base64-encoded file content.
 
     Common in LLM API payloads where images are sent as base64 strings.
@@ -467,11 +473,13 @@ def _default_detector(text: str) -> list[dict]:
 
     for category, pattern in patterns.items():
         for match in re.finditer(pattern, text, re.IGNORECASE):
-            detections.append({
-                "category": category,
-                "value": match.group(0)[:50],
-                "position": match.start(),
-            })
+            detections.append(
+                {
+                    "category": category,
+                    "value": match.group(0)[:50],
+                    "position": match.start(),
+                }
+            )
 
     # Context-aware name detection: look for labeled name fields
     name_patterns = [
@@ -482,21 +490,30 @@ def _default_detector(text: str) -> list[dict]:
         for match in re.finditer(pattern, text):
             name = match.group(1)
             # Filter out common false positives
-            if name.lower() not in ("new york", "san francisco", "los angeles",
-                                     "main street", "team alpha"):
-                detections.append({
-                    "category": "name",
-                    "value": name,
-                    "position": match.start(),
-                })
+            if name.lower() not in (
+                "new york",
+                "san francisco",
+                "los angeles",
+                "main street",
+                "team alpha",
+            ):
+                detections.append(
+                    {
+                        "category": "name",
+                        "value": name,
+                        "position": match.start(),
+                    }
+                )
 
     # Address detection: look for street patterns with numbers
     addr_pattern = r"\b\d{1,5}\s+[A-Z][a-z]+\s+(?:St|Ave|Dr|Rd|Blvd|Ln|Way|Ct|Pl)\b"
     for match in re.finditer(addr_pattern, text):
-        detections.append({
-            "category": "address",
-            "value": match.group(0),
-            "position": match.start(),
-        })
+        detections.append(
+            {
+                "category": "address",
+                "value": match.group(0),
+                "position": match.start(),
+            }
+        )
 
     return detections

@@ -153,9 +153,7 @@ class TestInspectHoldsThenInspects:
             addon._detector = _StubPipeline()
             addon._detector_ready.set()
 
-        inspect_task = asyncio.create_task(
-            addon._inspect("hello, just a normal harmless message")
-        )
+        inspect_task = asyncio.create_task(addon._inspect("hello, just a normal harmless message"))
         flip_task = asyncio.create_task(_flip_ready_soon())
 
         result = await asyncio.wait_for(inspect_task, timeout=5)
@@ -197,7 +195,9 @@ class TestInspectHoldsThenInspects:
         addon._detector_ready.set()  # background thread finished (failed)
         addon.DETECTOR_READY_WAIT_S = 20.0  # would be way too slow if re-waited
 
-        with patch.object(addon, "_init_detector", side_effect=RuntimeError("still broken")) as mock_init:
+        with patch.object(
+            addon, "_init_detector", side_effect=RuntimeError("still broken")
+        ) as mock_init:
             start = time.time()
             result = await addon._inspect("some content")
             elapsed = time.time() - start
@@ -301,8 +301,7 @@ class TestDetectorSelfHealsAfterTransientFailure:
             assert result2["reasons"] == ["detectors_unavailable"]
             assert addon._detector is pipeline
             assert addon._detector_init_error is None, (
-                "self-heal must clear the recorded error once the rebuild "
-                "actually succeeds"
+                "self-heal must clear the recorded error once the rebuild actually succeeds"
             )
 
             # Only a LATER request benefits: inspection resumes normally,
@@ -331,7 +330,9 @@ class TestDetectorSelfHealsAfterTransientFailure:
         # Simulate an already-recent retry attempt.
         addon._last_detector_retry_ts = time.time()
 
-        with patch.object(addon, "_init_detector", side_effect=RuntimeError("still broken")) as mock_init:
+        with patch.object(
+            addon, "_init_detector", side_effect=RuntimeError("still broken")
+        ) as mock_init:
             for _ in range(5):
                 result = await addon._inspect("some content")
                 assert result["action"] == "block"

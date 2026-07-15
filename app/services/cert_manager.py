@@ -13,7 +13,7 @@ import plistlib
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -82,8 +82,17 @@ def _extract_issuer_der(cert_path: Path) -> bytes:
 
     issuer_offset = offsets[1]
     r = subprocess.run(
-        ["openssl", "asn1parse", "-in", str(cert_path),
-         "-strparse", str(issuer_offset), "-out", "/dev/stdout", "-noout"],
+        [
+            "openssl",
+            "asn1parse",
+            "-in",
+            str(cert_path),
+            "-strparse",
+            str(issuer_offset),
+            "-out",
+            "/dev/stdout",
+            "-noout",
+        ],
         capture_output=True,
         check=True,
     )
@@ -145,7 +154,7 @@ def install_and_trust() -> bool:
             "trustList": {
                 sha1: {
                     "issuerName": issuer_der,
-                    "modDate": datetime.now(timezone.utc),
+                    "modDate": datetime.now(UTC),
                     "serialNumber": serial_bytes,
                     "trustSettings": [],  # empty = trusted for all policies
                 }

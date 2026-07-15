@@ -4,46 +4,44 @@ from __future__ import annotations
 
 import json
 import time
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from app.services.policy import (
-    PolicyEngine,
-    PolicyAction,
-    PolicyRule,
-    PolicyDecision,
     MatchCondition,
-    RequestContext,
+    PolicyAction,
+    PolicyEngine,
+    PolicyRule,
     PolicyWatcher,
+    RequestContext,
 )
 
 
 @pytest.fixture
 def basic_policy():
     """Simple policy with a few rules."""
-    return PolicyEngine(rules=[
-        PolicyRule(
-            name="block-ssn",
-            match=MatchCondition(category="SSN"),
-            action=PolicyAction.BLOCK,
-            priority=10,
-        ),
-        PolicyRule(
-            name="redact-email-chatgpt",
-            match=MatchCondition(category="EMAIL", destination="chatgpt.com"),
-            action=PolicyAction.REDACT,
-            priority=5,
-        ),
-        PolicyRule(
-            name="allow-internal",
-            match=MatchCondition(destination="llm.internal.corp.io"),
-            action=PolicyAction.ALLOW,
-            priority=20,
-        ),
-    ])
+    return PolicyEngine(
+        rules=[
+            PolicyRule(
+                name="block-ssn",
+                match=MatchCondition(category="SSN"),
+                action=PolicyAction.BLOCK,
+                priority=10,
+            ),
+            PolicyRule(
+                name="redact-email-chatgpt",
+                match=MatchCondition(category="EMAIL", destination="chatgpt.com"),
+                action=PolicyAction.REDACT,
+                priority=5,
+            ),
+            PolicyRule(
+                name="allow-internal",
+                match=MatchCondition(destination="llm.internal.corp.io"),
+                action=PolicyAction.ALLOW,
+                priority=20,
+            ),
+        ]
+    )
 
 
 class TestPolicyEvaluation:
@@ -77,34 +75,39 @@ class TestPolicyEvaluation:
 
     def test_priority_ordering(self):
         """Higher priority rules should be evaluated first."""
-        engine = PolicyEngine(rules=[
-            PolicyRule(
-                name="low-priority",
-                match=MatchCondition(category="SSN"),
-                action=PolicyAction.REDACT,
-                priority=1,
-            ),
-            PolicyRule(
-                name="high-priority",
-                match=MatchCondition(category="SSN"),
-                action=PolicyAction.BLOCK,
-                priority=100,
-            ),
-        ])
+        engine = PolicyEngine(
+            rules=[
+                PolicyRule(
+                    name="low-priority",
+                    match=MatchCondition(category="SSN"),
+                    action=PolicyAction.REDACT,
+                    priority=1,
+                ),
+                PolicyRule(
+                    name="high-priority",
+                    match=MatchCondition(category="SSN"),
+                    action=PolicyAction.BLOCK,
+                    priority=100,
+                ),
+            ]
+        )
         ctx = RequestContext(destination="api.openai.com", category="SSN")
         decision = engine.evaluate(ctx)
         assert decision.action == PolicyAction.BLOCK
         assert decision.rule_name == "high-priority"
 
     def test_disabled_rules_skipped(self):
-        engine = PolicyEngine(rules=[
-            PolicyRule(
-                name="disabled-rule",
-                match=MatchCondition(category="SSN"),
-                action=PolicyAction.BLOCK,
-                enabled=False,
-            ),
-        ], default_action=PolicyAction.ALLOW)
+        engine = PolicyEngine(
+            rules=[
+                PolicyRule(
+                    name="disabled-rule",
+                    match=MatchCondition(category="SSN"),
+                    action=PolicyAction.BLOCK,
+                    enabled=False,
+                ),
+            ],
+            default_action=PolicyAction.ALLOW,
+        )
         ctx = RequestContext(destination="api.openai.com", category="SSN")
         decision = engine.evaluate(ctx)
         assert decision.action == PolicyAction.ALLOW
@@ -185,23 +188,27 @@ class TestPolicyFromDict:
         assert decision.action == PolicyAction.BLOCK
 
     def test_from_json_string(self):
-        json_str = json.dumps({
-            "version": 2,
-            "rules": [
-                {"name": "test", "match": {"category": "EMAIL"}, "action": "redact"}
-            ],
-        })
+        json_str = json.dumps(
+            {
+                "version": 2,
+                "rules": [{"name": "test", "match": {"category": "EMAIL"}, "action": "redact"}],
+            }
+        )
         engine = PolicyEngine.from_yaml(json_str)
         assert len(engine.rules) == 1
 
     def test_from_file(self, tmp_path):
         policy_file = tmp_path / "policy.json"
-        policy_file.write_text(json.dumps({
-            "version": 2,
-            "rules": [
-                {"name": "block-all-ssn", "match": {"category": "SSN"}, "action": "block"}
-            ],
-        }))
+        policy_file.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "rules": [
+                        {"name": "block-all-ssn", "match": {"category": "SSN"}, "action": "block"}
+                    ],
+                }
+            )
+        )
         engine = PolicyEngine.from_file(policy_file)
         assert len(engine.rules) == 1
 
@@ -211,11 +218,13 @@ class TestPolicyManagement:
 
     def test_add_rule(self, basic_policy):
         initial_count = len(basic_policy.rules)
-        basic_policy.add_rule(PolicyRule(
-            name="new-rule",
-            match=MatchCondition(category="PHONE"),
-            action=PolicyAction.ALERT,
-        ))
+        basic_policy.add_rule(
+            PolicyRule(
+                name="new-rule",
+                match=MatchCondition(category="PHONE"),
+                action=PolicyAction.ALERT,
+            )
+        )
         assert len(basic_policy.rules) == initial_count + 1
 
     def test_remove_rule(self, basic_policy):
@@ -239,10 +248,14 @@ class TestPolicyWatcher:
 
     def test_loads_on_start(self, tmp_path):
         policy_file = tmp_path / "policy.json"
-        policy_file.write_text(json.dumps({
-            "version": 2,
-            "rules": [{"name": "r1", "match": {"category": "SSN"}, "action": "block"}],
-        }))
+        policy_file.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "rules": [{"name": "r1", "match": {"category": "SSN"}, "action": "block"}],
+                }
+            )
+        )
 
         watcher = PolicyWatcher(policy_file, reload_interval=0.1)
         watcher.start()
@@ -254,10 +267,14 @@ class TestPolicyWatcher:
 
     def test_reloads_on_change(self, tmp_path):
         policy_file = tmp_path / "policy.json"
-        policy_file.write_text(json.dumps({
-            "version": 2,
-            "rules": [{"name": "r1", "match": {}, "action": "block"}],
-        }))
+        policy_file.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "rules": [{"name": "r1", "match": {}, "action": "block"}],
+                }
+            )
+        )
 
         reloaded = []
         watcher = PolicyWatcher(
@@ -270,13 +287,17 @@ class TestPolicyWatcher:
 
         # Modify file
         time.sleep(0.1)
-        policy_file.write_text(json.dumps({
-            "version": 2,
-            "rules": [
-                {"name": "r1", "match": {}, "action": "block"},
-                {"name": "r2", "match": {}, "action": "allow"},
-            ],
-        }))
+        policy_file.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "rules": [
+                        {"name": "r1", "match": {}, "action": "block"},
+                        {"name": "r2", "match": {}, "action": "allow"},
+                    ],
+                }
+            )
+        )
         time.sleep(0.3)
 
         assert len(watcher.engine.rules) == 2

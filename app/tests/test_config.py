@@ -9,17 +9,11 @@ Tests cover:
 
 from __future__ import annotations
 
-import json
-import tempfile
 import threading
-from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 from app.config.schema import AppConfig, DetectionStackConfig
 from app.config.store import ConfigStore
-
 
 # --- Schema Tests ----------------------------------------------------
 
@@ -42,9 +36,7 @@ class TestDetectionStackConfig:
         assert stack.gemma4_e2b is True
 
     def test_legacy_cpu_flag(self):
-        stack = DetectionStackConfig(
-            qwen3_1_7b=False, gemma4_e2b=False, legacy_cpu=True
-        )
+        stack = DetectionStackConfig(qwen3_1_7b=False, gemma4_e2b=False, legacy_cpu=True)
         assert stack.legacy_cpu is True
         assert stack.qwen3_1_7b is False
         assert stack.gemma4_e2b is False
@@ -212,43 +204,59 @@ class TestConfigStoreDetectionStackSaveDict:
         ConfigStore.reset()
 
     def test_unrelated_save_resending_same_stack_does_not_mark_configured(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()  # fresh: unconfigured, qwen3_1_7b default True
-            result = ConfigStore.save_dict({
-                "detection_stack": {"regex": True, "qwen3_1_7b": True},  # unchanged
-                "proxy_port": 9001,  # the field actually being changed
-            })
+            result = ConfigStore.save_dict(
+                {
+                    "detection_stack": {"regex": True, "qwen3_1_7b": True},  # unchanged
+                    "proxy_port": 9001,  # the field actually being changed
+                }
+            )
             assert result.proxy_port == 9001
             assert result.detection_stack_configured is False
 
     def test_save_dict_marks_configured_on_stack_value_change(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()  # fresh: gliner_pii defaults False
-            result = ConfigStore.save_dict({
-                "detection_stack": {"gliner_pii": True},
-            })
+            result = ConfigStore.save_dict(
+                {
+                    "detection_stack": {"gliner_pii": True},
+                }
+            )
             assert result.detection_stack.gliner_pii is True
             assert result.detection_stack_configured is True
 
-    def test_save_dict_marks_configured_when_qwen3_resaved_true_to_true_is_unrelated(self, tmp_path):
+    def test_save_dict_marks_configured_when_qwen3_resaved_true_to_true_is_unrelated(
+        self, tmp_path
+    ):
         """A bare re-save of qwen3_1_7b: True (no actual change) must NOT
         mark configured on its own -- only an actual value change does."""
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
-            result = ConfigStore.save_dict({
-                "detection_stack": {"qwen3_1_7b": True},
-            })
+            result = ConfigStore.save_dict(
+                {
+                    "detection_stack": {"qwen3_1_7b": True},
+                }
+            )
             assert result.detection_stack_configured is False
 
     def test_save_dict_marks_configured_when_qwen3_toggled_off_then_on(self, tmp_path):
         """The real-world re-enable path: a low-resource user whose qwen3
         was auto-downgraded explicitly flips it off then back on in the
         dashboard -- each actual value change marks configured."""
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
             ConfigStore.save_dict({"detection_stack": {"qwen3_1_7b": False}})
             result = ConfigStore.save_dict({"detection_stack": {"qwen3_1_7b": True}})
@@ -256,18 +264,24 @@ class TestConfigStoreDetectionStackSaveDict:
             assert result.detection_stack_configured is True
 
     def test_save_dict_honors_explicit_configured_flag_in_payload(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
-            result = ConfigStore.save_dict({
-                "detection_stack": {"qwen3_1_7b": True},  # unchanged value
-                "detection_stack_configured": True,  # explicit intent
-            })
+            result = ConfigStore.save_dict(
+                {
+                    "detection_stack": {"qwen3_1_7b": True},  # unchanged value
+                    "detection_stack_configured": True,  # explicit intent
+                }
+            )
             assert result.detection_stack_configured is True
 
     def test_save_dict_leaves_configured_alone_when_key_absent(self, tmp_path):
-        with patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", tmp_path / "config.json"),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
             result = ConfigStore.save_dict({"proxy_port": 9001})
             assert result.detection_stack_configured is False
@@ -285,16 +299,20 @@ class TestConfigStore:
 
     def test_load_creates_default_if_missing(self, tmp_path):
         config_path = tmp_path / "config.json"
-        with patch("app.config.store.CONFIG_PATH", config_path), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", config_path),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             config = ConfigStore.load()
             assert config.proxy_port == 8000
             assert config_path.exists()
 
     def test_save_and_reload(self, tmp_path):
         config_path = tmp_path / "config.json"
-        with patch("app.config.store.CONFIG_PATH", config_path), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", config_path),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             config = AppConfig(proxy_port=1234)
             ConfigStore.save(config)
 
@@ -305,23 +323,29 @@ class TestConfigStore:
     def test_corrupted_file_resets_to_default(self, tmp_path):
         config_path = tmp_path / "config.json"
         config_path.write_text("not valid json {{{")
-        with patch("app.config.store.CONFIG_PATH", config_path), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", config_path),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             config = ConfigStore.load()
             assert config.proxy_port == 8000  # default
 
     def test_save_dict(self, tmp_path):
         config_path = tmp_path / "config.json"
-        with patch("app.config.store.CONFIG_PATH", config_path), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", config_path),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             result = ConfigStore.save_dict({"proxy_port": 5555})
             assert result.proxy_port == 5555
             assert ConfigStore.current().proxy_port == 5555
 
     def test_current_loads_lazily(self, tmp_path):
         config_path = tmp_path / "config.json"
-        with patch("app.config.store.CONFIG_PATH", config_path), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", config_path),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             config = ConfigStore.current()
             assert config is not None
             assert config.proxy_port == 8000
@@ -329,8 +353,10 @@ class TestConfigStore:
     def test_thread_safety(self, tmp_path):
         """Concurrent writes don't corrupt state."""
         config_path = tmp_path / "config.json"
-        with patch("app.config.store.CONFIG_PATH", config_path), \
-             patch("app.config.store.APP_DATA_DIR", tmp_path):
+        with (
+            patch("app.config.store.CONFIG_PATH", config_path),
+            patch("app.config.store.APP_DATA_DIR", tmp_path),
+        ):
             ConfigStore.load()
             errors = []
 

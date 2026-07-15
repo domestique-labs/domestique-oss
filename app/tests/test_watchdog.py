@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.services.watchdog import (
+    ProtectionState,
     Watchdog,
     WatchdogConfig,
-    ProtectionState,
 )
 
 
@@ -199,6 +199,7 @@ class TestPACSubdomainMatching:
 
     def test_pac_includes_subdomain_matching(self):
         from app.services.interceptor import generate_pac_file
+
         pac_path = generate_pac_file()
         content = pac_path.read_text()
 
@@ -208,6 +209,7 @@ class TestPACSubdomainMatching:
 
     def test_pac_returns_proxy_for_known_domains(self):
         from app.services.interceptor import generate_pac_file
+
         pac_path = generate_pac_file()
         content = pac_path.read_text()
 

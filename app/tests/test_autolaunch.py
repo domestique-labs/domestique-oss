@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import plistlib
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services.autolaunch import (
-    AutoLaunchManager,
     BUNDLE_ID,
+    AutoLaunchManager,
     generate_installer_script,
     generate_uninstaller_script,
 )
@@ -22,12 +22,8 @@ def manager(tmp_path, monkeypatch):
     monkeypatch.setattr("app.services.autolaunch.is_macos", lambda: True)
     monkeypatch.setattr("app.services.autolaunch.is_windows", lambda: False)
     plist_path = tmp_path / "LaunchAgents" / f"{BUNDLE_ID}.plist"
-    monkeypatch.setattr(
-        "app.services.autolaunch.LAUNCH_AGENT_PLIST", plist_path
-    )
-    monkeypatch.setattr(
-        "app.services.autolaunch.LAUNCH_AGENT_DIR", tmp_path / "LaunchAgents"
-    )
+    monkeypatch.setattr("app.services.autolaunch.LAUNCH_AGENT_PLIST", plist_path)
+    monkeypatch.setattr("app.services.autolaunch.LAUNCH_AGENT_DIR", tmp_path / "LaunchAgents")
     return AutoLaunchManager()
 
 

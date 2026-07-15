@@ -24,18 +24,19 @@ import re
 import sys
 import threading
 import time
-from pathlib import Path
-from typing import Any, Optional
-from urllib.request import Request
-from urllib.error import URLError
-
-from mitmproxy import http, ctx
 
 # Direct HTTP opener that bypasses any system proxy settings.
 # This is critical because the mitmdump process runs inside the proxy chain -
 # if urlopen respects system proxy, it would route localhost API calls back
 # through mitmproxy, creating a deadlock.
 import urllib.request as _urllib_req
+from pathlib import Path
+from typing import Any
+from urllib.error import URLError
+from urllib.request import Request
+
+from mitmproxy import ctx, http
+
 _direct_opener = _urllib_req.build_opener(_urllib_req.ProxyHandler({}))
 _direct_urlopen = _direct_opener.open
 
@@ -120,8 +121,7 @@ def _light_profile_stack(stack: dict, stack_configured: bool = False) -> dict:
     """
     if stack_configured:
         return {
-            key: bool(stack.get(key, default))
-            for key, default in _STACK_SAFE_DEFAULTS.items()
+            key: bool(stack.get(key, default)) for key, default in _STACK_SAFE_DEFAULTS.items()
         }
 
     light = {"regex": bool(stack.get("regex", _STACK_SAFE_DEFAULTS["regex"]))}
@@ -136,7 +136,9 @@ def _light_profile_stack(stack: dict, stack_configured: bool = False) -> dict:
 class _InspectResult:
     """Result from running the detection pipeline on a text."""
 
-    def __init__(self, findings: list, should_block: bool = False, redacted_text: str | None = None):
+    def __init__(
+        self, findings: list, should_block: bool = False, redacted_text: str | None = None
+    ):
         self.findings = findings
         self.should_block = should_block
         self.redacted_text = redacted_text
@@ -163,11 +165,13 @@ class _DetectorPipeline:
             try:
                 detections = await det.scan(text)
                 for d in detections:
-                    all_findings.append(_Finding(
-                        category=d.category,
-                        confidence=d.confidence,
-                        description=f"{d.detector}: {d.category} ({d.confidence:.0%})",
-                    ))
+                    all_findings.append(
+                        _Finding(
+                            category=d.category,
+                            confidence=d.confidence,
+                            description=f"{d.detector}: {d.category} ({d.confidence:.0%})",
+                        )
+                    )
             except Exception:
                 pass
 
@@ -254,9 +258,7 @@ class LLMGuardAddon:
         try:
             lines = self._log_file.read_text().strip().split("\n")
             if len(lines) > self.MAX_LOG_ENTRIES:
-                self._log_file.write_text(
-                    "\n".join(lines[-self.MAX_LOG_ENTRIES:]) + "\n"
-                )
+                self._log_file.write_text("\n".join(lines[-self.MAX_LOG_ENTRIES :]) + "\n")
         except OSError:
             pass
 
@@ -297,32 +299,34 @@ class LLMGuardAddon:
             "path": flow.request.path,
             "model": self._extract_model(flow),
             "content_length": len(flow.request.content or b""),
-            "detections": [
-                {"detector": "browser_proxy", "category": item}
-                for item in reasons
-            ],
+            "detections": [{"detector": "browser_proxy", "category": item} for item in reasons],
         }
         if latency_ms is not None:
             event["latency_ms"] = round(latency_ms, 1)
         if content is not None:
             event["prompt"] = content
-            event["prompt_fields"] = [{
-                "field_path": "request.body",
-                "text": content,
-                "length": len(content),
-            }]
+            event["prompt_fields"] = [
+                {
+                    "field_path": "request.body",
+                    "text": content,
+                    "length": len(content),
+                }
+            ]
         if redacted_content is not None:
             event["redacted_prompt"] = redacted_content
-            event["redacted_prompt_fields"] = [{
-                "field_path": "request.body",
-                "text": redacted_content,
-                "length": len(redacted_content),
-            }]
+            event["redacted_prompt_fields"] = [
+                {
+                    "field_path": "request.body",
+                    "text": redacted_content,
+                    "length": len(redacted_content),
+                }
+            ]
         if raw_body_preview:
             event["raw_body_preview"] = raw_body_preview
         if extra:
             event.update(extra)
         from llmguard.debug_trace import append_debug_trace
+
         append_debug_trace(event)
 
     def _extract_model(self, flow: http.HTTPFlow) -> str:
@@ -431,9 +435,14 @@ class LLMGuardAddon:
         silently overridden; an auto-selected light profile is logged.
         """
         import os
+
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
-        from app.services.pipeline_config import settings_from_config, config_hash, load_config_dict
+        from app.services.pipeline_config import (
+            config_hash,
+            load_config_dict,
+            settings_from_config,
+        )
         from llmguard.detectors.registry import create_detector_pipeline
 
         raw_config = load_config_dict()
@@ -508,11 +517,13 @@ class LLMGuardAddon:
     def _warmup_llm(self):
         """Pre-load Ollama model so first request doesn't block."""
         import threading
+
         config = self._load_config()
         stack = config.get("detection_stack", {})
         model = None
         if stack.get("gemma4_e2b", False):
             from llmguard.detectors.local_llm import _resolve_gemma_model
+
             model = _resolve_gemma_model()
         elif stack.get("qwen3_1_7b", True):
             model = "qwen3:1.7b"
@@ -523,17 +534,23 @@ class LLMGuardAddon:
 
         def _warmup():
             try:
-                import urllib.request as _req
                 import json as _json
+                import urllib.request as _req
+
                 opener = _req.build_opener(_req.ProxyHandler({}))
-                data = _json.dumps({
-                    "model": model,
-                    "messages": [{"role": "user", "content": "warmup"}],
-                    "stream": False,
-                    "options": {"num_predict": 1, "num_ctx": 8192},
-                }).encode()
-                req = _req.Request("http://localhost:11434/api/chat", data=data,
-                                   headers={"Content-Type": "application/json"})
+                data = _json.dumps(
+                    {
+                        "model": model,
+                        "messages": [{"role": "user", "content": "warmup"}],
+                        "stream": False,
+                        "options": {"num_predict": 1, "num_ctx": 8192},
+                    }
+                ).encode()
+                req = _req.Request(
+                    "http://localhost:11434/api/chat",
+                    data=data,
+                    headers={"Content-Type": "application/json"},
+                )
                 opener.open(req, timeout=120)
                 ctx.log.info(f"LLM warmup complete: {model}")
             except Exception as e:
@@ -558,14 +575,16 @@ class LLMGuardAddon:
 
         # Only inspect POST requests with bodies (not page loads / GETs)
         if method != "POST" or not flow.request.content:
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "pass",
-                "reason": f"no body ({method})",
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "pass",
+                    "reason": f"no body ({method})",
+                }
+            )
             self._trace_request(
                 flow,
                 action="pass",
@@ -579,22 +598,22 @@ class LLMGuardAddon:
         # static assets) are noise and cause false positives.
         _CONVERSATION_PATH_FRAGMENTS = (
             # ChatGPT web
-            "/conversation",          # /backend-api/f/conversation
-            "/backend-anon/",         # guest conversations
+            "/conversation",  # /backend-api/f/conversation
+            "/backend-anon/",  # guest conversations
             # OpenAI API
             "/v1/chat/completions",
             "/v1/completions",
-            "/v1/responses",          # 2025 Responses API
+            "/v1/responses",  # 2025 Responses API
             # Anthropic
             "/v1/messages",
-            "/v1/complete",           # legacy
-            "/completion",            # Claude web: /api/.../completion
-            "/append_message",        # Claude web
+            "/v1/complete",  # legacy
+            "/completion",  # Claude web: /api/.../completion
+            "/append_message",  # Claude web
             # Google Gemini
-            "/batchexecute",          # Gemini web (BardChatUi)
-            "/StreamGenerate",        # Gemini web streaming
-            ":generateContent",       # Gemini API
-            ":streamGenerateContent", # Gemini API streaming
+            "/batchexecute",  # Gemini web (BardChatUi)
+            "/StreamGenerate",  # Gemini web streaming
+            ":generateContent",  # Gemini API
+            ":streamGenerateContent",  # Gemini API streaming
             # Microsoft Copilot
             "/c/api/chat",
             "/c/api/conversations",
@@ -607,38 +626,51 @@ class LLMGuardAddon:
             # DeepSeek, Together, Fireworks, Cursor, etc.)
             "/chat/completions",
             "/generate",
-            "/predictions",           # Replicate
+            "/predictions",  # Replicate
             # HuggingFace
-            "/models/",               # api-inference: /models/{model}
+            "/models/",  # api-inference: /models/{model}
             # Cursor / Windsurf (gRPC-web)
-            "/aiserver.v1.",          # Cursor: /aiserver.v1.ChatService/
+            "/aiserver.v1.",  # Cursor: /aiserver.v1.ChatService/
         )
         _SKIP_PATH_SUBSTRINGS = (
-            "/sentinel/", "/autocompletions", "/connectors/",
-            "/telemetry", "/rgstr", "/library",
-            "/cdn-cgi/", "/ces/", "/cdn/", "/_next/",
-            "/assets/", "/static/", "/favicon",
+            "/sentinel/",
+            "/autocompletions",
+            "/connectors/",
+            "/telemetry",
+            "/rgstr",
+            "/library",
+            "/cdn-cgi/",
+            "/ces/",
+            "/cdn/",
+            "/_next/",
+            "/assets/",
+            "/static/",
+            "/favicon",
             "/init",
         )
         if any(s in path for s in _SKIP_PATH_SUBSTRINGS):
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "pass",
-                "reason": "non-conversation path",
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "pass",
+                    "reason": "non-conversation path",
+                }
+            )
             return
         if not any(f in path for f in _CONVERSATION_PATH_FRAGMENTS):
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "pass",
-                "reason": "non-conversation path",
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "pass",
+                    "reason": "non-conversation path",
+                }
+            )
             return
 
         # Extract user content from the request body
@@ -651,16 +683,18 @@ class LLMGuardAddon:
                     raw_snippet = flow.request.content.decode("utf-8", errors="replace")[:500]
                 except Exception:
                     pass
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "pass",
-                "reason": "no extractable content",
-                "body_size": len(flow.request.content),
-                "raw_snippet": raw_snippet if raw_snippet else None,
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "pass",
+                    "reason": "no extractable content",
+                    "body_size": len(flow.request.content),
+                    "raw_snippet": raw_snippet if raw_snippet else None,
+                }
+            )
             self._trace_request(
                 flow,
                 action="pass",
@@ -709,16 +743,18 @@ class LLMGuardAddon:
                     # User approved - let request through
                     self._stats["allowed"] += 1
                     self._persist_stats()
-                    self._log_request({
-                        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                        "host": host,
-                        "method": method,
-                        "path": path[:100],
-                        "action": "approved",
-                        "reasons": reasons,
-                        "prompt": content,
-                        "content_preview": content_preview,
-                    })
+                    self._log_request(
+                        {
+                            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                            "host": host,
+                            "method": method,
+                            "path": path[:100],
+                            "action": "approved",
+                            "reasons": reasons,
+                            "prompt": content,
+                            "content_preview": content_preview,
+                        }
+                    )
                     self._trace_request(
                         flow,
                         action="approved",
@@ -727,49 +763,49 @@ class LLMGuardAddon:
                         latency_ms=latency_ms,
                         extra={"approval_decision": "approved"},
                     )
-                    ctx.log.info(
-                        f"APPROVED by user: request to {host} ({reasons})"
-                    )
+                    ctx.log.info(f"APPROVED by user: request to {host} ({reasons})")
                     return
 
             # Denied, expired, or immediate block
             self._stats["blocked"] += 1
             self._persist_stats()
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "blocked",
-                "reasons": reasons,
-                "prompt": content,
-                "content_preview": content_preview,
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "blocked",
+                    "reasons": reasons,
+                    "prompt": content,
+                    "content_preview": content_preview,
+                }
+            )
             self._trace_request(
                 flow,
                 action="blocked",
                 reasons=reasons,
                 content=content,
                 latency_ms=latency_ms,
-                extra=(
-                    {"approval_decision": approval_decision}
-                    if approval_decision else None
-                ),
+                extra=({"approval_decision": approval_decision} if approval_decision else None),
             )
             flow.response = http.Response.make(
                 403,
-                json.dumps({
-                    "error": {
-                        "message": "Request blocked by LLMGuard: sensitive data detected",
-                        "type": "firewall_block",
-                        "details": reasons,
+                json.dumps(
+                    {
+                        "error": {
+                            "message": "Request blocked by LLMGuard: sensitive data detected",
+                            "type": "firewall_block",
+                            "details": reasons,
+                        }
                     }
-                }).encode(),
+                ).encode(),
                 {"Content-Type": "application/json"},
             )
             ctx.log.warn(f"BLOCKED request to {host}: {reasons}")
             try:
                 from app.services.notifications import notify_block
+
                 notify_block(host)
             except Exception:
                 logger.debug("Desktop notification failed", exc_info=True)
@@ -777,18 +813,20 @@ class LLMGuardAddon:
         elif result["action"] == "redact":
             self._stats["redacted"] += 1
             self._persist_stats()
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "redacted",
-                "reasons": result.get("reasons", []),
-                "redacted_count": result.get("redacted_count", 0),
-                "prompt": content,
-                "redacted_prompt": result["redacted_content"],
-                "content_preview": content_preview,
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "redacted",
+                    "reasons": result.get("reasons", []),
+                    "redacted_count": result.get("redacted_count", 0),
+                    "prompt": content,
+                    "redacted_prompt": result["redacted_content"],
+                    "content_preview": content_preview,
+                }
+            )
             self._trace_request(
                 flow,
                 action="redacted",
@@ -804,15 +842,17 @@ class LLMGuardAddon:
         else:
             self._stats["allowed"] += 1
             self._persist_stats()
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": method,
-                "path": path[:100],
-                "action": "allowed",
-                "prompt": content,
-                "content_preview": content_preview,
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": method,
+                    "path": path[:100],
+                    "action": "allowed",
+                    "prompt": content,
+                    "content_preview": content_preview,
+                }
+            )
             self._trace_request(
                 flow,
                 action="allowed",
@@ -823,6 +863,7 @@ class LLMGuardAddon:
     def _is_llm_endpoint(self, host: str) -> bool:
         """Check if a host is a known LLM API endpoint."""
         from app.services.interceptor import INTERCEPTED_DOMAINS
+
         return any(host.endswith(d) or host == d for d in INTERCEPTED_DOMAINS)
 
     def _emit_audit_event(
@@ -840,10 +881,11 @@ class LLMGuardAddon:
         """Emit a structured audit event to the audit store."""
         try:
             from app.services.audit import (
-                get_audit_store,
-                create_audit_event,
                 AuditAction,
+                create_audit_event,
+                get_audit_store,
             )
+
             action_enum = {
                 "block": AuditAction.BLOCK,
                 "redact": AuditAction.REDACT,
@@ -941,12 +983,14 @@ class LLMGuardAddon:
 
         # Submit to the API server
         try:
-            payload = json.dumps({
-                "host": host,
-                "path": path[:100],
-                "findings": findings,
-                "content_preview": redacted_preview,
-            }).encode()
+            payload = json.dumps(
+                {
+                    "host": host,
+                    "path": path[:100],
+                    "findings": findings,
+                    "content_preview": redacted_preview,
+                }
+            ).encode()
             req = Request(
                 f"{self._api_base}/api/approvals",
                 data=payload,
@@ -965,8 +1009,7 @@ class LLMGuardAddon:
 
         # Poll for the decision
         ctx.log.info(
-            f"Awaiting approval {approval_id} for {host} "
-            f"(timeout={timeout}s, findings={findings})"
+            f"Awaiting approval {approval_id} for {host} (timeout={timeout}s, findings={findings})"
         )
         deadline = time.time() + timeout
         poll_interval = 0.5
@@ -995,7 +1038,7 @@ class LLMGuardAddon:
         ctx.log.info(f"Approval {approval_id}: EXPIRED (timeout)")
         return "expired"
 
-    def _extract_content(self, flow: http.HTTPFlow) -> Optional[str]:
+    def _extract_content(self, flow: http.HTTPFlow) -> str | None:
         """Extract the user's message content from the request body.
 
         Handles JSON and non-JSON (URL-encoded, protobuf-like) bodies.
@@ -1068,7 +1111,7 @@ class LLMGuardAddon:
 
         return None
 
-    def _extract_files_from_json(self, body: dict) -> Optional[str]:
+    def _extract_files_from_json(self, body: dict) -> str | None:
         """Extract text from base64-encoded images/files in JSON payloads.
 
         Handles:
@@ -1090,7 +1133,7 @@ class LLMGuardAddon:
 
         return "\n".join(extracted_parts) if extracted_parts else None
 
-    def _extract_multipart_content(self, flow: http.HTTPFlow) -> Optional[str]:
+    def _extract_multipart_content(self, flow: http.HTTPFlow) -> str | None:
         """Extract text from multipart/form-data file uploads."""
         from app.services.file_scanner import scan_file
 
@@ -1141,7 +1184,8 @@ class LLMGuardAddon:
         broken policy file and re-saving config rebuilds the pipeline either
         way -- whether or not the previous background build already failed.
         """
-        from app.services.pipeline_config import config_mtime_ns, config_hash, load_config_dict
+        from app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+
         mtime = config_mtime_ns()
         if mtime == getattr(self, "_config_mtime", 0):
             return False
@@ -1180,7 +1224,10 @@ class LLMGuardAddon:
             config_changed = False
 
         now = time.time()
-        if not config_changed and (now - self._last_detector_retry_ts) < self.DETECTOR_RETRY_BACKOFF_S:
+        if (
+            not config_changed
+            and (now - self._last_detector_retry_ts) < self.DETECTOR_RETRY_BACKOFF_S
+        ):
             return
         if not self._detector_retry_lock.acquire(blocking=False):
             return  # a retry attempt is already in flight
@@ -1205,15 +1252,10 @@ class LLMGuardAddon:
                 self._init_detector()
             except Exception as e:
                 self._detector_init_error = e
-                ctx.log.error(
-                    f"Detector pipeline retry failed: {e} - still failing closed"
-                )
+                ctx.log.error(f"Detector pipeline retry failed: {e} - still failing closed")
                 return
             self._detector_init_error = None
-            ctx.log.info(
-                "Detector pipeline recovered after previous failure - "
-                "inspection resumed"
-            )
+            ctx.log.info("Detector pipeline recovered after previous failure - inspection resumed")
         finally:
             self._detector_retry_lock.release()
 
@@ -1291,6 +1333,7 @@ class LLMGuardAddon:
         extra: list[str] = []
         try:
             from app.services.injection import InjectionDetector, Severity
+
             inj = InjectionDetector(min_severity=Severity.HIGH).scan(content)
             if inj.is_injection:
                 extra.append(f"prompt_injection:{inj.highest_severity.value}")
@@ -1299,6 +1342,7 @@ class LLMGuardAddon:
 
         try:
             from app.services.code_detection import CodeDetector
+
             code = CodeDetector().scan(content)
             if code.is_sensitive:
                 extra.extend(f"code:{cat}" for cat in code.categories)
@@ -1345,10 +1389,7 @@ class LLMGuardAddon:
 
         # Skip static assets — only scan API responses (JSON / SSE)
         content_type = flow.response.headers.get("content-type", "")
-        is_api_response = (
-            "application/json" in content_type
-            or "text/event-stream" in content_type
-        )
+        is_api_response = "application/json" in content_type or "text/event-stream" in content_type
         if not is_api_response:
             return
 
@@ -1364,16 +1405,18 @@ class LLMGuardAddon:
             reasons = result.get("reasons", [])
             preview = response_text[:200]
 
-            self._log_request({
-                "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "host": host,
-                "method": "RESPONSE",
-                "path": flow.request.path[:100],
-                "action": "response_alert",
-                "reasons": reasons,
-                "content_preview": preview,
-                "direction": "inbound",
-            })
+            self._log_request(
+                {
+                    "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "host": host,
+                    "method": "RESPONSE",
+                    "path": flow.request.path[:100],
+                    "action": "response_alert",
+                    "reasons": reasons,
+                    "content_preview": preview,
+                    "direction": "inbound",
+                }
+            )
 
             # Emit audit event for response leak
             self._emit_audit_event(
@@ -1387,17 +1430,14 @@ class LLMGuardAddon:
                 content_preview=preview,
             )
 
-            ctx.log.warn(
-                f"RESPONSE ALERT from {host}: "
-                f"sensitive data in response - {reasons}"
-            )
+            ctx.log.warn(f"RESPONSE ALERT from {host}: sensitive data in response - {reasons}")
 
             # Add warning header (doesn't block - alert mode)
             flow.response.headers["X-LLMGuard-Alert"] = (
                 f"Sensitive data detected in response: {','.join(reasons)}"
             )
 
-    def _extract_response_content(self, flow: http.HTTPFlow) -> Optional[str]:
+    def _extract_response_content(self, flow: http.HTTPFlow) -> str | None:
         """Extract text content from an LLM response body.
 
         Handles streaming (SSE) and JSON response formats.
@@ -1427,7 +1467,7 @@ class LLMGuardAddon:
         except Exception:
             return None
 
-    def _extract_sse_content(self, raw: bytes) -> Optional[str]:
+    def _extract_sse_content(self, raw: bytes) -> str | None:
         """Extract text from SSE (Server-Sent Events) stream.
 
         Parses data: lines from SSE format, extracts content deltas.
@@ -1461,7 +1501,7 @@ class LLMGuardAddon:
 
         return "".join(texts) if texts else None
 
-    def _extract_response_text(self, body: dict) -> Optional[str]:
+    def _extract_response_text(self, body: dict) -> str | None:
         """Extract assistant message text from a JSON response body."""
         texts = []
 
@@ -1495,7 +1535,7 @@ class LLMGuardAddon:
 # --- Content extractors ----------------------------------------------
 
 
-def _extract_openai_content(body: dict) -> Optional[str]:
+def _extract_openai_content(body: dict) -> str | None:
     """Extract from OpenAI/ChatGPT format: {messages: [{role, content}]}.
 
     Handles both API format (content is string/array) and web app format
@@ -1512,7 +1552,11 @@ def _extract_openai_content(body: dict) -> Optional[str]:
                 return content
             # Handle multimodal content (array of parts)
             if isinstance(content, list):
-                text_parts = [p.get("text", "") for p in content if isinstance(p, dict) and p.get("type") == "text"]
+                text_parts = [
+                    p.get("text", "")
+                    for p in content
+                    if isinstance(p, dict) and p.get("type") == "text"
+                ]
                 # Also handle plain string parts
                 text_parts += [p for p in content if isinstance(p, str)]
                 return "\n".join(text_parts) if text_parts else None
@@ -1524,7 +1568,7 @@ def _extract_openai_content(body: dict) -> Optional[str]:
     return None
 
 
-def _extract_anthropic_content(body: dict) -> Optional[str]:
+def _extract_anthropic_content(body: dict) -> str | None:
     """Extract from Anthropic format: {messages: [{role, content}]} + system."""
     parts = []
     if "system" in body:
@@ -1543,7 +1587,7 @@ def _extract_anthropic_content(body: dict) -> Optional[str]:
     return "\n".join(parts) if parts else None
 
 
-def _extract_google_content(body: dict) -> Optional[str]:
+def _extract_google_content(body: dict) -> str | None:
     """Extract from Google/Gemini format: {contents: [{parts: [{text}]}]}."""
     contents = body.get("contents", [])
     if not contents:
@@ -1555,7 +1599,7 @@ def _extract_google_content(body: dict) -> Optional[str]:
     return "\n".join(texts) if texts else None
 
 
-def _extract_generic_content(body: dict) -> Optional[str]:
+def _extract_generic_content(body: dict) -> str | None:
     """Fallback: deep-search for user message text in any nested structure.
 
     ChatGPT web app (2026) uses deeply nested formats that don't match
@@ -1592,14 +1636,15 @@ def _extract_texts_recursive(obj, texts: list, depth: int = 0):
 def _is_metadata(text: str) -> bool:
     """Check if a string looks like metadata rather than user content."""
     import re as _re
+
     # UUID pattern
-    if _re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', text):
+    if _re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", text):
         return True
     # ISO timestamp
-    if _re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}', text):
+    if _re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", text):
         return True
     # Timezone names
-    if text.count('/') == 1 and all(c.isalpha() or c in '/_' for c in text):
+    if text.count("/") == 1 and all(c.isalpha() or c in "/_" for c in text):
         return True
     return False
 
@@ -1634,10 +1679,12 @@ def _find_base64_data(obj, depth: int = 0) -> list[dict]:
             if isinstance(source, dict) and source.get("type") == "base64":
                 media_type = source.get("media_type", "image/png")
                 ext = media_type.split("/")[-1] if "/" in media_type else "bin"
-                results.append({
-                    "data": source.get("data", ""),
-                    "filename": f"image.{ext}",
-                })
+                results.append(
+                    {
+                        "data": source.get("data", ""),
+                        "filename": f"image.{ext}",
+                    }
+                )
                 return results
 
         # Generic: look for file_data, image_data, attachment fields
@@ -1664,7 +1711,8 @@ def _looks_like_base64(text: str) -> bool:
     # Check first 100 chars for valid base64 charset
     sample = text[:100].replace("\n", "").replace("\r", "")
     import re as _re
-    return bool(_re.match(r'^[A-Za-z0-9+/=]+$', sample))
+
+    return bool(_re.match(r"^[A-Za-z0-9+/=]+$", sample))
 
 
 # mitmproxy addon entry point

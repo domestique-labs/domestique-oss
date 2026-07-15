@@ -29,11 +29,10 @@ Usage:
 from __future__ import annotations
 
 import re
-import time
 import threading
+import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -89,7 +88,7 @@ class SessionTracker:
             window.append(msg)
             # Trim to window size
             if len(window) > self._window_size:
-                self._sessions[session_id] = window[-self._window_size:]
+                self._sessions[session_id] = window[-self._window_size :]
 
     def get_window(self, session_id: str) -> list[Message]:
         """Get the current message window for a session.
@@ -209,10 +208,10 @@ class ContextAnalyzer:
                         later_text = messages[j].text
                         digit_count = sum(c.isdigit() for c in later_text)
                         if digit_count >= 4:
-                            combined = " ".join(m.text for m in messages[i:j + 1])
+                            combined = " ".join(m.text for m in messages[i : j + 1])
                             return ContextResult(
                                 is_suspicious=True,
-                                reason=f"PII preamble followed by digits across messages",
+                                reason="PII preamble followed by digits across messages",
                                 combined_text=combined,
                                 confidence=0.9,
                                 messages_analyzed=len(messages),

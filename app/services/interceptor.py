@@ -42,11 +42,10 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import shutil
 import socket
+import subprocess
 from pathlib import Path
-from typing import Optional
 
 from app.services.runtime import is_macos, is_windows
 
@@ -143,19 +142,22 @@ def generate_ca() -> tuple[Path, Path]:
 
 def _generate_ca_cryptography() -> tuple[Path, Path]:
     """Generate CA cert + key using the ``cryptography`` library."""
+    import datetime
+
     from cryptography import x509
-    from cryptography.x509.oid import NameOID
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
-    import datetime
+    from cryptography.x509.oid import NameOID
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=4096)
 
-    subject = issuer = x509.Name([
-        x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-        x509.NameAttribute(NameOID.ORGANIZATION_NAME, "LLMGuard Enterprise Security"),
-        x509.NameAttribute(NameOID.COMMON_NAME, "LLMGuard Local CA"),
-    ])
+    subject = issuer = x509.Name(
+        [
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "LLMGuard Enterprise Security"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "LLMGuard Local CA"),
+        ]
+    )
 
     cert = (
         x509.CertificateBuilder()
@@ -163,19 +165,23 @@ def _generate_ca_cryptography() -> tuple[Path, Path]:
         .issuer_name(issuer)
         .public_key(key.public_key())
         .serial_number(x509.random_serial_number())
-        .not_valid_before(datetime.datetime.now(datetime.timezone.utc))
-        .not_valid_after(
-            datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=3650)
-        )
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=3650))
         .add_extension(
-            x509.BasicConstraints(ca=True, path_length=None), critical=True,
+            x509.BasicConstraints(ca=True, path_length=None),
+            critical=True,
         )
         .add_extension(
             x509.KeyUsage(
-                key_cert_sign=True, crl_sign=True,
-                digital_signature=False, content_commitment=False,
-                key_encipherment=False, data_encipherment=False,
-                key_agreement=False, encipher_only=False, decipher_only=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                digital_signature=False,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                encipher_only=False,
+                decipher_only=False,
             ),
             critical=True,
         )
@@ -214,7 +220,8 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
 
     subprocess.run(
         [openssl, "genrsa", "-out", str(CA_KEY_PATH), "4096"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     os.chmod(CA_KEY_PATH, 0o600)
 
@@ -237,21 +244,31 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
     )
     subprocess.run(
         [
-            openssl, "req", "-new", "-x509", "-sha256",
-            "-key", str(CA_KEY_PATH),
-            "-out", str(CA_CERT_PATH),
-            "-days", "3650",
-            "-config", str(ext_file),
-            "-extensions", "v3_ca",
+            openssl,
+            "req",
+            "-new",
+            "-x509",
+            "-sha256",
+            "-key",
+            str(CA_KEY_PATH),
+            "-out",
+            str(CA_CERT_PATH),
+            "-days",
+            "3650",
+            "-config",
+            str(ext_file),
+            "-extensions",
+            "v3_ca",
         ],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
     os.chmod(CA_CERT_PATH, 0o644)
 
     return CA_CERT_PATH, CA_KEY_PATH
 
 
-def install_ca_to_keychain(cert_path: Optional[Path] = None) -> bool:
+def install_ca_to_keychain(cert_path: Path | None = None) -> bool:
     """Install the CA certificate into the current user's trust store.
 
     This allows browsers to accept our MITM certificates without warnings.
@@ -282,9 +299,12 @@ def install_ca_to_keychain(cert_path: Optional[Path] = None) -> bool:
     # Add to login keychain
     result = subprocess.run(
         [
-            "security", "add-trusted-cert",
-            "-r", "trustRoot",
-            "-k", os.path.expanduser("~/Library/Keychains/login.keychain-db"),
+            "security",
+            "add-trusted-cert",
+            "-r",
+            "trustRoot",
+            "-k",
+            os.path.expanduser("~/Library/Keychains/login.keychain-db"),
             str(cert),
         ],
         capture_output=True,
@@ -335,8 +355,7 @@ def generate_pac_file(port: int = 8080) -> Path:
     conditions = []
     for domain in INTERCEPTED_DOMAINS:
         conditions.append(
-            f'    if (host === "{domain}" || '
-            f'dnsDomainIs(host, ".{domain}")) return proxy;'
+            f'    if (host === "{domain}" || dnsDomainIs(host, ".{domain}")) return proxy;'
         )
 
     pac_content = f"""// LLMGuard - Proxy Auto-Configuration
@@ -439,7 +458,8 @@ def enable_system_proxy(port: int = 8080) -> bool:
     for interface in interfaces:
         check = subprocess.run(
             ["networksetup", "-getautoproxyurl", interface],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if pac_url in check.stdout and "Enabled: Yes" in check.stdout:
             success = True
