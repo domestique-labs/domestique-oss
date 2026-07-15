@@ -29,7 +29,7 @@ from pathlib import Path
 
 from app.services.runtime import is_macos, is_port_listening, is_windows
 
-logger = logging.getLogger("llmguard.watchdog")
+logger = logging.getLogger("domestique.watchdog")
 
 
 class ProtectionState(Enum):
@@ -103,7 +103,7 @@ class Watchdog:
         self._running = True
         self._set_state(ProtectionState.STARTING)
         self._thread = threading.Thread(
-            target=self._monitor_loop, daemon=True, name="llmguard-watchdog"
+            target=self._monitor_loop, daemon=True, name="domestique-watchdog"
         )
         self._thread.start()
 
@@ -280,9 +280,9 @@ class Watchdog:
 
         from app.services.interceptor import INTERCEPTED_DOMAINS
 
-        rules_file = Path.home() / ".llmguard" / "pf_rules.conf"
+        rules_file = Path.home() / ".domestique" / "pf_rules.conf"
         rules = [
-            "# LLMGuard fail-closed rules",
+            "# Domestique fail-closed rules",
             "# Block direct access to LLM APIs when proxy is down",
             "",
         ]
@@ -321,7 +321,7 @@ class Watchdog:
         if not is_macos():
             return
 
-        rules_file = Path.home() / ".llmguard" / "pf_rules.conf"
+        rules_file = Path.home() / ".domestique" / "pf_rules.conf"
         if rules_file.exists():
             rules_file.unlink()
         # Reload default rules
@@ -407,7 +407,7 @@ def verify_interception_chain(proxy_port: int = 8080) -> dict:
         import ssl
         import urllib.request
 
-        ca_path = Path.home() / ".llmguard" / "ca" / "llmguard-ca.pem"
+        ca_path = Path.home() / ".domestique" / "ca" / "domestique-ca.pem"
         ctx = (
             ssl.create_default_context(cafile=str(ca_path))
             if ca_path.exists()

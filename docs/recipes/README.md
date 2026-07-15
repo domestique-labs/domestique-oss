@@ -1,10 +1,10 @@
-# Recipes — pointing your agent at LLMGuard
+# Recipes — pointing your agent at Domestique
 
 Every recipe here is the same three moves:
 
 1. **Start the proxy**
    ```bash
-   llmguard start        # http://127.0.0.1:8000
+   domestique start        # http://127.0.0.1:8000
    ```
 2. **Point the tool's base URL at it** (keep using your own API key).
 3. **Run the tool normally** — secrets and PII are redacted out of prompts before they

@@ -33,8 +33,8 @@ _DETERMINISM_ENV_KEYS = (
     "OPENAI_API_BASE",
     "OPENAI_BASE_URL",
     "OPENAI_API_KEY",
-    "LLMGUARD_OPENAI_API_KEY",
-    "LLMGUARD_FAIL_MODE",
+    "DOMESTIQUE_OPENAI_API_KEY",
+    "DOMESTIQUE_FAIL_MODE",
 )
 
 
@@ -43,8 +43,8 @@ def _configure_determinism(handle: MockUpstreamHandle) -> None:
     os.environ["OPENAI_API_BASE"] = handle.base_url
     os.environ["OPENAI_BASE_URL"] = handle.base_url
     os.environ["OPENAI_API_KEY"] = "sk-test"
-    os.environ["LLMGUARD_OPENAI_API_KEY"] = "sk-test"
-    os.environ["LLMGUARD_FAIL_MODE"] = "closed"
+    os.environ["DOMESTIQUE_OPENAI_API_KEY"] = "sk-test"
+    os.environ["DOMESTIQUE_FAIL_MODE"] = "closed"
     # PYTHONHASHSEED is only load-bearing if set before the interpreter starts;
     # setting it here at runtime is a no-op. CI sets it at the job/process level
     # in .github/workflows/eval.yml instead.
@@ -62,8 +62,8 @@ def observe_corpus(rows: list[CorpusRow]) -> tuple[list[Observation], dict[str, 
             # Env must be set BEFORE create_app/Settings/LLMProxy read it.
             _configure_determinism(handle)
             # Import after env is set so litellm/Settings pick up the mock upstream.
-            from llmguard.app import create_app
-            from llmguard.config import Settings
+            from domestique.app import create_app
+            from domestique.config import Settings
 
             # enable_secret_detection defaults True (the active regex gate);
             # the other detector flags (PII, gliner, semantic, local LLM) default False.

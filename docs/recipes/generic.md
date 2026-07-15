@@ -1,8 +1,8 @@
-# Any OpenAI / Anthropic SDK → LLMGuard
+# Any OpenAI / Anthropic SDK → Domestique
 
 **Status:** ✅ Covered by the live-provider smoke tests (`tests/integration/`).
 
-Any code that lets you override the provider base URL works with LLMGuard. Set the base
+Any code that lets you override the provider base URL works with Domestique. Set the base
 URL to the proxy and use your normal key.
 
 ## OpenAI Python SDK

@@ -1,7 +1,7 @@
-"""LLMGuard SDK - public API for scanning and redacting sensitive data.
+"""Domestique SDK - public API for scanning and redacting sensitive data.
 
 This module provides the simple, user-facing functions for integrating
-LLMGuard into any Python application without running the full proxy.
+Domestique into any Python application without running the full proxy.
 
 Functions:
     scan(text) -> ScanResult       Check text for sensitive data

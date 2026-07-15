@@ -32,9 +32,9 @@ from mitmproxy.test import tflow, tutils
 
 from mitmproxy.net import encoding as mitm_encoding
 
-from app.services.mitm_addon import LLMGuardAddon
-from llmguard.detectors.registry import Finding, InspectionResult
-from llmguard.models import Action
+from app.services.mitm_addon import DomestiqueAddon
+from domestique.detectors.registry import Finding, InspectionResult
+from domestique.models import Action
 
 
 class _StubPipeline:
@@ -57,8 +57,8 @@ def mock_ctx():
         yield mock
 
 
-def _addon() -> LLMGuardAddon:
-    addon = LLMGuardAddon()
+def _addon() -> DomestiqueAddon:
+    addon = DomestiqueAddon()
     addon._detector = _StubPipeline()
     return addon
 
@@ -108,7 +108,7 @@ class TestResponseStreamsThrough:
         await addon.responseheaders(flow)
 
         assert callable(flow.response.stream)
-        assert flow.metadata["llmguard_streamed"] is True
+        assert flow.metadata["domestique_streamed"] is True
 
     async def test_installs_stream_for_json_response(self):
         addon = _addon()
@@ -129,7 +129,7 @@ class TestResponseStreamsThrough:
         out = flow.response.stream(chunk)
 
         assert out == chunk
-        assert bytes(flow.metadata["llmguard_response_buf"]) == chunk
+        assert bytes(flow.metadata["domestique_response_buf"]) == chunk
 
     async def test_non_api_content_type_not_streamed(self):
         """Static assets (HTML/JS/CSS) on an LLM host are left at
@@ -141,7 +141,7 @@ class TestResponseStreamsThrough:
         await addon.responseheaders(flow)
 
         assert flow.response.stream is False
-        assert "llmguard_streamed" not in flow.metadata
+        assert "domestique_streamed" not in flow.metadata
 
 
 class TestAsyncScanSurfacesLeakWithoutBlocking:
@@ -198,7 +198,7 @@ class TestAsyncScanSurfacesLeakWithoutBlocking:
         await _drain_background_tasks()
 
         assert flow.response.status_code == 200
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
 
     async def test_background_scan_failure_is_swallowed(self):
         """A background scan must never raise into the proxied flow --
@@ -271,7 +271,7 @@ class TestResponseScanScopedToConversationEndpoints:
         await addon.responseheaders(flow)
 
         assert flow.response.stream is False
-        assert "llmguard_streamed" not in flow.metadata
+        assert "domestique_streamed" not in flow.metadata
 
     async def test_sentinel_endpoint_not_teed_for_scanning(self):
         addon = _addon()
@@ -303,7 +303,7 @@ class TestResponseScanScopedToConversationEndpoints:
         await addon.response(flow)
 
         assert addon._stats["response_alerts"] == 0
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
 
 
 class TestCompressedResponseIsDecodedBeforeScanning:

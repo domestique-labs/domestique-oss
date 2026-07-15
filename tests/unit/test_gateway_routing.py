@@ -4,8 +4,8 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from llmguard.gateway import ROUTES, build_wedge_pipeline, create_gateway, upstream_base
-from llmguard.models import Action
+from domestique.gateway import ROUTES, build_wedge_pipeline, create_gateway, upstream_base
+from domestique.models import Action
 
 
 def test_routes_cover_openai_and_anthropic():
@@ -16,14 +16,14 @@ def test_routes_cover_openai_and_anthropic():
 
 
 def test_upstream_base_defaults(monkeypatch):
-    monkeypatch.delenv("LLMGUARD_OPENAI_UPSTREAM", raising=False)
-    monkeypatch.delenv("LLMGUARD_ANTHROPIC_UPSTREAM", raising=False)
+    monkeypatch.delenv("DOMESTIQUE_OPENAI_UPSTREAM", raising=False)
+    monkeypatch.delenv("DOMESTIQUE_ANTHROPIC_UPSTREAM", raising=False)
     assert upstream_base("openai") == "https://api.openai.com"
     assert upstream_base("anthropic") == "https://api.anthropic.com"
 
 
 def test_upstream_base_env_override(monkeypatch):
-    monkeypatch.setenv("LLMGUARD_OPENAI_UPSTREAM", "http://127.0.0.1:9999")
+    monkeypatch.setenv("DOMESTIQUE_OPENAI_UPSTREAM", "http://127.0.0.1:9999")
     assert upstream_base("openai") == "http://127.0.0.1:9999"
 
 

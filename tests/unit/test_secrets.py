@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from llmguard.detectors.secrets import SecretDetector
+from domestique.detectors.secrets import SecretDetector
 
 
 @pytest.fixture

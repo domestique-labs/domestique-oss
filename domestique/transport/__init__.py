@@ -13,7 +13,7 @@ import litellm
 import structlog
 
 if TYPE_CHECKING:
-    from llmguard.config import Settings
+    from domestique.config import Settings
 
 logger = structlog.get_logger()
 

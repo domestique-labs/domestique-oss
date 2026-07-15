@@ -140,7 +140,7 @@ class TestAPIEndpoints:
         handler._send_json({"ok": True})
 
     def test_get_debug_trace(self, api_server, tmp_path: Path):
-        from llmguard.debug_trace import append_debug_trace
+        from domestique.debug_trace import append_debug_trace
 
         trace_path = tmp_path / "debug_trace.jsonl"
         append_debug_trace(
@@ -148,7 +148,7 @@ class TestAPIEndpoints:
             path=trace_path,
         )
 
-        with patch("llmguard.debug_trace.TRACE_PATH", trace_path):
+        with patch("domestique.debug_trace.TRACE_PATH", trace_path):
             data = self._get(api_server, "/api/debug-trace?limit=10")
 
         assert data["total"] == 1

@@ -72,18 +72,18 @@ class AppDelegate(NSObject):
 
             svc = get_browser_proxy_service()
             if not svc.is_setup:
-                NSLog("LLMGuard: first-time setup - generating CA")
+                NSLog("Domestique: first-time setup - generating CA")
                 svc.setup()
 
             if not is_cert_trusted():
-                NSLog("LLMGuard: installing and trusting certificate")
+                NSLog("Domestique: installing and trusting certificate")
                 success = install_and_trust()
                 if success:
-                    NSLog("LLMGuard: certificate trusted")
+                    NSLog("Domestique: certificate trusted")
                 else:
-                    NSLog("LLMGuard: certificate trust deferred to dashboard")
+                    NSLog("Domestique: certificate trust deferred to dashboard")
         except Exception as e:
-            NSLog(f"LLMGuard: cert setup error: {e}")
+            NSLog(f"Domestique: cert setup error: {e}")
 
     def applicationShouldHandleReopen_hasVisibleWindows_(self, app, has_visible) -> bool:
         """Re-open dashboard in browser when user clicks Dock icon."""
@@ -157,7 +157,7 @@ class AppDelegate(NSObject):
             _api._startup_state["detail"] = "Initializing..."
 
             # Read config directly from JSON file
-            cfg_path = Path.home() / ".llmguard" / "config.json"
+            cfg_path = Path.home() / ".domestique" / "config.json"
             stack = {}
             try:
                 cfg = json.loads(cfg_path.read_text())
@@ -184,12 +184,12 @@ class AppDelegate(NSObject):
                     ps_resp = opener.open("http://localhost:11434/api/ps", timeout=3)
                     loaded = [m["name"] for m in json.loads(ps_resp.read()).get("models", [])]
                     if model in loaded:
-                        NSLog(f"LLMGuard: {model} already in memory - skipping warmup")
+                        NSLog(f"Domestique: {model} already in memory - skipping warmup")
                         continue
                 except Exception:
                     pass
 
-                NSLog(f"LLMGuard: loading {model} into memory...")
+                NSLog(f"Domestique: loading {model} into memory...")
                 _api._startup_state["phase"] = "warming"
                 _api._startup_state["detail"] = f"Loading {model}..."
                 try:
@@ -209,9 +209,9 @@ class AppDelegate(NSObject):
                     )
                     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
                     opener.open(req, timeout=120)
-                    NSLog(f"LLMGuard: {model} ready")
+                    NSLog(f"Domestique: {model} ready")
                 except Exception as e:
-                    NSLog(f"LLMGuard: {model} warmup failed: {e}")
+                    NSLog(f"Domestique: {model} warmup failed: {e}")
 
             if not svc.is_running:
                 svc.start()
@@ -223,14 +223,14 @@ class AppDelegate(NSObject):
 
                 _venv_scanner.scan("warmup test@example.com SSN 123-45-6789")
             except Exception as e:
-                NSLog(f"LLMGuard: detector warmup failed: {e}")
+                NSLog(f"Domestique: detector warmup failed: {e}")
 
             self._watchdog.reset_backoff()
             self._watchdog.start()
 
             _api._startup_state["phase"] = "ready"
             _api._startup_state["detail"] = ""
-            NSLog("LLMGuard: protection active")
+            NSLog("Domestique: protection active")
 
             try:
                 self._sync_ui(active=True)
@@ -239,7 +239,7 @@ class AppDelegate(NSObject):
 
         except Exception as e:
             err_msg = str(e).encode("ascii", "replace").decode("ascii")
-            NSLog(f"LLMGuard: failed to start: {err_msg}")
+            NSLog(f"Domestique: failed to start: {err_msg}")
             try:
                 import app.server.api as _api2
 
@@ -257,9 +257,9 @@ class AppDelegate(NSObject):
             svc = get_browser_proxy_service()
             if svc.is_running:
                 svc.stop()
-            NSLog("LLMGuard: protection stopped")
+            NSLog("Domestique: protection stopped")
         except Exception as e:
-            NSLog(f"LLMGuard: error stopping protection: {e}")
+            NSLog(f"Domestique: error stopping protection: {e}")
         self._sync_ui(active=False)
 
     def _sync_ui(self, active: bool) -> None:
@@ -307,7 +307,7 @@ class AppDelegate(NSObject):
             svc.start()
             return svc.is_running
         except Exception as e:
-            NSLog(f"LLMGuard: watchdog restart failed: {e}")
+            NSLog(f"Domestique: watchdog restart failed: {e}")
             return False
 
     def _on_watchdog_state_change(self, state: ProtectionState) -> None:
@@ -316,6 +316,6 @@ class AppDelegate(NSObject):
             self._sync_ui(active=True)
         elif state == ProtectionState.FAILED:
             self._sync_ui(active=False)
-            NSLog("LLMGuard: protection FAILED - manual restart needed")
+            NSLog("Domestique: protection FAILED - manual restart needed")
         elif state == ProtectionState.DEGRADED:
-            NSLog("LLMGuard: protection degraded - attempting recovery")
+            NSLog("Domestique: protection degraded - attempting recovery")

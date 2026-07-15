@@ -1,8 +1,8 @@
-# LLMGuard — Deployment Guide
+# Domestique — Deployment Guide
 
 ## Overview
 
-This guide covers deploying the LLMGuard in an enterprise environment so that **all LLM API traffic is transparently intercepted** without requiring per-application configuration changes.
+This guide covers deploying the Domestique in an enterprise environment so that **all LLM API traffic is transparently intercepted** without requiring per-application configuration changes.
 
 ## Architecture Summary
 
@@ -60,7 +60,7 @@ Or via Jamf/Intune: Upload ca.crt as a Certificate profile, set to Always Trust 
 
 ### Linux
 ```bash
-sudo cp infra/certs/ca.crt /usr/local/share/ca-certificates/llmguard-ca.crt
+sudo cp infra/certs/ca.crt /usr/local/share/ca-certificates/domestique-ca.crt
 sudo update-ca-certificates
 ```
 
@@ -107,7 +107,7 @@ docker compose up -d
 ### Kubernetes (production)
 ```bash
 # Using Helm
-helm install llmguard ./infra/kubernetes/helm-chart \
+helm install domestique ./infra/kubernetes/helm-chart \
     --set proxy.replicas=3 \
     --set openaiApiKey=$OPENAI_API_KEY \
     --set anthropicApiKey=$ANTHROPIC_API_KEY
@@ -211,7 +211,7 @@ tail -f logs/audit.jsonl | jq .
 - [ ] DNS-over-HTTPS disabled on managed devices
 - [ ] Proxy API keys stored in secrets manager (Vault, etc.)
 - [ ] Audit logs forwarded to SIEM
-- [ ] Fail-closed mode enabled (`LLMGUARD_FAIL_MODE=closed`)
+- [ ] Fail-closed mode enabled (`DOMESTIQUE_FAIL_MODE=closed`)
 - [ ] Regular policy reviews scheduled
 - [ ] Proxy containers scanned for vulnerabilities
 - [ ] Access to proxy admin API restricted to security team

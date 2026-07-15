@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "name": "LLMGuard Prompt Engineering Challenge",
+    "name": "Domestique Prompt Engineering Challenge",
     "version": "2.0",
     "description": "70 labeled samples for testing classifier prompt quality. Includes adversarial benign examples that resemble harmful content for precision/recall measurement.",
     "categories": [

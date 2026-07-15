@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from llmguard.extract import extract_texts
+from domestique.extract import extract_texts
 
 
 def test_openai_chat_string_content():

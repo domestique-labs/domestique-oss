@@ -1,4 +1,4 @@
-"""LLMGuard OSS CLI wedge - transparent redacting reverse proxy.
+"""Domestique OSS CLI wedge - transparent redacting reverse proxy.
 
 Routes a request by path to a provider (OpenAI/Anthropic), scans+redacts the
 prompt text using the existing detection pipeline, then forwards the redacted
@@ -19,12 +19,12 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from llmguard.config import Settings
-from llmguard.detectors.registry import DetectorPipeline, build_detectors
-from llmguard.extract import extract_texts
-from llmguard.models import Action
-from llmguard.policy import PolicyEngine
-from llmguard.redact import apply_field_redactions
+from domestique.config import Settings
+from domestique.detectors.registry import DetectorPipeline, build_detectors
+from domestique.extract import extract_texts
+from domestique.models import Action
+from domestique.policy import PolicyEngine
+from domestique.redact import apply_field_redactions
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -44,8 +44,8 @@ _DEFAULT_UPSTREAMS = {
     "anthropic": "https://api.anthropic.com",
 }
 _UPSTREAM_ENV = {
-    "openai": "LLMGUARD_OPENAI_UPSTREAM",
-    "anthropic": "LLMGUARD_ANTHROPIC_UPSTREAM",
+    "openai": "DOMESTIQUE_OPENAI_UPSTREAM",
+    "anthropic": "DOMESTIQUE_ANTHROPIC_UPSTREAM",
 }
 
 _WEDGE_POLICY = Path(__file__).resolve().parent / "policy" / "wedge_rules.yaml"
@@ -114,7 +114,7 @@ def _block_response(provider: str, reason: str) -> JSONResponse:
                 "type": "error",
                 "error": {
                     "type": "firewall_block",
-                    "message": f"Blocked by LLMGuard: {reason}",
+                    "message": f"Blocked by Domestique: {reason}",
                 },
             },
         )
@@ -122,7 +122,7 @@ def _block_response(provider: str, reason: str) -> JSONResponse:
         status_code=403,
         content={
             "error": {
-                "message": f"Blocked by LLMGuard: {reason}",
+                "message": f"Blocked by Domestique: {reason}",
                 "type": "firewall_block",
             }
         },
@@ -224,7 +224,7 @@ def create_gateway(
         finally:
             await app.state.http.aclose()
 
-    app = FastAPI(title="LLMGuard Proxy", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Domestique Proxy", version="0.1.0", lifespan=lifespan)
     app.state.settings = resolved
     app.state.pipeline = built_pipeline
 

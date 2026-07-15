@@ -1,10 +1,10 @@
-"""Tests for LLMGuard SDK - scan, redact, is_safe, and LiteLLM callback."""
+"""Tests for Domestique SDK - scan, redact, is_safe, and LiteLLM callback."""
 
 from unittest.mock import MagicMock
 
 import pytest
 
-from llmguard.sdk import is_safe, redact, scan
+from domestique.sdk import is_safe, redact, scan
 
 
 class TestScan:
@@ -114,47 +114,47 @@ class TestIsSafe:
         assert is_safe("") is True
 
 
-class TestLLMGuardCallback:
+class TestDomestiqueCallback:
     """Tests for the LiteLLM callback integration."""
 
     def test_import(self):
-        from llmguard import LLMGuardCallback
+        from domestique import DomestiqueCallback
 
-        cb = LLMGuardCallback()
+        cb = DomestiqueCallback()
         assert cb is not None
 
     def test_blocks_sensitive_request(self):
-        from llmguard import LLMGuardCallback
-        from llmguard.callback import LLMGuardBlockedError
+        from domestique import DomestiqueCallback
+        from domestique.callback import DomestiqueBlockedError
 
-        cb = LLMGuardCallback(mode="block")
+        cb = DomestiqueCallback(mode="block")
         messages = [{"role": "user", "content": "My SSN is 123-45-6789"}]
 
-        with pytest.raises(LLMGuardBlockedError):
+        with pytest.raises(DomestiqueBlockedError):
             cb.log_pre_api_call("gpt-4o", messages, {})
 
     def test_redact_mode_modifies_content(self):
-        from llmguard import LLMGuardCallback
+        from domestique import DomestiqueCallback
 
-        cb = LLMGuardCallback(mode="redact")
+        cb = DomestiqueCallback(mode="redact")
         messages = [{"role": "user", "content": "My SSN is 123-45-6789"}]
 
         cb.log_pre_api_call("gpt-4o", messages, {})
         assert "123-45-6789" not in messages[0]["content"]
 
     def test_allows_safe_content(self):
-        from llmguard import LLMGuardCallback
+        from domestique import DomestiqueCallback
 
-        cb = LLMGuardCallback(mode="block")
+        cb = DomestiqueCallback(mode="block")
         messages = [{"role": "user", "content": "What is the weather?"}]
 
         result = cb.log_pre_api_call("gpt-4o", messages, {})
         assert messages[0]["content"] == "What is the weather?"
 
     def test_skips_assistant_messages(self):
-        from llmguard import LLMGuardCallback
+        from domestique import DomestiqueCallback
 
-        cb = LLMGuardCallback(mode="block")
+        cb = DomestiqueCallback(mode="block")
         messages = [
             {"role": "assistant", "content": "SSN: 123-45-6789"},
             {"role": "user", "content": "Hello"},
@@ -164,22 +164,22 @@ class TestLLMGuardCallback:
         cb.log_pre_api_call("gpt-4o", messages, {})
 
     def test_on_block_callback(self):
-        from llmguard import LLMGuardCallback
-        from llmguard.callback import LLMGuardBlockedError
+        from domestique import DomestiqueCallback
+        from domestique.callback import DomestiqueBlockedError
 
         handler = MagicMock()
-        cb = LLMGuardCallback(mode="block", on_block=handler)
+        cb = DomestiqueCallback(mode="block", on_block=handler)
         messages = [{"role": "user", "content": "SSN 123-45-6789"}]
 
-        with pytest.raises(LLMGuardBlockedError):
+        with pytest.raises(DomestiqueBlockedError):
             cb.log_pre_api_call("gpt-4o", messages, {})
 
         handler.assert_called_once()
 
     def test_response_scanning(self):
-        from llmguard import LLMGuardCallback
+        from domestique import DomestiqueCallback
 
-        cb = LLMGuardCallback(scan_responses=True)
+        cb = DomestiqueCallback(scan_responses=True)
 
         # Mock LiteLLM response
         response = MagicMock()
@@ -191,9 +191,9 @@ class TestLLMGuardCallback:
         cb.log_success_event({}, response, 0.0, 1.0)
 
     def test_response_scanning_disabled(self):
-        from llmguard import LLMGuardCallback
+        from domestique import DomestiqueCallback
 
-        cb = LLMGuardCallback(scan_responses=False)
+        cb = DomestiqueCallback(scan_responses=False)
 
         response = MagicMock()
         choice = MagicMock()

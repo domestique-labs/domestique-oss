@@ -11,9 +11,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from llmguard.app import create_app
-from llmguard.config import Settings
-from llmguard.debug_trace import read_debug_trace
+from domestique.app import create_app
+from domestique.config import Settings
+from domestique.debug_trace import read_debug_trace
 
 
 @pytest.fixture
@@ -87,7 +87,7 @@ class TestBlockBehavior:
 class TestAllowBehavior:
     """Clean requests must be forwarded to upstream."""
 
-    @patch("llmguard.transport.litellm.acompletion")
+    @patch("domestique.transport.litellm.acompletion")
     async def test_forwards_clean_request(self, mock_llm: AsyncMock, client: AsyncClient) -> None:
         mock_llm.return_value = AsyncMock(
             model_dump=lambda: {"choices": [{"message": {"content": "Paris"}}], "model": "gpt-4"}
@@ -104,7 +104,7 @@ class TestAllowBehavior:
         assert "Paris" in r.json()["choices"][0]["message"]["content"]
         mock_llm.assert_called_once()
 
-    @patch("llmguard.transport.litellm.acompletion")
+    @patch("domestique.transport.litellm.acompletion")
     async def test_writes_debug_trace_for_allowed_request(
         self,
         mock_llm: AsyncMock,
@@ -116,7 +116,7 @@ class TestAllowBehavior:
             model_dump=lambda: {"choices": [{"message": {"content": "Paris"}}], "model": "gpt-4"}
         )
 
-        with patch("llmguard.debug_trace.TRACE_PATH", trace_path):
+        with patch("domestique.debug_trace.TRACE_PATH", trace_path):
             r = await client.post(
                 "/v1/chat/completions",
                 json={
@@ -142,7 +142,7 @@ class TestErrorHandling:
         )
         assert r.status_code == 400
 
-    @patch("llmguard.transport.litellm.acompletion", side_effect=TimeoutError("upstream timeout"))
+    @patch("domestique.transport.litellm.acompletion", side_effect=TimeoutError("upstream timeout"))
     async def test_upstream_failure_returns_502_in_closed_mode(
         self, _mock: AsyncMock, client: AsyncClient
     ) -> None:

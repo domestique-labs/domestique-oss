@@ -31,23 +31,23 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from llmguard.audit import AuditLogger
-from llmguard.config import Settings
-from llmguard.debug_trace import (
+from domestique.audit import AuditLogger
+from domestique.config import Settings
+from domestique.debug_trace import (
     append_debug_trace,
     detection_fields,
     join_prompts,
     prompt_fields,
 )
-from llmguard.detectors.registry import build_detectors
-from llmguard.models import Action, Detection
-from llmguard.policy import PolicyEngine
-from llmguard.transport import LLMProxy
+from domestique.detectors.registry import build_detectors
+from domestique.models import Action, Detection
+from domestique.policy import PolicyEngine
+from domestique.transport import LLMProxy
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from llmguard.detectors import Detector
+    from domestique.detectors import Detector
 
 logger = structlog.get_logger()
 

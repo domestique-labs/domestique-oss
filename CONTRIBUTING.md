@@ -1,4 +1,4 @@
-# Contributing to LLMGuard
+# Contributing to Domestique
 
 Thanks for helping build a local-first firewall for AI traffic. This is the Community
 Edition — free and open under [Apache-2.0](./LICENSE). Contributions are welcome.
@@ -28,9 +28,9 @@ pytest                          # test suite
 | Check | Command | Status |
 |---|---|---|
 | Tests | `pytest` | **blocking** — keep it green |
-| Lint | `ruff check llmguard app` | informational (being burned down) |
-| Format | `ruff format llmguard app` | informational |
-| Types | `mypy llmguard` | informational (strict) |
+| Lint | `ruff check domestique app` | informational (being burned down) |
+| Format | `ruff format domestique app` | informational |
+| Types | `mypy domestique` | informational (strict) |
 
 - Target **Python 3.11+**. Config lives in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`).
 - New code should pass `ruff` and `ruff format` and add tests. We're moving lint/types toward
@@ -40,7 +40,7 @@ pytest                          # test suite
 
 ## Pull requests
 1. Branch from `main`; keep PRs focused.
-2. `pytest` passes; new behavior has tests; run `ruff format llmguard app` on touched code.
+2. `pytest` passes; new behavior has tests; run `ruff format domestique app` on touched code.
 3. Sign off commits (`-s`), fill in the PR template, and link any related issue.
 4. A maintainer reviews. Be patient and responsive to feedback.
 

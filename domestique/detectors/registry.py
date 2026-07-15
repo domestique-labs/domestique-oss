@@ -18,16 +18,16 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from llmguard.config import Settings
-from llmguard.detectors.local_llm import LocalLLMClassifier
-from llmguard.detectors.pii import PIIDetector
-from llmguard.detectors.secrets import SecretDetector
-from llmguard.detectors.semantic import SemanticDetector
-from llmguard.models import Action, Detection, Span
-from llmguard.policy import PolicyEngine
+from domestique.config import Settings
+from domestique.detectors.local_llm import LocalLLMClassifier
+from domestique.detectors.pii import PIIDetector
+from domestique.detectors.secrets import SecretDetector
+from domestique.detectors.semantic import SemanticDetector
+from domestique.models import Action, Detection, Span
+from domestique.policy import PolicyEngine
 
 if TYPE_CHECKING:
-    from llmguard.detectors import Detector
+    from domestique.detectors import Detector
 
 logger = structlog.get_logger()
 
@@ -54,7 +54,7 @@ def build_detectors(settings: Settings) -> list[Detector]:
     if settings.enable_gliner:
         try:
             os.environ.setdefault("HF_HUB_OFFLINE", "1")
-            from llmguard.models import Detection, Span
+            from domestique.models import Detection, Span
 
             _gliner_labels = list(settings.gliner_labels)
             _gliner_threshold = settings.gliner_threshold
@@ -294,7 +294,7 @@ def create_detector_pipeline(settings: Settings | None = None) -> DetectorPipeli
 
     policy_path = Path(settings.policy_path)
     if not policy_path.is_absolute():
-        # Repository root: llmguard/detectors/registry.py -> repo/
+        # Repository root: domestique/detectors/registry.py -> repo/
         repo_root = Path(__file__).resolve().parent.parent.parent
         policy_path = repo_root / policy_path
 

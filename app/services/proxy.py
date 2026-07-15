@@ -101,7 +101,7 @@ class ProxyService:
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "llmguard.app:create_app",
+                "domestique.app:create_app",
                 "--factory",
                 "--host",
                 "0.0.0.0",
@@ -149,33 +149,33 @@ class ProxyService:
     def _build_env(config: AppConfig) -> dict:
         """Build environment variables for the proxy process."""
         env = os.environ.copy()
-        env["LLMGUARD_PORT"] = str(config.proxy_port)
-        env["LLMGUARD_FAIL_MODE"] = config.fail_mode
+        env["DOMESTIQUE_PORT"] = str(config.proxy_port)
+        env["DOMESTIQUE_FAIL_MODE"] = config.fail_mode
 
         stack = config.detection_stack
         has_llm = stack.qwen3_1_7b or stack.gemma4_e2b or stack.legacy_cpu
-        env["LLMGUARD_ENABLE_LOCAL_LLM"] = str(has_llm).lower()
-        env["LLMGUARD_ENABLE_SECRET_DETECTION"] = str(stack.regex).lower()
+        env["DOMESTIQUE_ENABLE_LOCAL_LLM"] = str(has_llm).lower()
+        env["DOMESTIQUE_ENABLE_SECRET_DETECTION"] = str(stack.regex).lower()
 
         # Select the LLM model based on priority
         if stack.gemma4_e2b:
-            from llmguard.detectors.local_llm import _resolve_gemma_model
+            from domestique.detectors.local_llm import _resolve_gemma_model
 
-            env["LLMGUARD_LOCAL_LLM_MODEL"] = _resolve_gemma_model()
+            env["DOMESTIQUE_LOCAL_LLM_MODEL"] = _resolve_gemma_model()
         elif stack.qwen3_1_7b:
-            env["LLMGUARD_LOCAL_LLM_MODEL"] = "qwen3:1.7b"
+            env["DOMESTIQUE_LOCAL_LLM_MODEL"] = "qwen3:1.7b"
         elif stack.legacy_cpu:
-            env["LLMGUARD_LOCAL_LLM_MODEL"] = "llama3.2:1b"
+            env["DOMESTIQUE_LOCAL_LLM_MODEL"] = "llama3.2:1b"
 
         return env
 
 
 def _refresh_mitm_confdir(ca_cert_path: Path, ca_key_path: Path, confdir: Path) -> bool:
-    """Copy the LLMGuard CA into mitmproxy's confdir if missing or stale.
+    """Copy the Domestique CA into mitmproxy's confdir if missing or stale.
 
     mitmdump reads its CA exclusively from ``confdir/mitmproxy-ca.pem`` /
     ``mitmproxy-ca-cert.pem`` -- it has no idea our own
-    ``~/.llmguard/ca/llmguard-ca.{pem,key}`` even exists. This used to copy
+    ``~/.domestique/ca/domestique-ca.{pem,key}`` even exists. This used to copy
     only once ever (``if not mitm_cert.exists(): ...``), so if the source
     CA was ever rotated, regenerated, or restored from a backup without
     also clearing ``ca/mitmproxy/``, mitmdump kept signing with the STALE
@@ -535,7 +535,7 @@ class BrowserProxyService:
             pass
 
     def _clear_stale_windows_mitmproxy(self) -> bool:
-        """Stop stale LLMGuard mitmproxy processes left behind on Windows."""
+        """Stop stale Domestique mitmproxy processes left behind on Windows."""
         from app.services.runtime import is_windows
 
         if not is_windows():

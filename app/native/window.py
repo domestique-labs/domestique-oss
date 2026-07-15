@@ -34,7 +34,7 @@ class MainWindow:
     the web view state across open/close cycles.
     """
 
-    TITLE = "LLMGuard"
+    TITLE = "Domestique"
     DEFAULT_SIZE = (960, 720)
 
     def __init__(self) -> None:

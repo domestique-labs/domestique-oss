@@ -1,4 +1,4 @@
-# LLMGuard — Benchmarking & Quality Analysis
+# Domestique — Benchmarking & Quality Analysis
 
 ## Benchmarks for Evaluating Our Solution
 

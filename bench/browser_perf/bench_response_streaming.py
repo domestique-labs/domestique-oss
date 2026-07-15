@@ -2,7 +2,7 @@
 
 Measures TIME-TO-FIRST-BYTE (TTFB) and total delivery time for a
 STREAMING LLM response (ChatGPT-style token-by-token SSE) as it passes
-through ``LLMGuardAddon`` -- the mitmproxy addon in
+through ``DomestiqueAddon`` -- the mitmproxy addon in
 ``app/services/mitm_addon.py`` that inspects browser-intercepted traffic.
 
 Why this exists
@@ -70,12 +70,12 @@ if str(PROJECT_ROOT) not in sys.path:
 from mitmproxy import http as mitm_http
 from mitmproxy.test import tflow, tutils
 
-from app.services.mitm_addon import LLMGuardAddon
+from app.services.mitm_addon import DomestiqueAddon
 
 
 # --- Deterministic stub detection pipeline -----------------------------
 #
-# Mirrors the contract of llmguard.detectors.registry.DetectorPipeline
+# Mirrors the contract of domestique.detectors.registry.DetectorPipeline
 # (async ``inspect(text) -> InspectionResult``) without pulling in
 # GLiNER/torch/etc, so the benchmark is fast and has zero external
 # dependencies. ``scan_delay_s`` simulates realistic detector latency
@@ -89,8 +89,8 @@ class _BenchPipeline:
         self._scan_delay_s = scan_delay_s
 
     async def inspect(self, text: str):
-        from llmguard.detectors.registry import Finding, InspectionResult
-        from llmguard.models import Action
+        from domestique.detectors.registry import Finding, InspectionResult
+        from domestique.models import Action
 
         if self._scan_delay_s:
             await asyncio.sleep(self._scan_delay_s)
@@ -140,20 +140,20 @@ def _build_flow():
     return flow
 
 
-def _build_addon(scan_delay_s: float) -> LLMGuardAddon:
+def _build_addon(scan_delay_s: float) -> DomestiqueAddon:
     from app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
 
-    addon = LLMGuardAddon()
+    addon = DomestiqueAddon()
     addon._detector = _BenchPipeline(scan_delay_s=scan_delay_s)
     # Pin the hot-reload fingerprint so _inspect() doesn't try to rebuild
-    # the real (heavy) pipeline from ~/.llmguard/config.json mid-benchmark.
+    # the real (heavy) pipeline from ~/.domestique/config.json mid-benchmark.
     addon._config_mtime = config_mtime_ns()
     addon._config_hash = config_hash(load_config_dict())
     return addon
 
 
 async def run_scenario(
-    addon: LLMGuardAddon,
+    addon: DomestiqueAddon,
     *,
     num_chunks: int,
     chunk_delay_s: float,

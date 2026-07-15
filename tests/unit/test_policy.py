@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from llmguard.models import Action, Detection, Span
-from llmguard.policy import PolicyEngine, Rule
+from domestique.models import Action, Detection, Span
+from domestique.policy import PolicyEngine, Rule
 
 
 def _det(
@@ -28,7 +28,7 @@ def _det(
 @pytest.fixture
 def engine() -> PolicyEngine:
     """Engine with production-like rules."""
-    return PolicyEngine.from_yaml("src/llmguard/policy/rules.yaml")
+    return PolicyEngine.from_yaml("src/domestique/policy/rules.yaml")
 
 
 class TestPolicyEvaluation:

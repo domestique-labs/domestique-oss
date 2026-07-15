@@ -8,9 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.mitm_addon import LLMGuardAddon
-from llmguard.detectors.registry import Finding, InspectionResult
-from llmguard.models import Action
+from app.services.mitm_addon import DomestiqueAddon
+from domestique.detectors.registry import Finding, InspectionResult
+from domestique.models import Action
 
 _TEST_PATTERNS = [
     (r"\b\d{3}-\d{2}-\d{4}\b", "us_ssn"),
@@ -22,7 +22,7 @@ _TEST_PATTERNS = [
 class _StubPipeline:
     """Minimal pipeline used in tests - no Presidio / spaCy required.
 
-    Mirrors the contract of ``llmguard.detectors.registry.DetectorPipeline``:
+    Mirrors the contract of ``domestique.detectors.registry.DetectorPipeline``:
     awaits ``inspect(text)`` and returns an ``InspectionResult`` with
     ``should_block``, ``findings`` (each carrying ``.description``), and
     ``redacted_text``.
@@ -53,7 +53,7 @@ def mock_ctx():
 @pytest.fixture
 def addon():
     """Addon wired to a deterministic in-memory test pipeline."""
-    a = LLMGuardAddon()
+    a = DomestiqueAddon()
     a._detector = _StubPipeline()
     return a
 
@@ -96,8 +96,8 @@ class TestResponseScanning:
         await addon.response(flow)
 
         # Should add alert header (not block)
-        assert "X-LLMGuard-Alert" in flow.response.headers
-        assert "ssn" in flow.response.headers["X-LLMGuard-Alert"].lower()
+        assert "X-Domestique-Alert" in flow.response.headers
+        assert "ssn" in flow.response.headers["X-Domestique-Alert"].lower()
 
     async def test_no_alert_on_clean_response(self, addon):
         """Clean response should pass without alert."""
@@ -111,7 +111,7 @@ class TestResponseScanning:
         await addon.response(flow)
 
         # No alert header should be set
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
 
     async def test_alerts_on_api_key_in_response(self, addon):
         """API key leak in response should trigger alert."""
@@ -129,7 +129,7 @@ class TestResponseScanning:
 
         await addon.response(flow)
 
-        assert "X-LLMGuard-Alert" in flow.response.headers
+        assert "X-Domestique-Alert" in flow.response.headers
 
     async def test_alerts_on_private_key_in_response(self, addon):
         """Private key leak should trigger alert."""
@@ -147,7 +147,7 @@ class TestResponseScanning:
 
         await addon.response(flow)
 
-        assert "X-LLMGuard-Alert" in flow.response.headers
+        assert "X-Domestique-Alert" in flow.response.headers
 
     async def test_ignores_non_llm_responses(self, addon):
         """Responses from non-LLM hosts should be ignored."""
@@ -159,19 +159,19 @@ class TestResponseScanning:
 
         await addon.response(flow)
 
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
 
     async def test_ignores_empty_responses(self, addon):
         """Empty responses should be ignored."""
         flow = _make_flow(response_body=b"")
         await addon.response(flow)
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
 
     async def test_ignores_small_responses(self, addon):
         """Very small responses should be ignored."""
         flow = _make_flow(response_body=b"ok")
         await addon.response(flow)
-        assert "X-LLMGuard-Alert" not in flow.response.headers
+        assert "X-Domestique-Alert" not in flow.response.headers
 
 
 class TestSSEResponseExtraction:
@@ -245,7 +245,7 @@ class TestResponseTextExtraction:
 class TestResponseAuditIntegration:
     """Test that response alerts create audit events."""
 
-    @patch("app.services.mitm_addon.LLMGuardAddon._emit_audit_event")
+    @patch("app.services.mitm_addon.DomestiqueAddon._emit_audit_event")
     async def test_audit_event_emitted_on_alert(self, mock_emit, addon):
         body = {"choices": [{"message": {"content": "SSN is 123-45-6789"}}]}
         flow = _make_flow(response_body=json.dumps(body).encode())

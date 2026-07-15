@@ -8,7 +8,7 @@ import threading
 
 from app.services.runtime import is_macos, is_windows
 
-logger = logging.getLogger("llmguard.notifications")
+logger = logging.getLogger("domestique.notifications")
 
 
 def notify(title: str, message: str) -> None:
@@ -117,7 +117,7 @@ class NotificationCoalescer:
             f"Blocked a leak to {host}" if count == 1 else f"Blocked {count} requests to {host}"
         )
         try:
-            self._notify_fn("LLMGuard", message)
+            self._notify_fn("Domestique", message)
         except Exception:
             # A notification failure must never affect the block itself.
             logger.debug("Desktop notification failed", exc_info=True)

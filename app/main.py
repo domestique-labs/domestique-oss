@@ -1,6 +1,6 @@
 """Application launcher for native and portable desktop modes.
 
-On macOS, LLMGuard uses the existing AppKit shell. On Windows and Linux, it
+On macOS, Domestique uses the existing AppKit shell. On Windows and Linux, it
 starts the same local API server and opens the dashboard in the default browser.
 """
 
@@ -28,7 +28,7 @@ def launch(
     api_port: int = DEFAULT_API_PORT,
     open_dashboard: bool = True,
 ) -> None:
-    """Launch LLMGuard.
+    """Launch Domestique.
 
     Args:
         mode: ``auto``, ``native``, or ``portable``. ``auto`` uses the native
@@ -48,7 +48,7 @@ def _configure_console_utf8() -> None:
     """Make console output UTF-8 safe on every platform.
 
     Windows consoles default to cp1252 and raise UnicodeEncodeError on the status
-    glyphs LLMGuard prints (e.g. the certificate-setup messages). The macOS launch
+    glyphs Domestique prints (e.g. the certificate-setup messages). The macOS launch
     path already did this; doing it here in ``main()`` also covers the portable
     Windows/Linux path, which otherwise crashes on first-run output.
     """
@@ -66,7 +66,7 @@ def _configure_console_utf8() -> None:
 def main(argv: list[str] | None = None) -> None:
     """CLI entry point used by ``python -m app``."""
     _configure_console_utf8()
-    parser = argparse.ArgumentParser(description="Launch LLMGuard")
+    parser = argparse.ArgumentParser(description="Launch Domestique")
     parser.add_argument(
         "--mode",
         choices=("auto", "native", "portable"),
@@ -139,7 +139,7 @@ def _launch_macos(*, api_port: int) -> None:
         except OSError:
             time.sleep(0.1)
 
-    NSProcessInfo.processInfo().setProcessName_("LLMGuard")
+    NSProcessInfo.processInfo().setProcessName_("Domestique")
 
     ns_app = NSApplication.sharedApplication()
     ns_app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
@@ -147,9 +147,9 @@ def _launch_macos(*, api_port: int) -> None:
     bundle = NSBundle.mainBundle()
     info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
     if info:
-        info["CFBundleName"] = "LLMGuard"
-        info["CFBundleDisplayName"] = "LLMGuard"
-        info["CFBundleIdentifier"] = "com.llmguard.app"
+        info["CFBundleName"] = "Domestique"
+        info["CFBundleDisplayName"] = "Domestique"
+        info["CFBundleIdentifier"] = "com.domestique.app"
 
     icon_path = Path(__file__).parent / "assets" / "images" / "logo-512.png"
     if not icon_path.exists():
@@ -288,7 +288,7 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     threading.Thread(target=_auto_start_proxies, daemon=True).start()
 
     dashboard_url = f"http://127.0.0.1:{api_port}/"
-    print(f"LLMGuard API running at http://127.0.0.1:{api_port}")
+    print(f"Domestique API running at http://127.0.0.1:{api_port}")
     print(f"Dashboard: {dashboard_url}")
     print("Press Ctrl+C to stop.")
 
@@ -492,7 +492,7 @@ def _ensure_ollama() -> None:
     # Determine which model is needed
     model = None
     if stack.gemma4_e2b:
-        from llmguard.detectors.local_llm import _resolve_gemma_model
+        from domestique.detectors.local_llm import _resolve_gemma_model
 
         model = _resolve_gemma_model()
     elif stack.qwen3_1_7b:

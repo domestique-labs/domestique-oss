@@ -8,20 +8,20 @@ saw ``[AWS_ACCESS_KEY_REDACTED]`` cannot echo the raw key back).
 
 Run the OpenAI door (defaults to api.openai.com / gpt-4o-mini):
 
-    LLMGUARD_LIVE_OPENAI_KEY=sk-... \
+    DOMESTIQUE_LIVE_OPENAI_KEY=sk-... \
       python -m pytest tests/integration/test_live_providers.py -v
 
 Point the OpenAI door at any OpenAI-compatible host (Groq / OpenRouter /
 Bedrock-openai-compat) instead:
 
-    LLMGUARD_LIVE_OPENAI_KEY=... \
-    LLMGUARD_OPENAI_UPSTREAM=https://api.groq.com/openai \
-    LLMGUARD_LIVE_OPENAI_MODEL=llama-3.1-8b-instant \
+    DOMESTIQUE_LIVE_OPENAI_KEY=... \
+    DOMESTIQUE_OPENAI_UPSTREAM=https://api.groq.com/openai \
+    DOMESTIQUE_LIVE_OPENAI_MODEL=llama-3.1-8b-instant \
       python -m pytest tests/integration/test_live_providers.py -k openai -v
 
 Run the Anthropic door (api.anthropic.com / claude-haiku-4-5):
 
-    LLMGUARD_LIVE_ANTHROPIC_KEY=sk-ant-... \
+    DOMESTIQUE_LIVE_ANTHROPIC_KEY=sk-ant-... \
       python -m pytest tests/integration/test_live_providers.py -k anthropic -v
 
 Cost per full run is a fraction of a cent (tiny prompts, max_tokens small).
@@ -36,7 +36,7 @@ import httpx
 import pytest
 
 from bench.eval.mock_upstream import serve
-from llmguard.gateway import create_gateway
+from domestique.gateway import create_gateway
 
 # The planted secret is a canonical AWS access key id -> category aws_access_key
 # (regex confidence 0.99), which the wedge policy REDACTS. If it appears in a
@@ -44,18 +44,18 @@ from llmguard.gateway import create_gateway
 _SECRET = "AKIAIOSFODNN7EXAMPLE"
 _ECHO_PROMPT = f"Echo the following line back verbatim, output nothing else:\ntoken {_SECRET} done"
 
-_OPENAI_KEY = os.environ.get("LLMGUARD_LIVE_OPENAI_KEY")
-_ANTHROPIC_KEY = os.environ.get("LLMGUARD_LIVE_ANTHROPIC_KEY")
-_OPENAI_MODEL = os.environ.get("LLMGUARD_LIVE_OPENAI_MODEL", "gpt-4o-mini")
-_ANTHROPIC_MODEL = os.environ.get("LLMGUARD_LIVE_ANTHROPIC_MODEL", "claude-haiku-4-5")
+_OPENAI_KEY = os.environ.get("DOMESTIQUE_LIVE_OPENAI_KEY")
+_ANTHROPIC_KEY = os.environ.get("DOMESTIQUE_LIVE_ANTHROPIC_KEY")
+_OPENAI_MODEL = os.environ.get("DOMESTIQUE_LIVE_OPENAI_MODEL", "gpt-4o-mini")
+_ANTHROPIC_MODEL = os.environ.get("DOMESTIQUE_LIVE_ANTHROPIC_MODEL", "claude-haiku-4-5")
 
 _TIMEOUT = 30.0
 
 _needs_openai = pytest.mark.skipif(
-    not _OPENAI_KEY, reason="set LLMGUARD_LIVE_OPENAI_KEY to run the live OpenAI-door test"
+    not _OPENAI_KEY, reason="set DOMESTIQUE_LIVE_OPENAI_KEY to run the live OpenAI-door test"
 )
 _needs_anthropic = pytest.mark.skipif(
-    not _ANTHROPIC_KEY, reason="set LLMGUARD_LIVE_ANTHROPIC_KEY to run the live Anthropic-door test"
+    not _ANTHROPIC_KEY, reason="set DOMESTIQUE_LIVE_ANTHROPIC_KEY to run the live Anthropic-door test"
 )
 
 

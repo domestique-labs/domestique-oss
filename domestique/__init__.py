@@ -1,10 +1,10 @@
-"""LLMGuard - Enterprise LLM Firewall SDK.
+"""Domestique - Enterprise LLM Firewall SDK.
 
-Use LLMGuard as a library to scan and redact sensitive data before sending
+Use Domestique as a library to scan and redact sensitive data before sending
 to LLMs. Works standalone (no proxy required) or as a LiteLLM callback.
 
 Quick Start:
-    from llmguard import scan, redact, is_safe
+    from domestique import scan, redact, is_safe
 
     # Check if text contains sensitive data
     result = scan("My SSN is 123-45-6789")
@@ -21,9 +21,9 @@ Quick Start:
 
 LiteLLM Integration:
     import litellm
-    from llmguard import LLMGuardCallback
+    from domestique import DomestiqueCallback
 
-    litellm.callbacks = [LLMGuardCallback()]
+    litellm.callbacks = [DomestiqueCallback()]
     # All LLM calls are now automatically scanned
 """
 
@@ -35,8 +35,8 @@ from typing import TYPE_CHECKING, Any
 __version__ = "0.1.0"
 
 if TYPE_CHECKING:
-    from llmguard.callback import LLMGuardCallback
-    from llmguard.sdk import RedactResult, ScanResult, is_safe, redact, scan
+    from domestique.callback import DomestiqueCallback
+    from domestique.sdk import RedactResult, ScanResult, is_safe, redact, scan
 
 __all__ = [
     "scan",
@@ -44,22 +44,22 @@ __all__ = [
     "is_safe",
     "ScanResult",
     "RedactResult",
-    "LLMGuardCallback",
+    "DomestiqueCallback",
     "__version__",
 ]
 
-# The SDK (scan/redact/LLMGuardCallback) and its detokenization engine live in
-# ``llmguard.sdk`` / ``llmguard.callback``, which currently depend on the
+# The SDK (scan/redact/DomestiqueCallback) and its detokenization engine live in
+# ``domestique.sdk`` / ``domestique.callback``, which currently depend on the
 # separate ``app`` package. Import them lazily so the CLI wedge
-# (``llmguard.gateway`` / ``llmguard.cli``) and a bare ``import llmguard`` work
+# (``domestique.gateway`` / ``domestique.cli``) and a bare ``import domestique`` work
 # in a standalone install where ``app`` is not present.
 _LAZY_EXPORTS = {
-    "scan": "llmguard.sdk",
-    "redact": "llmguard.sdk",
-    "is_safe": "llmguard.sdk",
-    "ScanResult": "llmguard.sdk",
-    "RedactResult": "llmguard.sdk",
-    "LLMGuardCallback": "llmguard.callback",
+    "scan": "domestique.sdk",
+    "redact": "domestique.sdk",
+    "is_safe": "domestique.sdk",
+    "ScanResult": "domestique.sdk",
+    "RedactResult": "domestique.sdk",
+    "DomestiqueCallback": "domestique.callback",
 }
 
 

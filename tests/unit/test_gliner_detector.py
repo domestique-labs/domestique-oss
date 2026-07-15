@@ -7,7 +7,7 @@ scanned request must be flagged with the distinct, actionable category
 ``gliner_not_cached`` instead of the generic ``pipeline:detector_error``
 that every other unexpected detector exception collapses into.
 
-It also asserts the fail-closed BLOCK decision itself: ``llmguard/policy/
+It also asserts the fail-closed BLOCK decision itself: ``domestique/policy/
 rules.yaml`` has an explicit ``block-detector-failures`` rule matching both
 ``detector_error`` and ``gliner_not_cached`` at high confidence, so a
 synthetic failure finding must always resolve to ``Action.BLOCK`` /
@@ -22,9 +22,9 @@ import types
 
 import pytest
 
-from llmguard.config import Settings
-from llmguard.detectors.registry import create_detector_pipeline
-from llmguard.models import Action
+from domestique.config import Settings
+from domestique.detectors.registry import create_detector_pipeline
+from domestique.models import Action
 
 
 def _gliner_only_settings() -> Settings:
@@ -81,7 +81,7 @@ class TestGLiNERNotCached:
         monkeypatch.setitem(sys.modules, "gliner", None)
 
         warnings: list[tuple] = []
-        import llmguard.detectors.registry as registry_mod
+        import domestique.detectors.registry as registry_mod
 
         monkeypatch.setattr(
             registry_mod.logger,

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────────
-# LLMGuard Install — sets up everything needed to run the app.
+# Domestique Install — sets up everything needed to run the app.
 #
 # Usage:
-#   cd llmguard
+#   cd domestique
 #   bash scripts/install.sh
 # ──────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -13,7 +13,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
 echo "══════════════════════════════════════════════════════════════"
-echo "  LLMGuard Installer"
+echo "  Domestique Installer"
 echo "══════════════════════════════════════════════════════════════"
 echo ""
 
@@ -30,7 +30,7 @@ export SSL_CERT_FILE="$(python -c 'import certifi; print(certifi.where())' 2>/de
 export REQUESTS_CA_BUNDLE="$SSL_CERT_FILE"
 
 # ── 2. Install package + all extras ───────────────────────────────
-echo "▶ [2/5] Installing LLMGuard + dependencies..."
+echo "▶ [2/5] Installing Domestique + dependencies..."
 pip install -e ".[all]" --quiet
 pip install py2app --quiet
 
@@ -58,14 +58,14 @@ else
 fi
 
 # ── 5. Build .app bundle ─────────────────────────────────────────
-echo "▶ [5/5] Building LLMGuard.app..."
+echo "▶ [5/5] Building Domestique.app..."
 python setup.py py2app --alias 2>/dev/null
 
 echo ""
 echo "══════════════════════════════════════════════════════════════"
 echo "  ✅ Installation complete!"
 echo ""
-echo "  Launch:  open dist/LLMGuard.app"
+echo "  Launch:  open dist/Domestique.app"
 echo "  Dashboard: http://127.0.0.1:9876/"
 echo ""
 echo "  Default preset: Balanced (Regex + GLiNER + Qwen3 1.7B)"

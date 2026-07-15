@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from llmguard.config import Settings
-from llmguard.detectors.registry import DetectorPipeline, build_detectors
-from llmguard.models import Action
-from llmguard.policy import PolicyEngine
+from domestique.config import Settings
+from domestique.detectors.registry import DetectorPipeline, build_detectors
+from domestique.models import Action
+from domestique.policy import PolicyEngine
 
-_WEDGE = Path("llmguard/policy/wedge_rules.yaml")
+_WEDGE = Path("domestique/policy/wedge_rules.yaml")
 
 
 def _pipeline() -> DetectorPipeline:

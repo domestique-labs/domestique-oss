@@ -1,6 +1,6 @@
 # Security Policy
 
-LLMGuard is a security tool, so we take vulnerabilities in it seriously.
+Domestique is a security tool, so we take vulnerabilities in it seriously.
 
 ## Reporting a vulnerability
 
@@ -16,7 +16,7 @@ We aim to acknowledge within **3 business days** and to agree on a disclosure ti
 Please give us reasonable time to fix before any public disclosure (coordinated disclosure).
 
 ## Scope
-- The `llmguard/` core engine, the API proxy (`llmguard/app.py`), the browser MITM addon
+- The `domestique/` core engine, the API proxy (`domestique/app.py`), the browser MITM addon
   (`app/services/mitm_addon.py`), the dashboard API (`app/server/api.py`), and the CA/cert handling.
 - Particularly interested in: detection bypasses (data that should be caught but isn't),
   fail-open conditions, CA/TLS interception weaknesses, and dashboard/API auth issues.

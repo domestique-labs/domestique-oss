@@ -48,9 +48,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Ruff (lint, core)
-        run: ruff check llmguard
+        run: ruff check domestique
       - name: Ruff (format check, core)
-        run: ruff format --check llmguard
+        run: ruff format --check domestique
 
   types:
     name: Types (core, blocking)
@@ -66,7 +66,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
       - name: Mypy (core, baseline-ratcheted)
-        run: mypy llmguard
+        run: mypy domestique
 
   lint-app:
     name: Lint (app, informational)

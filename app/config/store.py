@@ -13,7 +13,7 @@ from pathlib import Path
 from app.config.schema import AppConfig
 
 # Canonical storage location
-APP_DATA_DIR = Path.home() / ".llmguard"
+APP_DATA_DIR = Path.home() / ".domestique"
 CONFIG_PATH = APP_DATA_DIR / "config.json"
 
 

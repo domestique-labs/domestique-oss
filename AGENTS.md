@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-LLMGuard is a Python 3.11 project. Core proxy code lives in `llmguard/`: `app.py` builds the FastAPI app, `config.py` loads settings, `models.py` defines shared objects, and subpackages cover detectors, policy, transport, and audit logging. The desktop/menu-bar app lives in `app/`, with services in `app/services/`, routes in `app/server/`, native macOS code in `app/native/`, and UI assets in `app/assets/`. Tests are split between `tests/` and `app/tests/`. Benchmarks are in `bench/` and `benchmarks/`, deployment assets in `infra/`, and docs in `docs/`.
+Domestique is a Python 3.11 project. Core proxy code lives in `domestique/`: `app.py` builds the FastAPI app, `config.py` loads settings, `models.py` defines shared objects, and subpackages cover detectors, policy, transport, and audit logging. The desktop/menu-bar app lives in `app/`, with services in `app/services/`, routes in `app/server/`, native macOS code in `app/native/`, and UI assets in `app/assets/`. Tests are split between `tests/` and `app/tests/`. Benchmarks are in `bench/` and `benchmarks/`, deployment assets in `infra/`, and docs in `docs/`.
 
 ## Build, Test, and Development Commands
 
@@ -13,7 +13,7 @@ LLMGuard is a Python 3.11 project. Core proxy code lives in `llmguard/`: `app.py
 - `python -m pytest tests`: run the default pytest suite configured in `pyproject.toml`.
 - `python -m pytest app/tests`: run desktop/app service tests when changing `app/`.
 - `python -m ruff check .`: lint imports, style, security, and modernization rules.
-- `python -m mypy llmguard app`: run strict type checks.
+- `python -m mypy domestique app`: run strict type checks.
 
 Install development dependencies with `python -m pip install -e ".[dev]"`. Optional extras include `.[pii]`, `.[semantic]`, `.[local-llm]`, and `.[all]`.
 
@@ -31,4 +31,4 @@ Current history is minimal (`init`), so use concise, imperative subjects such as
 
 ## Security & Configuration Tips
 
-Never commit real provider keys or generated certificates. Keep local secrets in `.env`, update `.env.example` when adding required settings, and review changes to `llmguard/policy/rules.yaml`, `infra/certs/`, and `infra/dns/` carefully because they affect enforcement and deployment behavior.
+Never commit real provider keys or generated certificates. Keep local secrets in `.env`, update `.env.example` when adding required settings, and review changes to `domestique/policy/rules.yaml`, `infra/certs/`, and `infra/dns/` carefully because they affect enforcement and deployment behavior.

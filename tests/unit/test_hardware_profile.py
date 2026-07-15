@@ -12,7 +12,7 @@ Covered here:
   fail-toward-capable behavior on detection errors.
 - ``_light_profile_stack`` -- the pure stack-down-conversion logic,
   including the "explicit opt-in survives" rule.
-- ``LLMGuardAddon._resolve_hardware_profile`` / ``_init_detector`` wiring:
+- ``DomestiqueAddon._resolve_hardware_profile`` / ``_init_detector`` wiring:
   capable machines get the config-respecting stack unchanged; low-resource
   machines get the light stack; explicit heavy opt-ins are honored either
   way; the auto-light choice is logged (never silent).
@@ -30,7 +30,7 @@ import pytest
 pytest.importorskip("mitmproxy")
 
 from app.services.mitm_addon import (  # noqa: E402  (import after importorskip guard)
-    LLMGuardAddon,
+    DomestiqueAddon,
     _detect_low_resource_hardware,
     _light_profile_stack,
 )
@@ -151,7 +151,7 @@ class TestLightProfileStack:
         assert light["gliner_pii"] is True
 
 
-# --- LLMGuardAddon wiring ------------------------------------------------
+# --- DomestiqueAddon wiring ------------------------------------------------
 
 
 def _patched_pipeline(settings_holder: list):
@@ -169,7 +169,7 @@ def _patched_pipeline(settings_holder: list):
 
 class TestAddonHardwareProfileWiring:
     def test_capable_machine_respects_full_config(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: False
         settings_seen: list = []
 
@@ -177,7 +177,7 @@ class TestAddonHardwareProfileWiring:
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
@@ -187,7 +187,7 @@ class TestAddonHardwareProfileWiring:
         assert addon._light_profile_active is False
 
     def test_low_resource_machine_gets_light_stack_by_default(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
@@ -195,7 +195,7 @@ class TestAddonHardwareProfileWiring:
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
@@ -207,7 +207,7 @@ class TestAddonHardwareProfileWiring:
         assert addon._light_profile_active is True
 
     def test_low_resource_machine_honors_explicit_heavy_opt_in(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
@@ -215,7 +215,7 @@ class TestAddonHardwareProfileWiring:
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "gliner_pii": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
@@ -226,14 +226,14 @@ class TestAddonHardwareProfileWiring:
         )
 
     def test_low_resource_light_profile_is_logged_not_silent(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: True
 
         with patch(
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
@@ -246,14 +246,14 @@ class TestAddonHardwareProfileWiring:
         )
 
     def test_capable_machine_logs_nothing_extra(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: False
 
         with patch(
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
@@ -263,7 +263,7 @@ class TestAddonHardwareProfileWiring:
         assert patched_ctx.log.warn.call_count == 0
 
     def test_hardware_resource_check_is_cached_per_process(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         calls = []
 
         def _tracked():
@@ -284,7 +284,7 @@ class TestAddonHardwareProfileWiring:
         their ``qwen3_1_7b`` honored, not force-disabled -- previously there
         was NO supported way back from the auto-light downgrade for this
         specific field, since re-toggling it just writes ``True`` again."""
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
@@ -308,7 +308,7 @@ class TestAddonHardwareProfileWiring:
                 "detection_stack_configured": True,
             },
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
@@ -325,7 +325,7 @@ class TestAddonHardwareProfileWiring:
     def test_low_resource_machine_without_configured_flag_still_downgrades_qwen3(self):
         """Sanity check: absent the configured flag, the pre-fix behavior
         (force-off the default-valued qwen3_1_7b) is unchanged."""
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
@@ -333,7 +333,7 @@ class TestAddonHardwareProfileWiring:
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
@@ -355,7 +355,7 @@ class TestLightProfileSurfacedInStats:
     """
 
     def test_light_profile_active_is_persisted_to_stats_file(self, tmp_path):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._data_dir = tmp_path
         addon._stats_file = tmp_path / "browser_stats.json"
         addon._hardware_is_low_resource = lambda: True
@@ -364,7 +364,7 @@ class TestLightProfileSurfacedInStats:
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
@@ -374,7 +374,7 @@ class TestLightProfileSurfacedInStats:
         assert persisted["light_profile_active"] is True
 
     def test_capable_machine_persists_light_profile_active_false(self, tmp_path):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._data_dir = tmp_path
         addon._stats_file = tmp_path / "browser_stats.json"
         addon._hardware_is_low_resource = lambda: False
@@ -383,7 +383,7 @@ class TestLightProfileSurfacedInStats:
             "app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()

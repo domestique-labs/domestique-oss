@@ -84,7 +84,7 @@ Block / Redact / Allow
 **Problem**: Regex alone can't reliably detect names/addresses without labeled context.  
 **Solution**: Integrate GLiNER or a small NER model for the file scanner.
 
-- Use the existing `create_detector_pipeline()` from `llmguard/detectors/` instead of regex-only
+- Use the existing `create_detector_pipeline()` from `domestique/detectors/` instead of regex-only
 - GLiNER can detect names, addresses, and other entities regardless of format
 - Expected improvement: name recall 90% → 98%, address recall in unstructured text
 

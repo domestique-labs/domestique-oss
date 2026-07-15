@@ -15,7 +15,7 @@ from pathlib import Path
 import structlog
 import yaml
 
-from llmguard.models import Action, Detection
+from domestique.models import Action, Detection
 
 logger = structlog.get_logger()
 

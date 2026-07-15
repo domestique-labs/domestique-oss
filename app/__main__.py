@@ -1,4 +1,4 @@
-"""Entry point for the LLMGuard desktop application.
+"""Entry point for the Domestique desktop application.
 
 Usage:
     python -m app

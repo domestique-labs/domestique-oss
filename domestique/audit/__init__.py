@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 if TYPE_CHECKING:
-    from llmguard.models import Action, Detection
+    from domestique.models import Action, Detection
 
 logger = structlog.get_logger()
 

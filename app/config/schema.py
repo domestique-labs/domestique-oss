@@ -38,7 +38,7 @@ class DetectionStackConfig:
 class AppConfig:
     """Root application configuration.
 
-    Persisted to ~/.llmguard/config.json.
+    Persisted to ~/.domestique/config.json.
     Loaded on startup, saved on any change via the dashboard or menu bar.
     """
 

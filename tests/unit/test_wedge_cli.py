@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from llmguard.cli import main
+from domestique.cli import main
 
 
 def test_version(capsys):
@@ -10,7 +10,7 @@ def test_version(capsys):
         main(["--version"])
     assert exc.value.code == 0
     out = capsys.readouterr().out
-    assert "llmguard" in out.lower()
+    assert "domestique" in out.lower()
 
 
 def test_demo_redacts_and_prints(capsys):

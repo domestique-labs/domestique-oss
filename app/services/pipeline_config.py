@@ -11,11 +11,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-_CONFIG_PATH = Path.home() / ".llmguard" / "config.json"
+_CONFIG_PATH = Path.home() / ".domestique" / "config.json"
 
 
 def load_config_dict() -> dict[str, Any]:
-    """Read ~/.llmguard/config.json and return as dict."""
+    """Read ~/.domestique/config.json and return as dict."""
     try:
         if _CONFIG_PATH.exists():
             return json.loads(_CONFIG_PATH.read_text())
@@ -38,13 +38,13 @@ def config_hash(config: dict) -> str:
 
 
 def settings_from_config(config: dict | None = None):
-    """Build a llmguard.config.Settings from dashboard config dict.
+    """Build a domestique.config.Settings from dashboard config dict.
 
     Applies detection_stack toggles, classifier_prompt, disabled patterns,
     and LLM model selection. Returns a Settings instance ready for
     create_detector_pipeline().
     """
-    from llmguard.config import Settings
+    from domestique.config import Settings
 
     if config is None:
         config = load_config_dict()
@@ -70,7 +70,7 @@ def settings_from_config(config: dict | None = None):
     )
     settings.enable_local_llm = llm_on
     if stack.get("gemma4_e2b"):
-        from llmguard.detectors.local_llm import _resolve_gemma_model
+        from domestique.detectors.local_llm import _resolve_gemma_model
 
         settings.local_llm_model = _resolve_gemma_model()
     elif stack.get("qwen3_1_7b"):

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Generate and trust the LLMGuard local CA on Linux.
+# Generate and trust the Domestique local CA on Linux.
 #
 # The CA is normally created only when the proxy first starts, and the app has
 # no Linux trust implementation at all. This script generates the CA (if
@@ -33,9 +33,9 @@ else
   exit 1
 fi
 
-CA_PEM="$HOME/.llmguard/ca/llmguard-ca.pem"
+CA_PEM="$HOME/.domestique/ca/domestique-ca.pem"
 
-echo "Generating the LLMGuard CA (if missing) ..."
+echo "Generating the Domestique CA (if missing) ..."
 "$PY" - <<'PY'
 from app.services.interceptor import generate_ca
 cert, _key = generate_ca()
@@ -51,12 +51,12 @@ fi
 echo "Installing CA into the system trust store (sudo required) ..."
 if command -v update-ca-trust >/dev/null 2>&1; then
   # RHEL / Fedora / CentOS / SUSE
-  sudo cp "$CA_PEM" /etc/pki/ca-trust/source/anchors/llmguard-ca.pem
+  sudo cp "$CA_PEM" /etc/pki/ca-trust/source/anchors/domestique-ca.pem
   sudo update-ca-trust
   echo "Trusted via update-ca-trust."
 elif command -v update-ca-certificates >/dev/null 2>&1; then
   # Debian / Ubuntu (the file must end in .crt)
-  sudo cp "$CA_PEM" /usr/local/share/ca-certificates/llmguard-ca.crt
+  sudo cp "$CA_PEM" /usr/local/share/ca-certificates/domestique-ca.crt
   sudo update-ca-certificates
   echo "Trusted via update-ca-certificates."
 elif command -v trust >/dev/null 2>&1; then
@@ -74,7 +74,7 @@ fi
 if command -v certutil >/dev/null 2>&1; then
   NSSDB="$HOME/.pki/nssdb"
   if [ -d "$NSSDB" ]; then
-    if certutil -A -n "LLMGuard Local CA" -t "C,," -i "$CA_PEM" -d "sql:$NSSDB"; then
+    if certutil -A -n "Domestique Local CA" -t "C,," -i "$CA_PEM" -d "sql:$NSSDB"; then
       echo "Added to the browser NSS store ($NSSDB)."
     else
       echo "Note: failed to add to the NSS store; import $CA_PEM in your browser manually." >&2
@@ -87,5 +87,5 @@ else
 fi
 
 echo ""
-echo "Done. The system now trusts the LLMGuard CA, so intercepted HTTPS won't raise cert errors."
+echo "Done. The system now trusts the Domestique CA, so intercepted HTTPS won't raise cert errors."
 echo "If a browser still warns, restart it (or import $CA_PEM in its certificate settings)."

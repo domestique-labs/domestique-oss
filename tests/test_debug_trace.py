@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from llmguard.debug_trace import append_debug_trace, read_debug_trace
+from domestique.debug_trace import append_debug_trace, read_debug_trace
 
 
 def test_append_and_read_debug_trace(tmp_path: Path) -> None:

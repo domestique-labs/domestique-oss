@@ -242,9 +242,9 @@ class TestRedaction:
 
     def _get_redact(self):
         """Import the redaction method."""
-        from app.services.mitm_addon import LLMGuardAddon
+        from app.services.mitm_addon import DomestiqueAddon
 
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         return addon._redact_for_preview
 
     def test_redact_ssn(self):

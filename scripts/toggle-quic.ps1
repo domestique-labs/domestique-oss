@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Disable/enable QUIC (HTTP/3) in a browser so traffic can't bypass the
-  LLMGuard TCP proxy (:8080).
+  Domestique TCP proxy (:8080).
 
 .DESCRIPTION
   QUIC runs over UDP/443 and bypasses a TCP proxy, creating a DLP blind spot.

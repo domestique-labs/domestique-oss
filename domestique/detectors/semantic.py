@@ -22,7 +22,7 @@ from typing import Any
 
 import structlog
 
-from llmguard.models import Detection, Span
+from domestique.models import Detection, Span
 
 logger = structlog.get_logger()
 

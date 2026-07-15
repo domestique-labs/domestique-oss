@@ -30,9 +30,9 @@ from typing import Callable, Awaitable
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from bench.dataset import ALL_CASES, BenchCase
-from llmguard.detectors.secrets import SecretDetector
-from llmguard.detectors.semantic import SemanticDetector
-from llmguard.models import Detection
+from domestique.detectors.secrets import SecretDetector
+from domestique.detectors.semantic import SemanticDetector
+from domestique.models import Detection
 
 
 @dataclass
@@ -272,7 +272,7 @@ async def main() -> None:
     # ── Tier 3: Local LLM (if available) ─────────────────────────────────
     tier3_results = None
     try:
-        from llmguard.detectors.local_llm import LocalLLMClassifier
+        from domestique.detectors.local_llm import LocalLLMClassifier
         llm = LocalLLMClassifier(preset="balanced")
 
         # Quick availability check

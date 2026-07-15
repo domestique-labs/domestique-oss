@@ -18,9 +18,9 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-CA_DIR = Path.home() / ".llmguard" / "ca"
-CA_CERT = CA_DIR / "llmguard-ca.pem"
-CA_KEY = CA_DIR / "llmguard-ca.key"
+CA_DIR = Path.home() / ".domestique" / "ca"
+CA_CERT = CA_DIR / "domestique-ca.pem"
+CA_KEY = CA_DIR / "domestique-ca.key"
 
 
 def is_cert_generated() -> bool:
@@ -43,7 +43,7 @@ def is_cert_trusted() -> bool:
 
     if sys.platform == "win32":
         # Check if the CA is in the current user's Root store
-        for name in ("LLMGuard Local CA", "LLM Firewall Local CA"):
+        for name in ("Domestique Local CA", "LLM Firewall Local CA"):
             result = subprocess.run(
                 ["certutil", "-user", "-store", "Root", name],
                 capture_output=True,

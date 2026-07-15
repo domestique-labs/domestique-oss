@@ -1,12 +1,12 @@
-# LLMGuard Codebase Context
+# Domestique Codebase Context
 
 Last updated: 2026-05-26
 
 ## What This Project Is
 
-LLMGuard is a Python LLM data-loss-prevention proxy. It has two related surfaces:
+Domestique is a Python LLM data-loss-prevention proxy. It has two related surfaces:
 
-- `llmguard/`: the core FastAPI inspection proxy, detector registry, policy engine, audit logging, SDK helpers, and upstream forwarding.
+- `domestique/`: the core FastAPI inspection proxy, detector registry, policy engine, audit logging, SDK helpers, and upstream forwarding.
 - `app/`: the desktop control app, local dashboard API, dashboard HTML, proxy lifecycle management, browser HTTPS interception, benchmark runner, and platform integration.
 
 The original desktop app was macOS-first. It imported AppKit at module import time, used LaunchAgents, `networksetup`, `security`, `lsof`, `scutil`, and PF firewall rules directly. That made `python -m app` fail immediately on Windows with `ModuleNotFoundError: No module named 'AppKit'`.
@@ -19,26 +19,26 @@ The original desktop app was macOS-first. It imported AppKit at module import ti
 - `run.ps1`: PowerShell wrapper for Windows.
 - `run.bat`: Windows launcher for Command Prompt, Explorer, and double-click use.
 - `run.sh`: shell wrapper for macOS/Linux.
-- `llmguard.app:create_app`: FastAPI app factory used by the API inspection proxy.
+- `domestique.app:create_app`: FastAPI app factory used by the API inspection proxy.
 
 ## Runtime Architecture
 
 1. `app.main` loads persisted config via `ConfigStore`.
 2. `app.server.api.start_api_server()` starts a localhost API on `127.0.0.1:9876`.
 3. The dashboard at `app/assets/dashboard.html` calls that API.
-4. `ProxyService` starts the API proxy with `uvicorn llmguard.app:create_app --factory`.
+4. `ProxyService` starts the API proxy with `uvicorn domestique.app:create_app --factory`.
 5. `BrowserProxyService` starts `mitmdump` with `app/services/mitm_addon.py`, generates a PAC file, installs/trusts a local CA where supported, and points the OS proxy at the local MITM proxy.
 
 ## Configuration And Data
 
-- App config: `~/.llmguard/config.json`
-- Firewall logs: `~/.llmguard/firewall.log`
-- Browser proxy logs: `~/.llmguard/browser_proxy.log`
-- Browser stats: `~/.llmguard/browser_stats.json`
-- Browser request log: `~/.llmguard/request_log.jsonl`
-- Raw prompt decision trace: `~/.llmguard/debug_trace.jsonl`
-- Local CA: `~/.llmguard/ca/`
-- PAC file: `~/.llmguard/proxy.pac`
+- App config: `~/.domestique/config.json`
+- Firewall logs: `~/.domestique/firewall.log`
+- Browser proxy logs: `~/.domestique/browser_proxy.log`
+- Browser stats: `~/.domestique/browser_stats.json`
+- Browser request log: `~/.domestique/request_log.jsonl`
+- Raw prompt decision trace: `~/.domestique/debug_trace.jsonl`
+- Local CA: `~/.domestique/ca/`
+- PAC file: `~/.domestique/proxy.pac`
 
 The path is intentionally simple and works on Windows, macOS, and Linux. A future polish pass could move this to native per-OS app-data locations.
 
@@ -46,8 +46,8 @@ The path is intentionally simple and works on Windows, macOS, and Linux. A futur
 
 The app now writes two local request trails:
 
-- `~/.llmguard/request_log.jsonl`: compact browser-interception log shown in the dashboard. For inspected LLM requests it includes the action, reasons, preview, and full sent prompt.
-- `~/.llmguard/debug_trace.jsonl`: raw decision trace for both the FastAPI proxy and browser MITM proxy. It records passed, allowed, redacted, blocked, approved, invalid JSON, and no-content cases, including raw prompts, redacted prompts when applicable, detector findings, latency, endpoint, host, method, model, and request id.
+- `~/.domestique/request_log.jsonl`: compact browser-interception log shown in the dashboard. For inspected LLM requests it includes the action, reasons, preview, and full sent prompt.
+- `~/.domestique/debug_trace.jsonl`: raw decision trace for both the FastAPI proxy and browser MITM proxy. It records passed, allowed, redacted, blocked, approved, invalid JSON, and no-content cases, including raw prompts, redacted prompts when applicable, detector findings, latency, endpoint, host, method, model, and request id.
 
 The dashboard API also exposes the raw trace locally:
 
@@ -94,7 +94,7 @@ Browser interception on Windows uses current-user certificate/proxy settings:
 
 - CA trust: `certutil -user -addstore Root <cert>`
 - Proxy settings: `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings`
-- Previous proxy values are backed up to `~/.llmguard/windows_proxy_backup.json` and restored when interception is disabled.
+- Previous proxy values are backed up to `~/.domestique/windows_proxy_backup.json` and restored when interception is disabled.
 
 ## Cross-Platform Changes Made
 
@@ -125,7 +125,7 @@ Browser interception on Windows uses current-user certificate/proxy settings:
 ## Useful Verification Commands
 
 ```powershell
-python -m compileall app llmguard
+python -m compileall app domestique
 python -m app --help
 python -m app --no-browser
 ```
@@ -156,5 +156,5 @@ Get-NetTCPConnection -LocalPort 8080 -State Listen
 Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'mitmdump|mitm_addon' }
 ```
 
-The Windows browser-proxy startup now attempts to clean up stale LLMGuard-owned
+The Windows browser-proxy startup now attempts to clean up stale Domestique-owned
 `mitmdump` processes automatically before failing.

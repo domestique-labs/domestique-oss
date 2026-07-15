@@ -1,6 +1,6 @@
 """Tests for background detector-pipeline construction in the mitm addon.
 
-Context: ``LLMGuardAddon.load()`` used to call ``_init_detector()``
+Context: ``DomestiqueAddon.load()`` used to call ``_init_detector()``
 synchronously, which in turn calls ``create_detector_pipeline()`` -- a
 factory that can instantiate the full ML stack (torch/transformers/GLiNER).
 mitmproxy does not accept connections on the proxy port until ``load()``
@@ -30,7 +30,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.mitm_addon import LLMGuardAddon
+from app.services.mitm_addon import DomestiqueAddon
 
 
 def _join_background_init_threads(timeout: float = 3.0) -> None:
@@ -59,15 +59,15 @@ class _StubPipeline:
         self._detectors = []
 
     async def inspect(self, text: str):
-        from llmguard.detectors.registry import InspectionResult
-        from llmguard.models import Action
+        from domestique.detectors.registry import InspectionResult
+        from domestique.models import Action
 
         return InspectionResult(action=Action.ALLOW, reason="stub")
 
 
 class TestLoadDoesNotBlockOnPipelineConstruction:
     def test_load_returns_fast_even_when_pipeline_construction_is_slow(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         # Hardware detection is irrelevant to this test -- pin it so the
         # test isn't coupled to the speed/outcome of a real nvidia-smi call
         # on whatever machine runs the suite.
@@ -78,7 +78,7 @@ class TestLoadDoesNotBlockOnPipelineConstruction:
             return _StubPipeline()
 
         with patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=_slow_pipeline,
         ):
             start = time.time()
@@ -102,7 +102,7 @@ class TestLoadDoesNotBlockOnPipelineConstruction:
             _join_background_init_threads()
 
     def test_detector_ready_is_cleared_by_load_and_set_on_success(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: False
         # Constructed fresh, ready defaults True (so direct-construction
         # callers/tests that skip load() are never gated).
@@ -110,7 +110,7 @@ class TestLoadDoesNotBlockOnPipelineConstruction:
 
         pipeline = _StubPipeline()
         with patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             return_value=pipeline,
         ):
             addon.load(loader=MagicMock())
@@ -120,11 +120,11 @@ class TestLoadDoesNotBlockOnPipelineConstruction:
         assert addon._detector_init_error is None
 
     def test_load_sets_init_error_and_stays_fail_closed_on_construction_failure(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: False
 
         with patch(
-            "llmguard.detectors.registry.create_detector_pipeline",
+            "domestique.detectors.registry.create_detector_pipeline",
             side_effect=RuntimeError("pipeline construction exploded"),
         ):
             addon.load(loader=MagicMock())
@@ -139,7 +139,7 @@ class TestInspectHoldsThenInspects:
     async def test_inspect_holds_until_ready_then_inspects_normally(self):
         from app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
 
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._detector_ready.clear()
         addon._detector = None
         # Pin the config fingerprint up front so _inspect()'s hot-reload
@@ -163,7 +163,7 @@ class TestInspectHoldsThenInspects:
 
     @pytest.mark.asyncio
     async def test_inspect_fails_closed_when_wait_expires(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._detector_ready.clear()
         addon._detector = None
         addon.DETECTOR_READY_WAIT_S = 0.2  # bound the test's real wall time
@@ -189,7 +189,7 @@ class TestInspectHoldsThenInspects:
         pipeline construction, and join it before the test's ctx-patch
         fixture tears down.
         """
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._detector = None
         addon._detector_init_error = RuntimeError("boom")
         addon._detector_ready.set()  # background thread finished (failed)
@@ -225,7 +225,7 @@ class TestExistingFailClosedBehaviorPreserved:
             async def inspect(self, text):
                 raise RuntimeError("boom")
 
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._detector = _BoomPipeline()
         addon._detector_ready.set()
         # Pin the config fingerprint so _inspect()'s hot-reload check doesn't
@@ -258,7 +258,7 @@ class TestDetectorSelfHealsAfterTransientFailure:
 
     @pytest.mark.asyncio
     async def test_retry_rebuilds_pipeline_and_inspection_resumes_without_restart(self):
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: False
         addon.DETECTOR_RETRY_BACKOFF_S = 0  # deterministic: never gated by backoff
         addon._detector = None
@@ -318,7 +318,7 @@ class TestDetectorSelfHealsAfterTransientFailure:
         blocked requests can't hammer a still-broken dependency."""
         from app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
 
-        addon = LLMGuardAddon()
+        addon = DomestiqueAddon()
         addon.DETECTOR_RETRY_BACKOFF_S = 999.0
         addon._detector = None
         addon._detector_init_error = RuntimeError("still broken")

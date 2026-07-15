@@ -13,7 +13,7 @@ Only traffic to known LLM endpoints is intercepted - all other HTTPS
 traffic passes through untouched for zero performance impact on browsing.
 
 Security Model:
-    - CA key is stored in ~/.llmguard/ca/ with 0600 permissions
+    - CA key is stored in ~/.domestique/ca/ with 0600 permissions
     - CA cert is user-scoped (not system-wide unless IT deploys via MDM)
     - Proxy only binds to 127.0.0.1 (no external exposure)
     - System proxy configuration is PAC-only: we set AutoConfigURL (Windows)
@@ -31,7 +31,7 @@ Security Model:
     - enable_system_proxy() is idempotent about this: it also actively clears
       any blanket proxy state (ProxyServer/ProxyOverride on Windows,
       -setsecurewebproxy/-setwebproxy on macOS) that may already be present
-      from a prior blanket-era install of LLMGuard. Without this, a machine
+      from a prior blanket-era install of Domestique. Without this, a machine
       that had the old blanket proxy set - especially if the previous
       process was killed before its normal disable/atexit cleanup ran -
       would keep routing ALL traffic through mitmproxy even after upgrading
@@ -49,11 +49,11 @@ from pathlib import Path
 
 from app.services.runtime import is_macos, is_windows
 
-CA_DIR = Path.home() / ".llmguard" / "ca"
-CA_KEY_PATH = CA_DIR / "llmguard-ca.key"
-CA_CERT_PATH = CA_DIR / "llmguard-ca.pem"
-PAC_PATH = Path.home() / ".llmguard" / "proxy.pac"
-WINDOWS_PROXY_BACKUP_PATH = Path.home() / ".llmguard" / "windows_proxy_backup.json"
+CA_DIR = Path.home() / ".domestique" / "ca"
+CA_KEY_PATH = CA_DIR / "domestique-ca.key"
+CA_CERT_PATH = CA_DIR / "domestique-ca.pem"
+PAC_PATH = Path.home() / ".domestique" / "proxy.pac"
+WINDOWS_PROXY_BACKUP_PATH = Path.home() / ".domestique" / "windows_proxy_backup.json"
 
 # Domains to intercept - all major LLM API endpoints
 INTERCEPTED_DOMAINS = [
@@ -154,8 +154,8 @@ def _generate_ca_cryptography() -> tuple[Path, Path]:
     subject = issuer = x509.Name(
         [
             x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "LLMGuard Enterprise Security"),
-            x509.NameAttribute(NameOID.COMMON_NAME, "LLMGuard Local CA"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Domestique Enterprise Security"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "Domestique Local CA"),
         ]
     )
 
@@ -214,7 +214,7 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
     if not openssl:
         raise RuntimeError(
             "Neither the 'cryptography' Python package nor the OpenSSL CLI "
-            "is available. Install mitmproxy (pip install llmguard[browser-proxy]) "
+            "is available. Install mitmproxy (pip install domestique[browser-proxy]) "
             "or install OpenSSL."
         )
 
@@ -233,8 +233,8 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
         "prompt = no\n"
         "\n"
         "[req_dn]\n"
-        "CN = LLMGuard Local CA\n"
-        "O = LLMGuard Enterprise Security\n"
+        "CN = Domestique Local CA\n"
+        "O = Domestique Enterprise Security\n"
         "C = US\n"
         "\n"
         "[v3_ca]\n"
@@ -318,7 +318,7 @@ def is_ca_installed() -> bool:
 
     Checks both the current name and legacy name for backward compatibility.
     """
-    for name in ("LLMGuard Local CA", "LLM Firewall Local CA"):
+    for name in ("Domestique Local CA", "LLM Firewall Local CA"):
         if is_windows():
             result = subprocess.run(
                 ["certutil", "-user", "-store", "Root", name],
@@ -358,7 +358,7 @@ def generate_pac_file(port: int = 8080) -> Path:
             f'    if (host === "{domain}" || dnsDomainIs(host, ".{domain}")) return proxy;'
         )
 
-    pac_content = f"""// LLMGuard - Proxy Auto-Configuration
+    pac_content = f"""// Domestique - Proxy Auto-Configuration
 // Only intercepts traffic to known LLM API endpoints.
 // All other traffic goes DIRECT (no proxy overhead).
 
@@ -439,7 +439,7 @@ def enable_system_proxy(port: int = 8080) -> bool:
         )
 
         # Defensively clear any blanket web proxy left over from a prior
-        # blanket-era install of LLMGuard (before this PAC-only fix). We
+        # blanket-era install of Domestique (before this PAC-only fix). We
         # never SET these to "on" - only ever turn them off - so this is a
         # no-op on a fresh install where they were never configured.
         subprocess.run(
@@ -490,7 +490,7 @@ def disable_system_proxy() -> bool:
     for interface in interfaces:
         # We only ever turn the PAC (autoproxy) on, so that's all we need to
         # turn off. The securewebproxy/webproxy -off calls are kept as
-        # defensive no-ops in case an older LLMGuard version left one of
+        # defensive no-ops in case an older Domestique version left one of
         # those set on this machine (pre PAC-only fix).
         subprocess.run(
             ["networksetup", "-setsecurewebproxystate", interface, "off"],
@@ -573,7 +573,7 @@ def _enable_windows_proxy(port: int) -> bool:
 
     Idempotency note: we also unconditionally DELETE ProxyServer/
     ProxyOverride here (never set them). This matters for users upgrading
-    from a pre-PAC-only LLMGuard version that did set a blanket
+    from a pre-PAC-only Domestique version that did set a blanket
     ProxyServer - especially if that older process was killed before its
     normal disable/atexit cleanup ran, leaving the blanket proxy stuck in
     the registry. Without this, re-enabling would layer our PAC on top of
@@ -597,7 +597,7 @@ def _enable_windows_proxy(port: int) -> bool:
         winreg.SetValueEx(key, "ProxyEnable", 0, winreg.REG_DWORD, 1)
 
         # Unconditionally delete any blanket proxy left over from a prior
-        # blanket-era install of LLMGuard (before this PAC-only fix). This
+        # blanket-era install of Domestique (before this PAC-only fix). This
         # is idempotent - a no-op when they're absent, which is the case on
         # a fresh install that never set them. We never SET these values
         # here, only ever remove them.
@@ -605,7 +605,7 @@ def _enable_windows_proxy(port: int) -> bool:
         _delete_winreg_value(key, "ProxyOverride")
 
     _refresh_windows_proxy_settings()
-    return _windows_proxy_points_to_llmguard(key_path, pac_url)
+    return _windows_proxy_points_to_domestique(key_path, pac_url)
 
 
 def _backup_windows_proxy_settings(key_path: str) -> None:
@@ -640,19 +640,19 @@ def _restore_windows_proxy() -> bool:
 
     This also restores a pre-existing corporate AutoConfigURL: if the user
     already had their own PAC configured (common on managed/enterprise
-    machines) before enabling LLMGuard, _backup_windows_proxy_settings
+    machines) before enabling Domestique, _backup_windows_proxy_settings
     captured it, and the loop below writes that exact value back rather
     than just deleting AutoConfigURL. If the user never had one, the
     backed-up entry is None and we delete the key instead, restoring the
     "no PAC configured" state.
 
-    FOLLOW-UP (not implemented here): while LLMGuard interception is
+    FOLLOW-UP (not implemented here): while Domestique interception is
     *enabled*, we overwrite the corporate AutoConfigURL wholesale rather
     than chaining to it (e.g. having our PAC delegate to the corporate PAC
     for domains we don't care about). For an enterprise/Pro deployment,
     chaining would be safer than a full overwrite-and-restore, since any
     corporate PAC logic (e.g. internal domains needing a specific proxy)
-    is inactive for the duration LLMGuard is on. Restore-on-disable (below)
+    is inactive for the duration Domestique is on. Restore-on-disable (below)
     mitigates the risk once the user turns interception off, but does not
     help while it's running.
     """
@@ -694,7 +694,7 @@ def _delete_winreg_value(key, name: str) -> None:
         pass
 
 
-def _windows_proxy_points_to_llmguard(key_path: str, pac_url: str) -> bool:
+def _windows_proxy_points_to_domestique(key_path: str, pac_url: str) -> bool:
     """Verify our PAC is the active AutoConfigURL (PAC-only, no ProxyServer)."""
     import winreg
 

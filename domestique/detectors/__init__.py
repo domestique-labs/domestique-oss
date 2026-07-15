@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from llmguard.models import Detection
+    from domestique.models import Detection
 
 
 @runtime_checkable

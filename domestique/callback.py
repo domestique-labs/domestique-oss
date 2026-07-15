@@ -1,13 +1,13 @@
-"""LiteLLM callback integration for LLMGuard.
+"""LiteLLM callback integration for Domestique.
 
 Provides a drop-in callback that automatically scans all LLM requests
 and responses for sensitive data when using LiteLLM.
 
 Usage:
     import litellm
-    from llmguard import LLMGuardCallback
+    from domestique import DomestiqueCallback
 
-    litellm.callbacks = [LLMGuardCallback()]
+    litellm.callbacks = [DomestiqueCallback()]
 
     # Now all LLM calls are automatically protected:
     response = litellm.completion(
@@ -17,7 +17,7 @@ Usage:
     # ^ This will be blocked or redacted depending on policy
 
 Configuration:
-    callback = LLMGuardCallback(
+    callback = DomestiqueCallback(
         mode="redact",          # "block" or "redact" (default: "block")
         scan_responses=True,    # Also scan LLM responses
         on_block=my_handler,    # Custom handler for blocked requests
@@ -34,10 +34,10 @@ from app.services.redaction import RedactionAction, RedactionEngine
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-logger = logging.getLogger("llmguard.callback")
+logger = logging.getLogger("domestique.callback")
 
 
-class LLMGuardCallback:
+class DomestiqueCallback:
     """LiteLLM callback that scans requests/responses for sensitive data.
 
     Can operate in two modes:
@@ -96,8 +96,8 @@ class LLMGuardCallback:
                 if self._mode == "block":
                     if self._on_block:
                         self._on_block(content, categories)
-                    raise LLMGuardBlockedError(
-                        f"LLMGuard blocked request: sensitive data detected "
+                    raise DomestiqueBlockedError(
+                        f"Domestique blocked request: sensitive data detected "
                         f"({', '.join(categories)})"
                     )
                 # In redact mode, force redaction even for BLOCK-category items
@@ -120,7 +120,7 @@ class LLMGuardCallback:
                     self._on_redact(content, result.redacted_text, result.categories_found)
 
         if modified:
-            logger.info(f"LLMGuard: redacted content in request to {model}")
+            logger.info(f"Domestique: redacted content in request to {model}")
 
         return kwargs
 
@@ -151,7 +151,7 @@ class LLMGuardCallback:
 
             if result.action in (RedactionAction.BLOCK, RedactionAction.REDACT):
                 logger.warning(
-                    f"LLMGuard RESPONSE ALERT: sensitive data in LLM response "
+                    f"Domestique RESPONSE ALERT: sensitive data in LLM response "
                     f"({', '.join(result.categories_found)})"
                 )
         except Exception as e:
@@ -160,12 +160,12 @@ class LLMGuardCallback:
     def log_failure_event(
         self, kwargs: dict[str, Any], response_obj: Any, start_time: float, end_time: float
     ) -> None:
-        """Called on API failure. No-op for LLMGuard."""
+        """Called on API failure. No-op for Domestique."""
         pass
 
 
-class LLMGuardBlockedError(Exception):
-    """Raised when LLMGuard blocks a request due to sensitive data."""
+class DomestiqueBlockedError(Exception):
+    """Raised when Domestique blocks a request due to sensitive data."""
 
     def __init__(self, message: str, categories: list[str] | None = None) -> None:
         super().__init__(message)
