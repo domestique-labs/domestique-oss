@@ -102,6 +102,12 @@ INTERCEPTED_DOMAINS = [
     # DeepSeek
     "api.deepseek.com",
     "chat.deepseek.com",
+    # Qwen (Alibaba) — cloud destination, distinct from the local `qwen3` classifier.
+    # DashScope exposes an OpenAI-compatible endpoint (/compatible-mode/v1/chat/completions),
+    # which the generic OpenAI extraction already handles once the host is intercepted.
+    "chat.qwen.ai",
+    "dashscope.aliyuncs.com",
+    "dashscope-intl.aliyuncs.com",
     # Cursor AI
     "api2.cursor.sh",
     "api3.cursor.sh",
