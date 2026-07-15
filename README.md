@@ -15,7 +15,7 @@ any LLM — with zero system changes. No CA to install, no system proxy, cross-p
 [![Downloads/month](https://static.pepy.tech/badge/domestique/month)](https://pepy.tech/project/domestique)
 -->
 
-📖 [Docs](./docs/) · [Changelog](./CHANGELOG.md) · [Recipes](./docs/recipes/) · [Contributing](./CONTRIBUTING.md)
+📖 [Docs](./docs/) · [Changelog](./docs/CHANGELOG.md) · [Recipes](./docs/recipes/) · [Contributing](./CONTRIBUTING.md)
 
 ## Quick start
 
