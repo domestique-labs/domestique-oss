@@ -4,6 +4,19 @@
 redacts secrets and PII out of your prompts *before* they reach OpenAI, Anthropic, or
 any LLM — with zero system changes. No CA to install, no system proxy, cross-platform.
 
+[![CI](https://img.shields.io/github/actions/workflow/status/domestique-labs/domestique-oss/ci.yml?branch=main&label=CI)](https://github.com/domestique-labs/domestique-oss/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![GitHub stars](https://img.shields.io/github/stars/domestique-labs/domestique-oss?style=flat)](https://github.com/domestique-labs/domestique-oss/stargazers)
+<!-- Enable once the package is published to PyPI (blocked on the final package name — see CHANGELOG):
+[![PyPI version](https://img.shields.io/pypi/v/domestique)](https://pypi.org/project/domestique/)
+[![PyPI downloads](https://static.pepy.tech/badge/domestique)](https://pepy.tech/project/domestique)
+[![Downloads/month](https://static.pepy.tech/badge/domestique/month)](https://pepy.tech/project/domestique)
+-->
+
+📖 [Docs](./docs/) · [Changelog](./CHANGELOG.md) · [Recipes](./docs/recipes/) · [Contributing](./CONTRIBUTING.md)
+
 ## Quick start
 
 ```bash
