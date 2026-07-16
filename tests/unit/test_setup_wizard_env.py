@@ -76,3 +76,17 @@ class TestExtrasInstallArgv:
 
         monkeypatch.setattr(wizard, "detect_install_env", lambda: "pipx")
         assert extras_install_argv(["ner"])[0] == "pipx"
+
+
+class TestPipxSegmentMatch:
+    """Review finding: 'pipx' must match a whole path segment — a project at
+    ~/dev/pipx-clone/.venv is a plain venv, not a pipx-managed one."""
+
+    def test_pipx_like_substring_is_plain_pip(self):
+        assert detect_install_env(prefix="/home/bob/dev/pipx-clone/.venv", environ={}) == "pip"
+
+    def test_real_pipx_segment_still_detected(self):
+        assert (
+            detect_install_env(prefix="/home/bob/.local/pipx/venvs/domestique", environ={})
+            == "pipx"
+        )

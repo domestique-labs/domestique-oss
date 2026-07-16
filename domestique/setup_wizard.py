@@ -298,19 +298,35 @@ def detect_hardware() -> HardwareProfile:
 # ──────────────────────────────── prompts ─────────────────────────────────
 
 
-def _input(prompt: str, default: str = "") -> str:
+def _input(prompt: str, default: str = "", *, eof_raises: bool = False) -> str:
     suffix = f" [{default}] " if default else " "
     try:
         ans = input(_console_safe(prompt + suffix)).strip()
     except EOFError:
+        if eof_raises:
+            raise
         return default
     return ans or default
 
 
-def prompt_yes_no(question: str, default: bool = True) -> bool:
+def prompt_yes_no(question: str, default: bool = True, *, eof_default: bool | None = None) -> bool:
+    """Ask a y/n question; Enter accepts ``default``.
+
+    ``eof_default``: when given, EOF on stdin returns this value instead of
+    ``default``. Callers whose accept-path has side effects (installs,
+    downloads) should pass ``eof_default=False`` so a stream that passes
+    ``isatty()`` but immediately EOFs fails safe instead of auto-accepting.
+    """
     suffix = "Y/n" if default else "y/N"
     while True:
-        a = _input(f"{question} ({suffix})", "y" if default else "n").lower()
+        try:
+            a = _input(
+                f"{question} ({suffix})",
+                "y" if default else "n",
+                eof_raises=eof_default is not None,
+            ).lower()
+        except EOFError:
+            return default if eof_default is None else eof_default
         if a in ("y", "yes"):
             return True
         if a in ("n", "no"):
@@ -352,7 +368,9 @@ def detect_install_env(
     norm = raw_prefix.replace("\\", "/").lower()
 
     pipx_home = env.get("PIPX_HOME", "").replace("\\", "/").lower()
-    if "pipx" in norm or (pipx_home and norm.startswith(pipx_home)):
+    # Match "pipx" as a whole path segment, not a substring — a project
+    # living at e.g. ~/dev/pipx-clone/.venv is a plain venv, not pipx.
+    if "pipx" in norm.split("/") or (pipx_home and norm.startswith(pipx_home)):
         return "pipx"
 
     uv_tool_dir = env.get("UV_TOOL_DIR", "").replace("\\", "/").lower()

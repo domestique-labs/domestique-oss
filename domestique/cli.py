@@ -83,10 +83,27 @@ def _maybe_offer_first_run_setup(no_setup: bool) -> None:
 
     if (setup_wizard.DOMESTIQUE_HOME / "config.json").exists():
         return
-    if not sys.stdin.isatty():
+    # stdin can be None (pythonw, GUI launchers) or already closed (some
+    # service managers) — both must mean "not interactive", never a crash.
+    try:
+        interactive = sys.stdin is not None and sys.stdin.isatty()
+    except ValueError:
+        interactive = False
+    if not interactive:
         return
-    if setup_wizard.prompt_yes_no("First run - configure detection tiers now?", default=True):
-        setup_wizard.run_wizard()
+    # eof_default=False: a stream that passes isatty() but immediately EOFs
+    # (canonical: `docker run -t` without -i) must DECLINE — auto-accepting
+    # would install extras and pull multi-GB models unattended mid-`start`.
+    if setup_wizard.prompt_yes_no(
+        "First run - configure detection tiers now?", default=True, eof_default=False
+    ):
+        try:
+            setup_wizard.run_wizard()
+        except SystemExit as exc:
+            # A failed install step must not kill `domestique start`;
+            # regex-only protection still works with zero downloads.
+            print(f"Setup did not complete (exit: {exc.code}).")
+            print("Continuing with regex-only detection (run 'domestique setup' anytime).")
     else:
         print("Continuing with regex-only detection (run 'domestique setup' anytime).")
 
@@ -122,7 +139,10 @@ def _browser_unreachable_hint() -> None:
         print('Install it with:  pipx inject domestique "domestique[browser-proxy]"')
         print('  (or in a plain venv: pip install "domestique[browser-proxy]")')
     else:
-        print("dashboard app isn't running - start it with: python -m app")
+        # `--mode portable` works on a core install everywhere; bare
+        # `python -m app` needs the [macos-native] extra on macOS.
+        print("dashboard app isn't running (or didn't respond) - start it with:")
+        print("  python -m app --mode portable")
 
 
 def _cmd_browser(action: str, url: str) -> int:

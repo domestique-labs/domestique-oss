@@ -19,6 +19,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+# This is the bootstrap installer — it may be run by old system pythons
+# (Ubuntu 22.04 / Debian 11 ship 3.10). The wizard module uses 3.11+ syntax,
+# so fail with a clear message instead of an opaque ImportError.
+if sys.version_info < (3, 11):  # noqa: UP036 — guard MUST run on older interpreters
+    sys.exit(
+        "Domestique requires Python 3.11+ "
+        f"(this is {sys.version_info.major}.{sys.version_info.minor}). "
+        "Install a newer Python first, e.g.: uv python install 3.12"
+    )
+
 # Support direct invocation from a source checkout where the repo root (and
 # therefore the ``domestique`` package) is not yet on sys.path — this script
 # is the bootstrap installer, so it must run before any pip install.
