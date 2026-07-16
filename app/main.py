@@ -17,9 +17,35 @@ from typing import NoReturn
 
 from app.config.store import ConfigStore
 from app.server.api import start_api_server
+from domestique.branding import LOGO, supports_unicode
 
 DASHBOARD_PATH = Path(__file__).parent / "assets" / "dashboard.html"
 DEFAULT_API_PORT = 9876
+
+
+def _render_app_banner(api_port: int) -> str:
+    """Compose the ``python -m app`` splash banner (logo + status block).
+
+    Mirrors the ``domestique start`` banner in ``domestique/cli.py`` but with
+    dashboard copy. Unicode glyphs are gated on :func:`supports_unicode` with
+    ASCII fallbacks so a cp1252 console renders cleanly.
+    """
+    api_url = f"http://127.0.0.1:{api_port}"
+    if supports_unicode():
+        rule, active, check = "─" * 60, "►", "✔"
+    else:
+        rule, active, check = "-" * 60, ">", "+"
+    return (
+        LOGO
+        + "  [OSS DASHBOARD]\n"
+        + rule
+        + "\n"
+        + f"  [{active}] Domestique API running at {api_url}\n"
+        + f"  [{check}] Dashboard: {api_url}/\n"
+        + rule
+        + "\n"
+        + "  Press Ctrl+C to stop.\n"
+    )
 
 
 def launch(
@@ -164,6 +190,8 @@ def _launch_macos(*, api_port: int) -> None:
                 stream.reconfigure(encoding="utf-8", errors="replace")
             except Exception:
                 pass
+
+    print(_render_app_banner(api_port), flush=True)
 
     ConfigStore.load()
     start_api_server(port=api_port)
@@ -310,6 +338,12 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     _api._startup_state["phase"] = "ready"
     _api._startup_state["detail"] = ""
 
+    # Splash banner FIRST, as one atomic print: the background workers below
+    # (Ollama bootstrap in particular) write to the same terminal — the
+    # first-run `ollama pull` progress bar owns it for minutes — so the
+    # banner must be fully flushed before any of them start.
+    print(_render_app_banner(api_port), flush=True)
+
     # First-time setup: generate the CA (BEFORE opening the browser). This
     # mirrors AppDelegate._ensure_cert_trusted() on macOS. Without this,
     # portable mode (Windows/Linux) never generates a CA on a fresh install,
@@ -325,13 +359,8 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     # Auto-start proxies that were enabled in the saved config.
     threading.Thread(target=_auto_start_proxies, daemon=True).start()
 
-    dashboard_url = f"http://127.0.0.1:{api_port}/"
-    print(f"Domestique API running at http://127.0.0.1:{api_port}")
-    print(f"Dashboard: {dashboard_url}")
-    print("Press Ctrl+C to stop.")
-
     if open_dashboard:
-        webbrowser.open(dashboard_url)
+        webbrowser.open(f"http://127.0.0.1:{api_port}/")
 
     # System tray icon (portable mode, any OS) — mirrors the macOS StatusBar.
     tray = _start_system_tray(api_port)
@@ -507,6 +536,27 @@ def _wait_for_command(
     return None
 
 
+# Approximate `ollama pull` download sizes, keyed by the models
+# _ensure_ollama() can select. Only used for the user-facing heads-up
+# before the pull; keep in sync with the model choices above/below.
+_MODEL_PULL_SIZES = {
+    "qwen3:1.7b": "~1.4 GB",
+    "llama3.2:1b": "~1.3 GB",
+    "gemma4:e2b": "~3 GB",
+    "gemma4:e2b-mlx": "~3 GB",
+}
+
+
+def _pull_notice(model: str) -> str:
+    """One-line heads-up printed before `ollama pull` takes over the terminal."""
+    size = _MODEL_PULL_SIZES.get(model, "a few GB")
+    marker, dash = ("▶", "—") if supports_unicode() else (">", "-")
+    return (
+        f"{marker} Pulling model {model} "
+        f"({size}, one-time {dash} progress below; may take several minutes)..."
+    )
+
+
 def _ensure_ollama() -> None:
     """Ensure Ollama is installed, running optimally, and the model is warm.
 
@@ -647,7 +697,11 @@ def _ensure_ollama() -> None:
         pulled = set()
 
     if model not in pulled and not any(m.startswith(model.split(":")[0]) for m in pulled):
-        print(f"▶ Pulling model {model} (first run only)...")
+        # Heads-up BEFORE handing the terminal to `ollama pull`: its live
+        # progress bar owns the console for the whole (one-time) download,
+        # so set expectations first. Deliberately NOT capturing output —
+        # the user should see download progress.
+        print(_pull_notice(model), flush=True)
         try:
             subprocess.run([ollama_bin, "pull", model], timeout=600)
             print(f"  ✓ {model} ready")

@@ -14,31 +14,18 @@ import contextlib
 import sys
 
 from domestique import __version__
+from domestique.branding import LOGO, supports_unicode
 
 _DEMO_PROMPT = (
     "Here is my AWS key AKIAIOSFODNN7EXAMPLE and email jane.doe@corp.com, "
     "SSN 123-45-6789. Please help me debug this."
 )
 
-# figlet "standard" rendering of "domestique"
-_LOGO = r"""
-     _                           _   _
-  __| | ___  _ __ ___   ___  ___| |_(_) __ _ _   _  ___
- / _` |/ _ \| '_ ` _ \ / _ \/ __| __| |/ _` | | | |/ _ \
-| (_| | (_) | | | | | |  __/\__ \ |_| | (_| | |_| |  __/
- \__,_|\___/|_| |_| |_|\___||___/\__|_|\__, |\__,_|\___|
-                                          |_|
-"""
-
-
-def _supports_unicode() -> bool:
-    """Whether stdout can encode the fancy banner glyphs (False on a cp1252 console)."""
-    enc = getattr(sys.stdout, "encoding", None) or ""
-    try:
-        "►✔→─".encode(enc)
-    except (LookupError, UnicodeError):
-        return False
-    return True
+# Backwards-compatible aliases: the logo and unicode probe moved to
+# domestique.branding (shared with the app launcher), but tests and callers
+# still reference / monkeypatch these module-level names.
+_LOGO = LOGO
+_supports_unicode = supports_unicode
 
 
 def _banner(host: str, port: int) -> str:
