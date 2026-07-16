@@ -85,18 +85,56 @@ def main(argv: list[str] | None = None) -> None:
         help="Start the local API without opening the dashboard.",
     )
     args = parser.parse_args(argv)
-    launch(
-        mode=args.mode,
-        api_port=args.api_port,
-        open_dashboard=not args.no_browser,
-    )
+    try:
+        launch(
+            mode=args.mode,
+            api_port=args.api_port,
+            open_dashboard=not args.no_browser,
+        )
+    except RuntimeError as exc:
+        # Mode-resolution errors (native off-macOS, native without pyobjc)
+        # are user-facing configuration problems, not bugs — no traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
+
+
+def _native_available() -> bool:
+    """Whether the optional AppKit (pyobjc) dependency is importable.
+
+    Note: a truthy spec means the module is *findable*, not that a later
+    import cannot fail (e.g. a broken pyobjc install) — that narrower case
+    still raises at import time, exactly as it did before this probe.
+    """
+    import importlib.util
+
+    try:
+        return importlib.util.find_spec("AppKit") is not None
+    except (ImportError, ValueError):
+        # find_spec itself can raise in edge states (module stubbed into
+        # sys.modules with __spec__ unset, broken meta-path finder). The
+        # probe exists for graceful degradation, so degrade.
+        return False
 
 
 def _resolve_mode(mode: str) -> str:
     if mode == "auto":
-        return "native" if sys.platform == "darwin" else "portable"
-    if mode == "native" and sys.platform != "darwin":
-        raise RuntimeError("Native mode is only available on macOS.")
+        if sys.platform != "darwin":
+            return "portable"
+        if _native_available():
+            return "native"
+        print(
+            "AppKit (pyobjc) not installed — falling back to portable mode.\n"
+            '  For the native menu-bar app: pip install -e ".[macos-native]"'
+        )
+        return "portable"
+    if mode == "native":
+        if sys.platform != "darwin":
+            raise RuntimeError("Native mode is only available on macOS.")
+        if not _native_available():
+            raise RuntimeError(
+                "Native mode requires AppKit (pyobjc). "
+                'Install with: pip install -e ".[macos-native]"'
+            )
     return mode
 
 
@@ -295,7 +333,7 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     if open_dashboard:
         webbrowser.open(dashboard_url)
 
-    # System tray icon (Windows/Linux) — mirrors macOS StatusBar.
+    # System tray icon (portable mode, any OS) — mirrors the macOS StatusBar.
     tray = _start_system_tray(api_port)
 
     def _shutdown(_signum=None, _frame=None) -> None:
@@ -751,8 +789,31 @@ def _benchmark_and_warm(model: str, hw: dict, opener) -> None:
     print(f"  ✓ {model} warm on {chosen}")
 
 
+def _tray_available() -> bool:
+    """Whether the optional tray dependencies (pystray + Pillow) are findable."""
+    import importlib.util
+
+    try:
+        return (
+            importlib.util.find_spec("pystray") is not None
+            and importlib.util.find_spec("PIL") is not None
+        )
+    except (ImportError, ValueError):
+        return False
+
+
 def _start_system_tray(api_port: int):
-    """Start the system tray icon on Windows/Linux. Returns the tray or None."""
+    """Start the system tray icon in portable mode. Returns the tray or None.
+
+    ``SystemTray`` imports pystray lazily *inside its background thread*, so a
+    missing optional dep surfaced as an unhandled thread traceback long after
+    startup. Probing availability here degrades the missing-dep case to no
+    tray icon with an install hint. (A present-but-broken install can still
+    fail at import time inside the thread — the probe only covers findability.)
+    """
+    if not _tray_available():
+        print('  Tray icon disabled (optional) — enable with: pip install -e ".[desktop]"')
+        return None
     try:
         from app.services.tray import SystemTray
     except ImportError:
