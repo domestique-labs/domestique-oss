@@ -669,7 +669,9 @@ def pick_features(args: argparse.Namespace) -> set[str]:
     chosen = set()
     for key, info in FEATURE_EXTRAS.items():
         size = f" (~{info['extra_download_mb']} MB)"
-        if prompt_yes_no(f"  install {info['label']}{size}?", default=info["default"]):
+        if prompt_yes_no(
+            f"  install {info['label']}{size}?", default=info["default"], eof_default=False
+        ):
             chosen.add(key)
     return chosen
 
@@ -696,7 +698,9 @@ def pick_preset(
         )
         return recommended
 
-    if not prompt_yes_no("  enable the Tier-3 local LLM classifier?", default=True):
+    if not prompt_yes_no(
+        "  enable the Tier-3 local LLM classifier?", default=True, eof_default=False
+    ):
         return None
 
     recommended = recommend_preset(vram_gb, free_vram_gb, ram_gb)
@@ -737,7 +741,7 @@ def confirm_plan(extras: set[str], preset: str | None) -> bool:
         if total_mb
         else "  no pip downloads required"
     )
-    return prompt_yes_no("\n  proceed?", default=True)
+    return prompt_yes_no("\n  proceed?", default=True, eof_default=False)
 
 
 def _wait_for_command(
@@ -1012,7 +1016,7 @@ def _decide(question: str, *, default: bool, yes: bool) -> bool:
         suffix = "Y/n" if default else "y/N"
         _print(f"{question} ({suffix}) -> {'yes' if default else 'no'} (auto)")
         return default
-    return prompt_yes_no(question, default=default)
+    return prompt_yes_no(question, default=default, eof_default=False)
 
 
 def _wizard_walkthrough(hw: HardwareProfile, *, yes: bool) -> WizardChoices:
@@ -1091,7 +1095,7 @@ def _confirm_wizard_plan(choices: WizardChoices, extras: list[str]) -> bool:
     _print(f"  Desktop UI          {'yes' if choices.desktop_ui else 'no'}")
     if extras:
         _print(f"  pip extras          {', '.join(extras)}")
-    return prompt_yes_no("\n  proceed?", default=True)
+    return prompt_yes_no("\n  proceed?", default=True, eof_default=False)
 
 
 def _install_wizard_selection(choices: WizardChoices) -> None:
