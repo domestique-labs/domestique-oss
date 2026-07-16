@@ -27,10 +27,12 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from mitmproxy import http as mitm_http
-from mitmproxy.test import tflow, tutils
 
+pytest.importorskip("mitmproxy")  # requires the [browser-proxy] extra; skip cleanly when absent
+
+from mitmproxy import http as mitm_http
 from mitmproxy.net import encoding as mitm_encoding
+from mitmproxy.test import tflow, tutils
 
 from app.services.mitm_addon import DomestiqueAddon
 from domestique.detectors.registry import Finding, InspectionResult
@@ -351,8 +353,7 @@ class TestCompressedResponseIsDecodedBeforeScanning:
         await addon.responseheaders(flow)
 
         plaintext = (
-            b'data: {"choices":[{"delta":{"content":"SSN 123-45-6789"}}]}\n\n'
-            b"data: [DONE]\n\n"
+            b'data: {"choices":[{"delta":{"content":"SSN 123-45-6789"}}]}\n\ndata: [DONE]\n\n'
         )
         gzip_bytes = mitm_encoding.encode(plaintext, "gzip")
         flow.response.stream(gzip_bytes)
@@ -406,9 +407,7 @@ class TestCompressedResponseIsDecodedBeforeScanning:
         flow = _flow(content_type="application/json")  # no content_encoding
         await addon.responseheaders(flow)
 
-        plaintext = json.dumps(
-            {"choices": [{"message": {"content": "SSN 123-45-6789"}}]}
-        ).encode()
+        plaintext = json.dumps({"choices": [{"message": {"content": "SSN 123-45-6789"}}]}).encode()
         flow.response.stream(plaintext)
 
         await addon.response(flow)
@@ -421,9 +420,7 @@ class TestCompressedResponseIsDecodedBeforeScanning:
         flow = _flow(content_type="application/json", content_encoding="identity")
         await addon.responseheaders(flow)
 
-        plaintext = json.dumps(
-            {"choices": [{"message": {"content": "SSN 123-45-6789"}}]}
-        ).encode()
+        plaintext = json.dumps({"choices": [{"message": {"content": "SSN 123-45-6789"}}]}).encode()
         flow.response.stream(plaintext)
 
         await addon.response(flow)
@@ -454,7 +451,8 @@ class TestCompressedResponseIsDecodedBeforeScanning:
         all must also be recorded as un-scannable, not silently dropped."""
         addon = _addon()
         flow = _flow(
-            content_type="application/json", content_encoding="x-unknown-codec",
+            content_type="application/json",
+            content_encoding="x-unknown-codec",
         )
         await addon.responseheaders(flow)
 

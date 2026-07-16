@@ -5,6 +5,10 @@ from __future__ import annotations
 import io
 from unittest.mock import patch
 
+import pytest
+
+pytest.importorskip("PIL")  # requires the [file-scanning] extra; skip cleanly when absent
+
 from PIL import Image, ImageDraw
 
 from app.services.file_scanner import (
