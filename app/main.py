@@ -85,18 +85,35 @@ def main(argv: list[str] | None = None) -> None:
         help="Start the local API without opening the dashboard.",
     )
     args = parser.parse_args(argv)
-    launch(
-        mode=args.mode,
-        api_port=args.api_port,
-        open_dashboard=not args.no_browser,
-    )
+    try:
+        launch(
+            mode=args.mode,
+            api_port=args.api_port,
+            open_dashboard=not args.no_browser,
+        )
+    except RuntimeError as exc:
+        # Mode-resolution errors (native off-macOS, native without pyobjc)
+        # are user-facing configuration problems, not bugs — no traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(2) from exc
 
 
 def _native_available() -> bool:
-    """Whether the optional AppKit (pyobjc) dependency is importable."""
+    """Whether the optional AppKit (pyobjc) dependency is importable.
+
+    Note: a truthy spec means the module is *findable*, not that a later
+    import cannot fail (e.g. a broken pyobjc install) — that narrower case
+    still raises at import time, exactly as it did before this probe.
+    """
     import importlib.util
 
-    return importlib.util.find_spec("AppKit") is not None
+    try:
+        return importlib.util.find_spec("AppKit") is not None
+    except (ImportError, ValueError):
+        # find_spec itself can raise in edge states (module stubbed into
+        # sys.modules with __spec__ unset, broken meta-path finder). The
+        # probe exists for graceful degradation, so degrade.
+        return False
 
 
 def _resolve_mode(mode: str) -> str:
@@ -773,22 +790,26 @@ def _benchmark_and_warm(model: str, hw: dict, opener) -> None:
 
 
 def _tray_available() -> bool:
-    """Whether the optional tray dependencies (pystray + Pillow) are importable."""
+    """Whether the optional tray dependencies (pystray + Pillow) are findable."""
     import importlib.util
 
-    return (
-        importlib.util.find_spec("pystray") is not None
-        and importlib.util.find_spec("PIL") is not None
-    )
+    try:
+        return (
+            importlib.util.find_spec("pystray") is not None
+            and importlib.util.find_spec("PIL") is not None
+        )
+    except (ImportError, ValueError):
+        return False
 
 
 def _start_system_tray(api_port: int):
     """Start the system tray icon in portable mode. Returns the tray or None.
 
     ``SystemTray`` imports pystray lazily *inside its background thread*, so a
-    missing optional dep would otherwise surface as an unhandled thread
-    traceback long after startup. Probe availability here instead and degrade
-    to no tray icon with an install hint.
+    missing optional dep surfaced as an unhandled thread traceback long after
+    startup. Probing availability here degrades the missing-dep case to no
+    tray icon with an install hint. (A present-but-broken install can still
+    fail at import time inside the thread — the probe only covers findability.)
     """
     if not _tray_available():
         print('  Tray icon disabled (optional) — enable with: pip install -e ".[desktop]"')

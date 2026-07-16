@@ -70,6 +70,39 @@ class TestResolveMode:
         probe.assert_not_called()
 
 
+class TestAvailabilityProbes:
+    """find_spec itself can raise in edge states (module stubbed into
+    sys.modules with __spec__ unset, broken meta-path finder) — the probes
+    must degrade to False, never crash (review finding)."""
+
+    def test_native_probe_swallows_valueerror(self) -> None:
+        with patch("importlib.util.find_spec", side_effect=ValueError("__spec__ is None")):
+            assert main._native_available() is False
+
+    def test_native_probe_swallows_importerror(self) -> None:
+        with patch("importlib.util.find_spec", side_effect=ImportError):
+            assert main._native_available() is False
+
+    def test_tray_probe_swallows_valueerror(self) -> None:
+        with patch("importlib.util.find_spec", side_effect=ValueError("__spec__ is None")):
+            assert main._tray_available() is False
+
+
+class TestMainErrorPresentation:
+    def test_explicit_native_off_macos_exits_cleanly(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Mode-resolution RuntimeErrors are config problems: message + exit 2,
+        not a raw traceback (review finding)."""
+        monkeypatch.setattr(sys, "platform", "linux")
+        with pytest.raises(SystemExit) as excinfo:
+            main.main(["--mode", "native"])
+        assert excinfo.value.code == 2
+        err = capsys.readouterr().err
+        assert "error:" in err
+        assert "only available on macOS" in err
+
+
 class TestStartSystemTray:
     def test_missing_tray_deps_returns_none_with_hint(
         self, capsys: pytest.CaptureFixture[str]
