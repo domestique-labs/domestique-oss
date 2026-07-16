@@ -33,6 +33,9 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip("mitmproxy")  # requires the [browser-proxy] extra; skip cleanly when absent
+
 from mitmproxy.test import tflow, tutils
 
 from app.services.mitm_addon import DomestiqueAddon

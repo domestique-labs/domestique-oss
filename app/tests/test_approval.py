@@ -242,6 +242,7 @@ class TestRedaction:
 
     def _get_redact(self):
         """Import the redaction method."""
+        pytest.importorskip("mitmproxy")  # [browser-proxy] extra; skip cleanly when absent
         from app.services.mitm_addon import DomestiqueAddon
 
         addon = DomestiqueAddon()
