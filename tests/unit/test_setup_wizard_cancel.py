@@ -59,6 +59,10 @@ class TestSetupCommandCtrlC:
 class TestInstallerMainCtrlC:
     def test_ctrl_c_cancels_cleanly_with_exit_130(self, interrupted_stdin, monkeypatch, capsys):
         monkeypatch.setattr("sys.argv", ["setup_wizard"])
+        # On Linux, _run_installer() first re-execs into a .venv (os.execv), which
+        # would replace the pytest process before the Ctrl+C path is ever reached.
+        # Stub it out so this test exercises only the KeyboardInterrupt handling.
+        monkeypatch.setattr(wizard, "_ensure_linux_venv", MagicMock())
         monkeypatch.setattr(wizard, "detect_hardware", MagicMock(return_value=HW))
         install = MagicMock()
         monkeypatch.setattr(wizard, "install_extras", install)
