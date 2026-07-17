@@ -20,6 +20,19 @@ from domestique.models import Action, Detection
 logger = structlog.get_logger()
 
 
+def _display_path(path: Path) -> str:
+    """Log-friendly form of *path*: relative to the CWD when inside it.
+
+    Bundled policy files live deep inside the package (or site-packages),
+    which makes startup logs needlessly noisy. Paths outside the CWD stay
+    absolute — a "../../.." chain would be worse than a long path.
+    """
+    try:
+        return path.relative_to(Path.cwd()).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 @dataclass(frozen=True)
 class Rule:
     """A single policy rule parsed from YAML."""
@@ -60,7 +73,7 @@ class PolicyEngine:
                 )
                 for r in raw.get("rules", [])
             ]
-            logger.info("policy_loaded", rule_count=len(rules), path=str(path))
+            logger.info("policy_loaded", rule_count=len(rules), path=_display_path(path))
             return cls(rules=rules)
         except Exception:
             logger.exception("policy_load_error", path=str(path))

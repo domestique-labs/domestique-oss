@@ -878,22 +878,39 @@ def _start_system_tray(api_port: int):
         get_proxy_service,
     )
 
-    def _toggle() -> None:
+    # Two independent toggles: the API proxy (proxy_enabled) and browser
+    # protection (browser_interception) are separate services with separate
+    # config flags — toggling one must never touch the other's state.
+    def _toggle_api_proxy() -> None:
         proxy = get_proxy_service()
-        bp = get_browser_proxy_service()
         config = ConfigStore.current()
-        if proxy.is_running or bp.is_running:
+        if proxy.is_running:
             proxy.stop()
-            if bp.is_running:
-                bp.stop()
             config.proxy_enabled = False
-            config.browser_interception = False
-            config.browser_interception_configured = True
             ConfigStore.save(config)
         else:
             try:
                 proxy.start(config)
                 config.proxy_enabled = True
+                ConfigStore.save(config)
+            except Exception:
+                pass
+
+    def _toggle_browser() -> None:
+        bp = get_browser_proxy_service()
+        config = ConfigStore.current()
+        if bp.is_running:
+            bp.stop()
+            config.browser_interception = False
+            config.browser_interception_configured = True
+            ConfigStore.save(config)
+        else:
+            try:
+                if not bp.is_setup:
+                    bp.setup()
+                bp.start()
+                config.browser_interception = True
+                config.browser_interception_configured = True
                 ConfigStore.save(config)
             except Exception:
                 pass
@@ -905,7 +922,8 @@ def _start_system_tray(api_port: int):
         os._exit(0)
 
     tray = SystemTray(
-        on_toggle=_toggle,
+        on_toggle_api=_toggle_api_proxy,
+        on_toggle_browser=_toggle_browser,
         on_quit=_quit,
         dashboard_url=f"http://127.0.0.1:{api_port}",
     )
@@ -919,8 +937,10 @@ def _tray_sync_loop(tray) -> None:
 
     while True:
         try:
-            active = get_proxy_service().is_running or get_browser_proxy_service().is_running
-            tray.set_active(active)
+            tray.set_states(
+                api_active=get_proxy_service().is_running,
+                browser_active=get_browser_proxy_service().is_running,
+            )
         except Exception:
             pass
         time.sleep(3)

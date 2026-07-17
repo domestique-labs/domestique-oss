@@ -112,6 +112,13 @@ class StatusBar:
         menu.addItem_(NSMenuItem.separatorItem())
 
         # Protection toggle
+        # TODO(onboarding-wizard): mirror the pystray tray (app/services/tray.py),
+        # which now has two independent items — "API Proxy: on/off" and
+        # "Browser Protection: on/off". This menu still uses the single
+        # all-or-nothing `toggleFirewall:` selector because the actual toggle
+        # logic lives in app/native/app_delegate.py; splitting it requires a
+        # new delegate action + state plumbing there and is scoped out of the
+        # tray-decoupling change.
         self._toggle_item = self._add_item(menu, "Disable Protection", action="toggleFirewall:")
 
         menu.addItem_(NSMenuItem.separatorItem())
