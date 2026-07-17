@@ -300,6 +300,50 @@ def _render_canned(before: str, after: str, findings: list[Finding], *, color: b
     return "\n".join(lines)
 
 
+def _truncate(value: str, width: int = 22) -> str:
+    value = value.strip()
+    if len(value) <= width:
+        return value
+    keep = width - 1
+    return value[: keep // 2] + "…" + value[-(keep - keep // 2) :]
+
+
+def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
+    g = console.glyphs()
+    paint = console.Palette(enabled=color)
+
+    # dedupe by span, keep highest confidence per span
+    best: dict[tuple[int, int], Finding] = {}
+    for f in findings:
+        if f.span is None:
+            continue
+        key = (f.span.start, f.span.end)
+        if key not in best or f.confidence > best[key].confidence:
+            best[key] = f
+    ordered = sorted(best.values(), key=lambda f: f.span.start if f.span else 0)
+
+    if not ordered:
+        return f"  {g['dot']} nothing sensitive detected"
+
+    rows = []
+    for f in ordered:
+        assert f.span is not None
+        leaked = _truncate(before[f.span.start : f.span.end])
+        token = f"[{f.category.upper()}_REDACTED]"
+        rows.append((_label(f.category), leaked, token, f"{f.confidence:.0%}"))
+
+    lw = max(len(r[0]) for r in rows)
+    vw = max(len(r[1]) for r in rows)
+    out = [f"  {paint(g['check'], 'green')} redacted {len(rows)} secret(s)"]
+    for label, leaked, token, conf in rows:
+        out.append(
+            f"    {paint(g['check'], 'green')} {label:<{lw}}  "
+            f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
+            f"{paint(token, 'green')}  {paint(conf, 'dim')}"
+        )
+    return "\n".join(out)
+
+
 def run_demo(*, interactive: bool | None = None) -> int:
     """Canned before/after redaction, then (on a TTY) an interactive loop.
 

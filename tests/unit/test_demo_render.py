@@ -3,13 +3,13 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from domestique.cli import _render_canned, _render_config_header
+from domestique.cli import _render_canned, _render_config_header, _render_ledger, _truncate
 from domestique.config import Settings
 from domestique.gateway import build_wedge_pipeline
 from domestique.policy import PolicyEngine
 
 if TYPE_CHECKING:
-    from domestique.detectors.registry import InspectionResult
+    from domestique.detectors.registry import Finding, InspectionResult
 
 
 class TestConfigHeader:
@@ -47,3 +47,34 @@ class TestCanned:
         out = _render_canned(text, res.redacted_text or text, res.findings, color=True)
         assert "\033[31m" in out  # red used for a leaked secret
         assert "\033[32m" in out  # green used for a token
+
+
+class TestLedger:
+    def _findings(self, text: str) -> list[Finding]:
+        return asyncio.run(build_wedge_pipeline().inspect(text)).findings
+
+    def test_pairs_leaked_value_to_token(self) -> None:
+        text = "my aws key AKIAIOSFODNN7EXAMPLE and phone 555-123-4567"
+        out = _render_ledger(text, self._findings(text), color=False)
+        assert "redacted 2 secret" in out
+        assert "AKIAIOSFODNN7EXAMPLE" in out
+        assert "[AWS_ACCESS_KEY_REDACTED]" in out
+        assert "555-123-4567" in out
+        assert "[PHONE_NUMBER_REDACTED]" in out
+
+    def test_clean_input_says_nothing_detected(self) -> None:
+        text = "just a normal sentence about the weather"
+        out = _render_ledger(text, self._findings(text), color=False)
+        assert "nothing sensitive detected" in out
+
+    def test_truncate_shortens_long_values_with_ellipsis(self) -> None:
+        # unit-test _truncate directly — deterministic, no detector dependency
+        long_value = "A" * 60
+        result = _truncate(long_value, 22)
+        assert len(result) <= 22
+        assert "…" in result
+        # keeps head and tail context, drops the middle
+        assert result.startswith("A") and result.endswith("A")
+
+    def test_truncate_leaves_short_values_unchanged(self) -> None:
+        assert _truncate("short", 22) == "short"
