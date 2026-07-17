@@ -50,7 +50,7 @@ def enable_windows_vt() -> bool:
 def supports_color(stream: object | None = None) -> bool:
     """Whether ANSI color should be emitted to *stream* (default stdout)."""
     stream = stream if stream is not None else sys.stdout
-    if os.environ.get("NO_COLOR"):
+    if "NO_COLOR" in os.environ:
         return False
     try:
         if not (stream is not None and stream.isatty()):  # type: ignore[union-attr]

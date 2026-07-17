@@ -35,6 +35,18 @@ class TestSettingsFromConfig:
         s = settings_from_config({"disabled_builtin_patterns": ["phone_number"]})
         assert s.disabled_builtin_patterns == ["phone_number"]
 
+    def test_llm_preset_is_mapped(self) -> None:
+        s = settings_from_config({"llm_preset": "quality"})
+        assert s.local_llm_preset == "quality"
+
+    def test_llm_preset_absent_keeps_default(self) -> None:
+        s = settings_from_config({})
+        assert s.local_llm_preset == "balanced"  # Settings() default
+
+    def test_llm_preset_invalid_value_falls_back_to_default(self) -> None:
+        s = settings_from_config({"llm_preset": "bogus"})
+        assert s.local_llm_preset == "balanced"  # ignore unknown values
+
 
 class TestLoadConfigDict:
     def test_missing_file_returns_empty(

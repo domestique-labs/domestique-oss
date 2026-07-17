@@ -19,6 +19,10 @@ class TestSupportsColor:
         monkeypatch.setenv("NO_COLOR", "1")
         assert console.supports_color(self._stream(tty=True)) is False
 
+    def test_empty_no_color_still_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("NO_COLOR", "")
+        assert console.supports_color(self._stream(tty=True)) is False
+
     def test_non_tty_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("NO_COLOR", raising=False)
         assert console.supports_color(self._stream(tty=False)) is False

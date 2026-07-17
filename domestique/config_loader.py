@@ -64,6 +64,10 @@ def settings_from_config(config: dict[str, Any] | None = None) -> Settings:
     if config.get("classifier_prompt"):
         settings.local_llm_system_prompt = config["classifier_prompt"]
 
+    preset = config.get("llm_preset")
+    if preset in ("minimal", "balanced", "quality", "legacy-cpu"):
+        settings.local_llm_preset = preset
+
     settings.disabled_builtin_patterns = config.get("disabled_builtin_patterns", [])
     settings.local_llm_timeout_s = max(settings.local_llm_timeout_s, 30.0)
 
