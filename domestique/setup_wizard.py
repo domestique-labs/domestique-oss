@@ -876,6 +876,14 @@ def _ensure_linux_venv() -> None:
 
 
 def main() -> int:
+    try:
+        return _run_installer()
+    except KeyboardInterrupt:
+        _print("\n  cancelled — nothing was installed or changed.")
+        return 130
+
+
+def _run_installer() -> int:
     _ensure_linux_venv()
     args = parse_args()
     banner()
@@ -1143,7 +1151,7 @@ def _run_finale_demo(*, interactive: bool = False) -> None:
 def run_wizard(*, yes: bool = False, demo: bool = True) -> int:
     """The ``domestique setup`` walkthrough. Returns a process exit code."""
     _print("=" * 64)
-    _print("  Domestique setup — first-run configuration")
+    _print("  Domestique setup — hardware-aware configuration (re-run anytime)")
     _print("=" * 64)
 
     hw = detect_hardware()

@@ -119,7 +119,11 @@ def _cmd_start(host: str, port: int, *, no_setup: bool = False) -> int:
 def _cmd_setup(yes: bool) -> int:
     from domestique.setup_wizard import run_wizard
 
-    return run_wizard(yes=yes)
+    try:
+        return run_wizard(yes=yes)
+    except KeyboardInterrupt:
+        print("\n  cancelled — nothing was installed or changed.")
+        return 130
 
 
 def _browser_unreachable_hint() -> None:
