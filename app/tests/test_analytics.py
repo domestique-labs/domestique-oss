@@ -81,7 +81,7 @@ class TestUserProfile:
 
     def test_max_history(self):
         profile = UserProfile("user", max_history=5)
-        for i in range(10):
+        for _i in range(10):
             profile.record_request("api.openai.com", 100)
         assert profile.total_requests == 10
         # Only 5 in deque

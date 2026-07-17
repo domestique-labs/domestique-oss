@@ -148,7 +148,7 @@ class TestDomestiqueCallback:
         cb = DomestiqueCallback(mode="block")
         messages = [{"role": "user", "content": "What is the weather?"}]
 
-        result = cb.log_pre_api_call("gpt-4o", messages, {})
+        cb.log_pre_api_call("gpt-4o", messages, {})
         assert messages[0]["content"] == "What is the weather?"
 
     def test_skips_assistant_messages(self):

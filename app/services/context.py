@@ -245,7 +245,7 @@ class ContextAnalyzer:
         combined = " ".join(m.text for m in messages)
 
         # Check for SSN pattern in combined text
-        if _SSN_COMBINED.search(combined):
+        if _SSN_COMBINED.search(combined):  # noqa: SIM102
             # Verify it spans multiple messages (not in a single one)
             if not any(_SSN_COMBINED.search(m.text) for m in messages):
                 return ContextResult(
@@ -257,7 +257,7 @@ class ContextAnalyzer:
                 )
 
         # Check for credit card pattern in combined text
-        if _CC_COMBINED.search(combined):
+        if _CC_COMBINED.search(combined):  # noqa: SIM102
             if not any(_CC_COMBINED.search(m.text) for m in messages):
                 return ContextResult(
                     is_suspicious=True,

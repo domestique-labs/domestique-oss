@@ -83,7 +83,10 @@ class TestEnsureCertGeneratedPortable:
         ):
             main._ensure_cert_generated_portable()  # must not raise
         out = capsys.readouterr().out
-        assert "did not complete" in out
+        # Exact wording differs by platform (Linux says "isn't implemented on
+        # Linux yet"; macOS/Windows say "did not complete automatically"), but a
+        # returning-False trust attempt must always log the manual fix-cert fallback.
+        assert "fix-cert" in out
 
     def test_setup_failure_is_non_fatal_and_skips_trust(self):
         """If CA generation itself fails, don't even attempt trust."""

@@ -14,8 +14,8 @@ import json
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
@@ -23,6 +23,9 @@ import pytest
 from app.config.schema import AppConfig
 from app.config.store import ConfigStore
 from app.server.api import APIHandler, start_api_server
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture(autouse=True)
@@ -51,19 +54,19 @@ class TestAPIEndpoints:
     """Integration tests for API endpoints."""
 
     def _get(self, base_url: str, path: str) -> dict:
-        res = urllib.request.urlopen(f"{base_url}{path}")
+        res = urllib.request.urlopen(f"{base_url}{path}")  # noqa: S310
         return json.loads(res.read())
 
     def _post(self, base_url: str, path: str, data: dict = None) -> tuple[int, dict]:
         body = json.dumps(data).encode() if data else b""
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310
             f"{base_url}{path}",
             data=body,
             method="POST",
             headers={"Content-Type": "application/json"},
         )
         try:
-            res = urllib.request.urlopen(req)
+            res = urllib.request.urlopen(req)  # noqa: S310
             return res.status, json.loads(res.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
@@ -93,15 +96,15 @@ class TestAPIEndpoints:
             assert data["ok"] is True
 
     def test_post_config_invalid_json(self, api_server):
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310
             f"{api_server}/api/config",
             data=b"not json",
             method="POST",
             headers={"Content-Type": "application/json"},
         )
         try:
-            urllib.request.urlopen(req)
-            assert False, "Should have raised"
+            urllib.request.urlopen(req)  # noqa: S310
+            raise AssertionError("Should have raised")
         except urllib.error.HTTPError as e:
             assert e.code == 400
 
@@ -112,15 +115,15 @@ class TestAPIEndpoints:
         assert "report_exists" in data
 
     def test_not_found(self, api_server):
-        req = urllib.request.Request(f"{api_server}/api/nonexistent")
+        req = urllib.request.Request(f"{api_server}/api/nonexistent")  # noqa: S310
         try:
-            urllib.request.urlopen(req)
-            assert False, "Should have raised"
+            urllib.request.urlopen(req)  # noqa: S310
+            raise AssertionError("Should have raised")
         except urllib.error.HTTPError as e:
             assert e.code == 404
 
     def test_cors_headers(self, api_server):
-        res = urllib.request.urlopen(f"{api_server}/api/status")
+        res = urllib.request.urlopen(f"{api_server}/api/status")  # noqa: S310
         assert res.headers.get("Access-Control-Allow-Origin") == "*"
 
     def test_send_json_ignores_client_disconnect(self):

@@ -17,15 +17,20 @@ All responses are JSON. CORS headers allow the embedded WKWebView
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.config.store import ConfigStore
 from app.services.benchmark import BenchmarkService
 from app.services.proxy import BrowserProxyService, ProxyService
+
+if TYPE_CHECKING:
+    from app.services.approval import PendingApproval
 
 # Singleton services (shared across all requests)
 _proxy_service = ProxyService()
@@ -67,7 +72,7 @@ class _VenvScanner:
     is kept alive and fed JSON lines on stdin.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._proc = None
         self._lock = threading.Lock()
 
@@ -93,7 +98,7 @@ class _VenvScanner:
                 return str(candidate)
         return None
 
-    def _ensure_proc(self):
+    def _ensure_proc(self) -> None:
         """Start or restart the worker subprocess if needed."""
         if self._proc is not None and self._proc.poll() is None:
             return
@@ -113,8 +118,8 @@ class _VenvScanner:
             f"sys.path.insert(0, {root_literal})\n"
             "os.environ['HF_HUB_OFFLINE'] = '1'\n"
             "logging.basicConfig(stream=sys.stderr)\n"
-            "import structlog; structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))\n"
-            "from app.services.pipeline_config import load_config_dict, config_hash, settings_from_config\n"
+            "import structlog; structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))\n"  # noqa: E501
+            "from app.services.pipeline_config import load_config_dict, config_hash, settings_from_config\n"  # noqa: E501
             "from domestique.detectors.registry import create_detector_pipeline\n"
             "cfg = load_config_dict()\n"
             "cfg_hash = config_hash(cfg)\n"
@@ -133,7 +138,7 @@ class _VenvScanner:
             "        loop = asyncio.new_event_loop()\n"
             "        result = loop.run_until_complete(pipeline.inspect(req['text']))\n"
             "        loop.close()\n"
-            "        dets = [{'detector':f.detector,'category':f.category,'confidence':f.confidence}\n"
+            "        dets = [{'detector':f.detector,'category':f.category,'confidence':f.confidence}\n"  # noqa: E501
             "                for f in result.findings if f.category != 'detector_error']\n"
             "        print(json.dumps({'ok':True,'detections':dets}), flush=True)\n"
             "    except Exception as e:\n"
@@ -141,7 +146,7 @@ class _VenvScanner:
         )
         import subprocess
 
-        self._proc = subprocess.Popen(
+        self._proc = subprocess.Popen(  # noqa: S603
             [vpy, "-c", worker],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -182,10 +187,8 @@ class _VenvScanner:
                 if not result_line:
                     # Timeout: kill the subprocess to avoid desync
                     # (stale reader thread could consume the next response)
-                    try:
+                    with contextlib.suppress(Exception):
                         self._proc.kill()
-                    except Exception:
-                        pass
                     self._proc = None
                     return []
                 resp = json.loads(result_line[0])
@@ -194,10 +197,8 @@ class _VenvScanner:
                 return []
             except Exception:
                 # Kill broken subprocess, will restart on next call
-                try:
+                with contextlib.suppress(Exception):
                     self._proc.stdin.close()
-                except Exception:
-                    pass
                 self._proc = None
                 return []
 
@@ -275,7 +276,7 @@ class _ResourceMonitor:
             import ctypes
             from ctypes import wintypes
 
-            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):  # noqa: N801
                 _fields_ = [
                     ("cb", wintypes.DWORD),
                     ("PageFaultCount", wintypes.DWORD),
@@ -289,7 +290,7 @@ class _ResourceMonitor:
                     ("PeakPagefileUsage", ctypes.c_size_t),
                 ]
 
-            GetProcessMemoryInfo = ctypes.windll.psapi.GetProcessMemoryInfo
+            GetProcessMemoryInfo = ctypes.windll.psapi.GetProcessMemoryInfo  # noqa: N806
             GetProcessMemoryInfo.argtypes = [
                 wintypes.HANDLE,
                 ctypes.POINTER(PROCESS_MEMORY_COUNTERS),
@@ -302,7 +303,7 @@ class _ResourceMonitor:
             handle = ctypes.windll.kernel32.GetCurrentProcess()
             if GetProcessMemoryInfo(handle, ctypes.byref(counters), counters.cb):
                 return counters.WorkingSetSize / 1024 / 1024
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         return 0.0
 
@@ -350,7 +351,7 @@ class _ResourceMonitor:
         try:
             if sys.platform == "win32":
                 r = subprocess.run(
-                    [
+                    [  # noqa: S607
                         "powershell",
                         "-NoProfile",
                         "-Command",
@@ -367,7 +368,7 @@ class _ResourceMonitor:
             else:
                 # macOS/Linux: use ps to sum RSS of ollama processes
                 r = subprocess.run(
-                    ["pgrep", "-f", "ollama"],
+                    ["pgrep", "-f", "ollama"],  # noqa: S607
                     capture_output=True,
                     text=True,
                     timeout=5,
@@ -376,8 +377,8 @@ class _ResourceMonitor:
                     pids = r.stdout.strip().split("\n")
                     total_rss = 0
                     for pid in pids:
-                        pr = subprocess.run(
-                            ["ps", "-o", "rss=", "-p", pid.strip()],
+                        pr = subprocess.run(  # noqa: S603
+                            ["ps", "-o", "rss=", "-p", pid.strip()],  # noqa: S607
                             capture_output=True,
                             text=True,
                             timeout=5,
@@ -385,7 +386,7 @@ class _ResourceMonitor:
                         if pr.returncode == 0 and pr.stdout.strip():
                             total_rss += int(pr.stdout.strip())
                     result["mem_mb"] = round(total_rss / 1024, 1)
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
         return result
@@ -416,7 +417,7 @@ class APIHandler(BaseHTTPRequestHandler):
     Each request is handled independently.
     """
 
-    def log_message(self, format, *args) -> None:
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         """Suppress default stderr logging."""
         pass
 
@@ -1026,7 +1027,7 @@ class APIHandler(BaseHTTPRequestHandler):
         except ValueError as e:
             self._send_json({"error": str(e)}, 409)
 
-    def _notify_approval_needed(self, approval) -> None:
+    def _notify_approval_needed(self, approval: PendingApproval) -> None:
         """Send a desktop notification for a pending approval."""
         try:
             from app.services.notifications import notify
@@ -1035,7 +1036,7 @@ class APIHandler(BaseHTTPRequestHandler):
             title = "Domestique: Approval Needed"
             msg = f"{categories} detected in request to {approval.host}"
             notify(title, msg)
-        except Exception:
+        except Exception:  # noqa: S110
             pass  # Non-critical
 
     # --- Customization handlers --------------------------------------
@@ -1113,7 +1114,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 if rule["action"] not in valid_actions:
                     self._send_json({"error": f"action must be one of {valid_actions}"}, 400)
                     return
-                if "min_confidence" in rule:
+                if "min_confidence" in rule:  # noqa: SIM102
                     if not (0.0 <= rule["min_confidence"] <= 1.0):
                         self._send_json({"error": "min_confidence must be 0.0-1.0"}, 400)
                         return
@@ -1148,7 +1149,7 @@ class APIHandler(BaseHTTPRequestHandler):
                 for pat in custom_patterns:
                     try:
                         compiled = re_module.compile(pat["regex"])
-                        for m in compiled.finditer(text):
+                        for _m in compiled.finditer(text):
                             detections.append(
                                 {
                                     "detector": f"custom:{pat['name']}",
@@ -1156,7 +1157,7 @@ class APIHandler(BaseHTTPRequestHandler):
                                     "confidence": pat["confidence"],
                                 }
                             )
-                    except Exception:
+                    except Exception:  # noqa: S110
                         pass
 
             self._send_json(
@@ -1200,7 +1201,7 @@ class APIHandler(BaseHTTPRequestHandler):
                             "distribution": dist,
                         }
                     )
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
         # Custom uploaded dataset
         custom = Path.home() / ".domestique" / "workshop" / "custom_dataset.json"
@@ -1219,7 +1220,7 @@ class APIHandler(BaseHTTPRequestHandler):
                         "distribution": dist,
                     }
                 )
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
         self._send_json({"datasets": results})
 
@@ -1431,7 +1432,7 @@ class APIHandler(BaseHTTPRequestHandler):
                     ds_samples = data.get("samples", [])
                     samples.extend(ds_samples)
                     source_names.append(data.get("name", Path(p).stem))
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
         if not samples:
             dataset_path = self._get_active_dataset_path(
@@ -1465,7 +1466,7 @@ class APIHandler(BaseHTTPRequestHandler):
             }
         )
 
-        def _run():
+        def _run() -> None:
             import time
 
             try:
@@ -1691,7 +1692,7 @@ class APIHandler(BaseHTTPRequestHandler):
         return builtin_path
 
 
-from socketserver import ThreadingMixIn
+from socketserver import ThreadingMixIn  # noqa: E402
 
 
 class _LocalHTTPServer(ThreadingMixIn, HTTPServer):

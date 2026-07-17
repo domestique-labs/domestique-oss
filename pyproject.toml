@@ -95,6 +95,13 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "UP", "ANN", "S", "B", "A", "SIM", "TCH"]
 ignore = ["ANN401", "S101"]
 
+[tool.ruff.lint.per-file-ignores]
+# Test functions are self-documenting fixtures; requiring return/argument type
+# annotations on every test method adds noise without type-safety value. (Core
+# `ruff check domestique` doesn't lint tests at all; this keeps `ruff check app`
+# consistent with that.)
+"app/tests/**" = ["ANN"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

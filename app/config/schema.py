@@ -18,13 +18,13 @@ class DetectionStackConfig:
     """Tier 1: Compiled regex patterns for secrets, API keys, passwords. ~0.03ms."""
 
     gliner_pii: bool = False
-    """Tier 2: GLiNER2-PII zero-shot NER model (300M params). ~20ms. High recall but adds false positives."""
+    """Tier 2: GLiNER2-PII zero-shot NER model (300M params). ~20ms. High recall but adds false positives."""  # noqa: E501
 
     openai_privacy_filter: bool = False
     """Tier 2: OpenAI Privacy Filter (1.5B params). ~130ms. Heavy."""
 
     gemma4_e2b: bool = False
-    """Tier 3: Gemma 4 E2B via Ollama. ~155ms (MLX) / ~285ms (GGUF). Best quality. Needs 32GB+ RAM."""
+    """Tier 3: Gemma 4 E2B via Ollama. ~155ms (MLX) / ~285ms (GGUF). Best quality. Needs 32GB+ RAM."""  # noqa: E501
 
     qwen3_1_7b: bool = True
     """Tier 3: Qwen3 1.7B via Ollama. ~163ms. 1.8GB VRAM. Default - fits 16GB laptops."""

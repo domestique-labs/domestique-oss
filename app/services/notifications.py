@@ -5,8 +5,12 @@ from __future__ import annotations
 import logging
 import subprocess
 import threading
+from typing import TYPE_CHECKING
 
 from app.services.runtime import is_macos, is_windows
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger("domestique.notifications")
 
@@ -20,9 +24,9 @@ def notify(title: str, message: str) -> None:
 
 
 def _notify_macos(title: str, message: str) -> None:
-    script = f'display notification "{_escape_osascript(message)}" with title "{_escape_osascript(title)}"'
-    subprocess.Popen(
-        ["osascript", "-e", script],
+    script = f'display notification "{_escape_osascript(message)}" with title "{_escape_osascript(title)}"'  # noqa: E501
+    subprocess.Popen(  # noqa: S603
+        ["osascript", "-e", script],  # noqa: S607
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -42,8 +46,8 @@ def _notify_windows(title: str, message: str) -> None:
         "Start-Sleep -Seconds 6; "
         "$n.Dispose()"
     )
-    subprocess.Popen(
-        ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],
+    subprocess.Popen(  # noqa: S603
+        ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps],  # noqa: S607
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -76,8 +80,8 @@ class NotificationCoalescer:
     def __init__(
         self,
         window_seconds: float = 5.0,
-        notify_fn=notify,
-        timer_factory=threading.Timer,
+        notify_fn: Callable[[str, str], None] = notify,
+        timer_factory: Callable[..., threading.Timer] = threading.Timer,
     ) -> None:
         self._window_seconds = window_seconds
         self._notify_fn = notify_fn
