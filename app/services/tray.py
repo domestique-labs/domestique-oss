@@ -3,6 +3,11 @@
 Mirrors the macOS StatusBar: shows a shield icon in the notification area
 with a right-click menu for toggling protection, opening the dashboard,
 and quitting. Icon changes to reflect active/inactive state.
+
+The API proxy and browser protection are separate services with separate
+config flags (proxy_enabled vs browser_interception), so the menu exposes
+one independent toggle per service instead of a single all-or-nothing
+switch.
 """
 
 from __future__ import annotations
@@ -40,29 +45,34 @@ class SystemTray:
 
     Provides the same functionality as the macOS StatusBar:
     - Shield icon indicating protection status
-    - Right-click menu: toggle protection, open dashboard, quit
+    - Right-click menu: independent API-proxy / browser-protection
+      toggles, open dashboard, quit
 
     Usage:
         tray = SystemTray(
-            on_toggle=my_toggle_fn,
+            on_toggle_api=toggle_api_proxy_fn,
+            on_toggle_browser=toggle_browser_fn,
             on_quit=my_quit_fn,
             dashboard_url="http://127.0.0.1:9876",
         )
         tray.start()  # runs in background thread
-        tray.set_active(True)
+        tray.set_states(api_active=True, browser_active=False)
     """
 
     def __init__(
         self,
         *,
-        on_toggle: Callable[[], None],
+        on_toggle_api: Callable[[], None],
+        on_toggle_browser: Callable[[], None],
         on_quit: Callable[[], None],
         dashboard_url: str = "http://127.0.0.1:9876",
     ) -> None:
-        self._on_toggle = on_toggle
+        self._on_toggle_api = on_toggle_api
+        self._on_toggle_browser = on_toggle_browser
         self._on_quit = on_quit
         self._dashboard_url = dashboard_url
-        self._active = False
+        self._api_active = False
+        self._browser_active = False
         self._icon = None
         self._thread: threading.Thread | None = None
 
@@ -78,9 +88,13 @@ class SystemTray:
 
         menu = pystray.Menu(
             pystray.MenuItem(
-                lambda _: "✅ Protection Active" if self._active else "❌ Protection Inactive",
-                self._handle_toggle,
+                lambda _: f"API Proxy: {'on' if self._api_active else 'off'}",
+                self._handle_toggle_api,
                 default=True,
+            ),
+            pystray.MenuItem(
+                lambda _: f"Browser Protection: {'on' if self._browser_active else 'off'}",
+                self._handle_toggle_browser,
             ),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open Dashboard", self._handle_dashboard),
@@ -91,25 +105,44 @@ class SystemTray:
         self._icon = pystray.Icon(
             name="Domestique",
             icon=image,
-            title="Domestique — Protection Inactive",
+            title=self._tooltip(),
             menu=menu,
         )
         self._icon.run()
 
-    def set_active(self, active: bool) -> None:
-        """Update the tray icon tooltip to reflect protection state."""
-        self._active = active
+    def _tooltip(self) -> str:
+        api = "on" if self._api_active else "off"
+        browser = "on" if self._browser_active else "off"
+        return f"Domestique — API Proxy: {api}, Browser: {browser}"
+
+    def set_states(self, *, api_active: bool, browser_active: bool) -> None:
+        """Update tooltip/menu state for both services independently."""
+        self._api_active = api_active
+        self._browser_active = browser_active
         if self._icon:
-            status = "Active" if active else "Inactive"
-            self._icon.title = f"Domestique — Protection {status}"
+            self._icon.title = self._tooltip()
+            # Menu labels are lazy callables; nudge pystray to re-render them.
+            update = getattr(self._icon, "update_menu", None)
+            if callable(update):
+                update()
+
+    def set_active(self, active: bool) -> None:
+        """Back-compat single-switch state setter (treats both as one).
+
+        Prefer :meth:`set_states`, which reflects each service on its own.
+        """
+        self.set_states(api_active=active, browser_active=active)
 
     def stop(self) -> None:
         """Remove the tray icon."""
         if self._icon:
             self._icon.stop()
 
-    def _handle_toggle(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
-        self._on_toggle()
+    def _handle_toggle_api(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        self._on_toggle_api()
+
+    def _handle_toggle_browser(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
+        self._on_toggle_browser()
 
     def _handle_dashboard(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         webbrowser.open(self._dashboard_url)

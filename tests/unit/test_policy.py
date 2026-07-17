@@ -94,3 +94,24 @@ class TestCustomRules:
         assert engine.evaluate([_det(detector="pii_detector", category="phone_number")]) is Action.ALLOW
         # Email should match.
         assert engine.evaluate([_det(detector="pii_detector", category="email_address")]) is Action.REDACT
+
+
+class TestDisplayPath:
+    """policy_loaded logs a CWD-relative path when possible (user feedback:
+    the absolute package path was uselessly long in startup output)."""
+
+    def test_path_under_cwd_is_relative(self, tmp_path, monkeypatch):
+        from domestique.policy import _display_path
+
+        monkeypatch.chdir(tmp_path)
+        p = tmp_path / "domestique" / "policy" / "wedge_rules.yaml"
+        assert _display_path(p) == "domestique/policy/wedge_rules.yaml"
+
+    def test_path_outside_cwd_stays_absolute(self, tmp_path, monkeypatch):
+        from domestique.policy import _display_path
+
+        monkeypatch.chdir(tmp_path / "." if (tmp_path / ".").exists() else tmp_path)
+        outside = "/somewhere/else/rules.yaml"
+        from pathlib import Path
+
+        assert _display_path(Path(outside)) == outside

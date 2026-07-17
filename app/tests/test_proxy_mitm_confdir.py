@@ -73,9 +73,14 @@ class TestRefreshMitmConfdir:
         assert mitm_cert.read_text() == "CERT-OLD"
 
         # Simulate CA rotation/regeneration: source rewritten with a
-        # newer mtime (this is exactly what generate_ca() does).
-        _touch(ca_cert, "CERT-NEW", mtime=time.time())
-        _touch(ca_key, "KEY-NEW", mtime=time.time())
+        # newer mtime (this is exactly what generate_ca() does). Anchor the
+        # new mtime strictly past the copied cert's actual mtime rather than
+        # trusting two back-to-back time.time() samples to be ordered — on
+        # Windows the OS write-timestamp and time.time() can tie, which made
+        # this staleness check spuriously read "not newer".
+        new_time = max(time.time(), mitm_cert.stat().st_mtime + 1)
+        _touch(ca_cert, "CERT-NEW", mtime=new_time)
+        _touch(ca_key, "KEY-NEW", mtime=new_time)
 
         refreshed = _refresh_mitm_confdir(ca_cert, ca_key, confdir)
 

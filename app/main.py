@@ -21,9 +21,9 @@ from app.server.api import start_api_server
 from domestique.branding import LOGO, supports_unicode
 
 if TYPE_CHECKING:
-    import urllib.request
     from collections.abc import Callable
     from types import FrameType
+    from urllib.request import OpenerDirector
 
     from app.services.tray import SystemTray
 
@@ -721,7 +721,7 @@ def _ensure_ollama() -> None:
 
 
 def _ollama_infer(
-    opener: urllib.request.OpenerDirector, model: str, text: str, num_predict: int = 5
+    opener: OpenerDirector, model: str, text: str, num_predict: int = 5
 ) -> dict | None:
     """Run a single Ollama inference and return timing metadata."""
     import json
@@ -749,7 +749,7 @@ def _ollama_infer(
         return None
 
 
-def _benchmark_and_warm(model: str, hw: dict, opener: urllib.request.OpenerDirector) -> None:
+def _benchmark_and_warm(model: str, hw: dict, opener: OpenerDirector) -> None:
     """Benchmark inference, choose optimal backend, and pre-warm the model.
 
     On systems with a discrete GPU, runs 3 quick inferences on the current
@@ -884,22 +884,39 @@ def _start_system_tray(api_port: int) -> SystemTray | None:
         get_proxy_service,
     )
 
-    def _toggle() -> None:
+    # Two independent toggles: the API proxy (proxy_enabled) and browser
+    # protection (browser_interception) are separate services with separate
+    # config flags — toggling one must never touch the other's state.
+    def _toggle_api_proxy() -> None:
         proxy = get_proxy_service()
-        bp = get_browser_proxy_service()
         config = ConfigStore.current()
-        if proxy.is_running or bp.is_running:
+        if proxy.is_running:
             proxy.stop()
-            if bp.is_running:
-                bp.stop()
             config.proxy_enabled = False
-            config.browser_interception = False
-            config.browser_interception_configured = True
             ConfigStore.save(config)
         else:
             try:
                 proxy.start(config)
                 config.proxy_enabled = True
+                ConfigStore.save(config)
+            except Exception:  # noqa: S110
+                pass
+
+    def _toggle_browser() -> None:
+        bp = get_browser_proxy_service()
+        config = ConfigStore.current()
+        if bp.is_running:
+            bp.stop()
+            config.browser_interception = False
+            config.browser_interception_configured = True
+            ConfigStore.save(config)
+        else:
+            try:
+                if not bp.is_setup:
+                    bp.setup()
+                bp.start()
+                config.browser_interception = True
+                config.browser_interception_configured = True
                 ConfigStore.save(config)
             except Exception:  # noqa: S110
                 pass
@@ -911,7 +928,8 @@ def _start_system_tray(api_port: int) -> SystemTray | None:
         os._exit(0)
 
     tray = SystemTray(
-        on_toggle=_toggle,
+        on_toggle_api=_toggle_api_proxy,
+        on_toggle_browser=_toggle_browser,
         on_quit=_quit,
         dashboard_url=f"http://127.0.0.1:{api_port}",
     )
@@ -924,11 +942,11 @@ def _tray_sync_loop(tray: SystemTray) -> None:
     from app.server.api import get_browser_proxy_service, get_proxy_service
 
     while True:
-        try:
-            active = get_proxy_service().is_running or get_browser_proxy_service().is_running
-            tray.set_active(active)
-        except Exception:  # noqa: S110
-            pass
+        with contextlib.suppress(Exception):
+            tray.set_states(
+                api_active=get_proxy_service().is_running,
+                browser_active=get_browser_proxy_service().is_running,
+            )
         time.sleep(3)
 
 
