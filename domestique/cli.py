@@ -344,23 +344,57 @@ def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
     return "\n".join(out)
 
 
+def _route_logs_to_stderr() -> None:
+    """Keep process logs (structlog) off stdout, colored only to match stderr.
+
+    Domestique never calls ``structlog.configure()`` elsewhere, so structlog's
+    unconfigured default — a ``ConsoleRenderer`` that always emits ANSI color
+    to stdout, tty or not — is what fires when the policy/pipeline loaders
+    log (e.g. ``policy_loaded``). Left alone, that would interleave colored
+    log lines into the rendered demo output on every run, TTY or not.
+
+    The factory below resolves ``sys.stderr`` at each call instead of once
+    here (``structlog.PrintLoggerFactory(file=sys.stderr)`` would capture it
+    once): structlog only re-resolves the *current* stdout dynamically, any
+    other stream is bound at configure time, which would go stale across a
+    stream swap (e.g. pytest's per-test capsys/capfd redirection).
+    """
+    import structlog
+
+    def _stderr_logger_factory(*_args: object) -> structlog.PrintLogger:
+        return structlog.PrintLogger(file=sys.stderr)
+
+    structlog.configure(
+        processors=[
+            *structlog.get_config()["processors"][:-1],
+            structlog.dev.ConsoleRenderer(colors=console.supports_color(sys.stderr)),
+        ],
+        logger_factory=_stderr_logger_factory,
+    )
+
+
 def run_demo(*, interactive: bool | None = None) -> int:
     """Canned before/after redaction, then (on a TTY) an interactive loop.
 
-    ``interactive=None`` auto-detects: the try-your-own loop only runs when
-    stdin is a real TTY, so pipes/CI/subprocess smoke tests see exactly the
-    canned output and exit.
+    Builds the pipeline from the user's loaded config so the header and the
+    redaction reflect the same detectors ("run the real stack"). Fresh
+    machine -> Settings() defaults, shown honestly.
     """
+    from domestique.config_loader import settings_from_config
     from domestique.gateway import build_wedge_pipeline
+    from domestique.policy import PolicyEngine
 
-    pipeline = build_wedge_pipeline()
+    _route_logs_to_stderr()
+    color = console.supports_color()
+    settings = settings_from_config()
+    pipeline = build_wedge_pipeline(settings)
+    policy = PolicyEngine.from_yaml_default()
+
+    print(_render_config_header(settings, policy, color=color))
+
     result = asyncio.run(pipeline.inspect(_DEMO_PROMPT))
     after = result.redacted_text or _DEMO_PROMPT
-    print("Domestique demo - watch it redact secrets before they reach the LLM.\n")
-    print("BEFORE:\n" + _DEMO_PROMPT + "\n")
-    print("AFTER (sent to the model):\n" + after + "\n")
-    if result.findings:
-        print("Findings: " + ", ".join(f.description for f in result.findings))
+    print(_render_canned(_DEMO_PROMPT, after, result.findings, color=color))
 
     if interactive is None:
         try:
@@ -368,21 +402,21 @@ def run_demo(*, interactive: bool | None = None) -> int:
         except ValueError:
             interactive = False
     if interactive:
-        print("\nNow try your own - paste a prompt with (fake!) secrets, Enter to finish.")
+        g = console.glyphs()
+        print(
+            f"\n  Now try your own {g['arrow']} paste a prompt with (fake!) secrets, "
+            "Enter to finish."
+        )
         while True:
             try:
-                text = input("\nprompt> ").strip()
+                text = input("\n  prompt> ").strip()
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
             if not text:
                 break
             res = asyncio.run(pipeline.inspect(text))
-            print("AFTER:    " + (res.redacted_text or text))
-            if res.findings:
-                print("Findings: " + ", ".join(f.description for f in res.findings))
-            else:
-                print("Findings: none - nothing sensitive detected")
+            print(_render_ledger(text, res.findings, color=color))
     return 0
 
 
