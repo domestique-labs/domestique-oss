@@ -196,6 +196,7 @@ class Finding:
     detector: str
     category: str
     confidence: float
+    span: Span | None = None
 
     @property
     def description(self) -> str:
@@ -262,7 +263,12 @@ class DetectorPipeline:
 
         action, reason = self._policy.explain(detections)
         findings = [
-            Finding(detector=d.detector, category=d.category, confidence=d.confidence)
+            Finding(
+                detector=d.detector,
+                category=d.category,
+                confidence=d.confidence,
+                span=d.span,
+            )
             for d in detections
         ]
 
