@@ -15,9 +15,15 @@ import asyncio
 import contextlib
 import json
 import sys
+from typing import TYPE_CHECKING
 
-from domestique import __version__
+from domestique import __version__, console
 from domestique.branding import LOGO, supports_unicode
+from domestique.models import Action
+
+if TYPE_CHECKING:
+    from domestique.config import Settings
+    from domestique.policy import PolicyEngine
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
 
@@ -191,6 +197,59 @@ def _cmd_browser(action: str, url: str) -> int:
         return 0
     print(f"error: {payload.get('error', 'unexpected dashboard response')}")
     return 1
+
+
+_CATEGORY_LABELS = {
+    "aws_access_key": "AWS access key",
+    "email_address": "Email address",
+    "us_ssn": "US SSN",
+    "phone_number": "Phone number",
+    "credit_card": "Credit card",
+    "github_token": "GitHub token",
+    "jwt": "JWT token",
+    "private_key": "Private key",
+}
+
+
+def _label(category: str) -> str:
+    return _CATEGORY_LABELS.get(category, category.replace("_", " ").capitalize())
+
+
+def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
+    g = console.glyphs()
+    paint = console.Palette(enabled=color)
+    actions = policy.actions
+    redact = "on" if Action.REDACT in actions else "off"
+    block = "on (crown-jewels)" if Action.BLOCK in actions else "off"
+
+    presets = ["minimal", "balanced", "quality", "legacy-cpu"]
+    active = settings.local_llm_preset
+    preset_cells = [
+        paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
+    ]
+
+    tiers = [
+        ("Regex", settings.enable_secret_detection),
+        ("Presidio", settings.enable_pii_detection),
+        ("GLiNER", settings.enable_gliner),
+        ("Semantic", settings.enable_semantic_detection),
+        (f"LLM:{settings.local_llm_model}", settings.enable_local_llm),
+    ]
+    stack_cells = [
+        (paint(f"{g['check']} {name}", "green") if on else paint(f"{g['dot']} {name}", "dim"))
+        for name, on in tiers
+    ]
+
+    rule = "  " + g["rule"] * 58
+    return "\n".join(
+        [
+            "  " + paint("Active configuration", "bold"),
+            rule,
+            f"    Policy           redact {redact}   {g['dot']}   block {block}",
+            "    Hardware preset  " + "  ".join(preset_cells),
+            "    Detection stack  " + "   ".join(stack_cells),
+        ]
+    )
 
 
 def run_demo(*, interactive: bool | None = None) -> int:
