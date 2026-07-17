@@ -28,9 +28,9 @@ def _display_path(path: Path) -> str:
     absolute — a "../../.." chain would be worse than a long path.
     """
     try:
-        return str(path.relative_to(Path.cwd()))
+        return path.relative_to(Path.cwd()).as_posix()
     except ValueError:
-        return str(path)
+        return path.as_posix()
 
 
 @dataclass(frozen=True)
