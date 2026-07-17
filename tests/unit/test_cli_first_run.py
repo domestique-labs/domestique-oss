@@ -124,3 +124,55 @@ class TestPromptEofDefault:
     def test_eof_without_eof_default_keeps_old_behavior(self, monkeypatch):
         monkeypatch.setattr("builtins.input", MagicMock(side_effect=EOFError))
         assert wizard.prompt_yes_no("q?", default=True) is True
+
+
+class TestInteractiveDemo:
+    """`domestique demo` grows a TTY-only try-your-own loop (user feedback:
+    the canned demo alone isn't convincing). Non-TTY behavior is unchanged."""
+
+    def _pipeline(self, monkeypatch):
+        from unittest.mock import AsyncMock
+
+        result = MagicMock()
+        result.redacted_text = "AFTER [REDACTED]"
+        f = MagicMock()
+        f.description = "secret_scanner:aws_access_key (99%)"
+        result.findings = [f]
+        pipeline = MagicMock()
+        pipeline.inspect = AsyncMock(return_value=result)
+        monkeypatch.setattr(
+            "domestique.gateway.build_wedge_pipeline", MagicMock(return_value=pipeline)
+        )
+        return pipeline
+
+    def test_non_tty_skips_interactive_loop(self, monkeypatch, capsys):
+        from domestique.cli import run_demo
+
+        self._pipeline(monkeypatch)
+        stdin = MagicMock()
+        stdin.isatty.return_value = False
+        monkeypatch.setattr("sys.stdin", stdin)
+        assert run_demo() == 0
+        out = capsys.readouterr().out
+        assert "try your own" not in out.lower()
+
+    def test_interactive_loop_redacts_user_input(self, monkeypatch, capsys):
+        from domestique.cli import run_demo
+
+        pipeline = self._pipeline(monkeypatch)
+        monkeypatch.setattr(
+            "builtins.input", MagicMock(side_effect=["my key AKIA123", ""])
+        )
+        assert run_demo(interactive=True) == 0
+        out = capsys.readouterr().out
+        assert "try your own" in out.lower()
+        assert "AFTER [REDACTED]" in out
+        assert "aws_access_key" in out
+        assert pipeline.inspect.await_count == 2  # canned + one user prompt
+
+    def test_interactive_loop_eof_exits_cleanly(self, monkeypatch):
+        from domestique.cli import run_demo
+
+        self._pipeline(monkeypatch)
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=EOFError))
+        assert run_demo(interactive=True) == 0  # must not raise

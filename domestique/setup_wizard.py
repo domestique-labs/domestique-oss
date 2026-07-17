@@ -1117,13 +1117,25 @@ def _install_wizard_selection(choices: WizardChoices) -> None:
             _print(f"     Install it from https://ollama.com, then: ollama pull {model}")
 
 
-def _run_finale_demo() -> None:
-    """Show the in-process redaction demo before any server starts."""
+def _stdin_is_tty() -> bool:
+    """True only for a live interactive stdin (None/closed → False)."""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except ValueError:
+        return False
+
+
+def _run_finale_demo(*, interactive: bool = False) -> None:
+    """Show the in-process redaction demo before any server starts.
+
+    ``interactive`` enables the try-your-own loop — must stay False for
+    ``--yes`` runs, which promise zero questions even on a TTY.
+    """
     section("demo - watch it redact")
     try:
         from domestique.cli import run_demo
 
-        run_demo()
+        run_demo(interactive=interactive)
     except Exception as exc:  # demo is decorative — never fail setup over it
         _print(f"  (demo skipped: {exc})")
 
@@ -1157,7 +1169,7 @@ def run_wizard(*, yes: bool = False, demo: bool = True) -> int:
     _print(f"\n  ✓ configuration written to {cfg_path}")
 
     if demo:
-        _run_finale_demo()
+        _run_finale_demo(interactive=not yes and _stdin_is_tty())
 
     section("setup complete")
     _print("  next: domestique start          launch the redacting proxy")

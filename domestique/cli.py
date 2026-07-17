@@ -55,6 +55,11 @@ def _banner(host: str, port: int) -> str:
     )
 
 
+_SETUP_LATER_HINT = (
+    "Continuing with regex-only detection (run 'domestique setup' in another terminal anytime)."
+)
+
+
 def _maybe_offer_first_run_setup(no_setup: bool) -> None:
     """Offer the setup wizard on the very first ``domestique start``.
 
@@ -90,9 +95,9 @@ def _maybe_offer_first_run_setup(no_setup: bool) -> None:
             # A failed install step must not kill `domestique start`;
             # regex-only protection still works with zero downloads.
             print(f"Setup did not complete (exit: {exc.code}).")
-            print("Continuing with regex-only detection (run 'domestique setup' anytime).")
+            print(_SETUP_LATER_HINT)
     else:
-        print("Continuing with regex-only detection (run 'domestique setup' anytime).")
+        print(_SETUP_LATER_HINT)
 
 
 def _cmd_start(host: str, port: int, *, no_setup: bool = False) -> int:
@@ -184,7 +189,13 @@ def _cmd_browser(action: str, url: str) -> int:
     return 1
 
 
-def run_demo() -> int:
+def run_demo(*, interactive: bool | None = None) -> int:
+    """Canned before/after redaction, then (on a TTY) an interactive loop.
+
+    ``interactive=None`` auto-detects: the try-your-own loop only runs when
+    stdin is a real TTY, so pipes/CI/subprocess smoke tests see exactly the
+    canned output and exit.
+    """
     from domestique.gateway import build_wedge_pipeline
 
     pipeline = build_wedge_pipeline()
@@ -195,6 +206,28 @@ def run_demo() -> int:
     print("AFTER (sent to the model):\n" + after + "\n")
     if result.findings:
         print("Findings: " + ", ".join(f.description for f in result.findings))
+
+    if interactive is None:
+        try:
+            interactive = sys.stdin is not None and sys.stdin.isatty()
+        except ValueError:
+            interactive = False
+    if interactive:
+        print("\nNow try your own - paste a prompt with (fake!) secrets, Enter to finish.")
+        while True:
+            try:
+                text = input("\nprompt> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print()
+                break
+            if not text:
+                break
+            res = asyncio.run(pipeline.inspect(text))
+            print("AFTER:    " + (res.redacted_text or text))
+            if res.findings:
+                print("Findings: " + ", ".join(f.description for f in res.findings))
+            else:
+                print("Findings: none - nothing sensitive detected")
     return 0
 
 
