@@ -40,51 +40,17 @@ def config_hash(config: dict) -> str:
 def settings_from_config(config: dict | None = None):
     """Build a domestique.config.Settings from dashboard config dict.
 
-    Applies detection_stack toggles, classifier_prompt, disabled patterns,
-    and LLM model selection. Returns a Settings instance ready for
-    create_detector_pipeline().
+    Delegates to domestique.config_loader (single source of truth for the
+    detection_stack -> Settings mapping; app->domestique is the allowed
+    import direction). Kept here for backward-compatible imports from app
+    code, and so this module's own load_config_dict() remains the default
+    source when no config dict is passed in.
     """
-    from domestique.config import Settings
+    from domestique.config_loader import settings_from_config as _core
 
     if config is None:
         config = load_config_dict()
-
-    settings = Settings()
-    stack = config.get("detection_stack", {})
-
-    settings.enable_secret_detection = stack.get("regex", True)
-    settings.enable_pii_detection = False  # Presidio off — GLiNER handles PII better
-    settings.enable_gliner = stack.get("gliner_pii", False)
-    settings.enable_semantic_detection = False  # Semantic heuristics add noise
-
-    # GLiNER customization
-    if config.get("gliner_labels"):
-        settings.gliner_labels = config["gliner_labels"]
-    if config.get("gliner_threshold") is not None:
-        settings.gliner_threshold = config["gliner_threshold"]
-
-    llm_on = (
-        stack.get("gemma4_e2b", False)
-        or stack.get("qwen3_1_7b", False)
-        or stack.get("legacy_cpu", False)
-    )
-    settings.enable_local_llm = llm_on
-    if stack.get("gemma4_e2b"):
-        from domestique.detectors.local_llm import _resolve_gemma_model
-
-        settings.local_llm_model = _resolve_gemma_model()
-    elif stack.get("qwen3_1_7b"):
-        settings.local_llm_model = "qwen3:1.7b"
-    elif stack.get("legacy_cpu"):
-        settings.local_llm_model = "llama3.2:1b"
-
-    if config.get("classifier_prompt"):
-        settings.local_llm_system_prompt = config["classifier_prompt"]
-
-    settings.disabled_builtin_patterns = config.get("disabled_builtin_patterns", [])
-    settings.local_llm_timeout_s = max(settings.local_llm_timeout_s, 30.0)
-
-    return settings
+    return _core(config)
 
 
 def config_mtime_ns() -> int:

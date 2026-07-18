@@ -53,6 +53,16 @@ class PolicyEngine:
     def __init__(self, rules: list[Rule]) -> None:
         self._rules = rules
 
+    @property
+    def actions(self) -> set[Action]:
+        """The distinct actions across all loaded rules."""
+        return {rule.action for rule in self._rules}
+
+    @classmethod
+    def from_yaml_default(cls) -> PolicyEngine:
+        """Load the packaged redact-first wedge policy."""
+        return cls.from_yaml(Path(__file__).resolve().parent / "cli-rules.yaml")
+
     @classmethod
     def from_yaml(cls, path: str | Path) -> PolicyEngine:
         """Load rules from a YAML file. Falls back to defaults on error."""

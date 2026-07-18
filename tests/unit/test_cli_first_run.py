@@ -7,10 +7,14 @@ It prompts exactly once on a true first interactive run.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import domestique.setup_wizard as wizard
 from domestique.cli import _maybe_offer_first_run_setup
+
+if TYPE_CHECKING:
+    import pytest
 
 
 class TestFirstRunGate:
@@ -128,27 +132,19 @@ class TestPromptEofDefault:
 
 class TestInteractiveDemo:
     """`domestique demo` grows a TTY-only try-your-own loop (user feedback:
-    the canned demo alone isn't convincing). Non-TTY behavior is unchanged."""
+    the canned demo alone isn't convincing). Non-TTY behavior is unchanged.
 
-    def _pipeline(self, monkeypatch):
-        from unittest.mock import AsyncMock
+    These drive the REAL detector pipeline (like test_demo_smoke.py) rather
+    than span-less mocks: the ledger renderer needs real `Finding.span`
+    values to produce rows, so a mocked result with no `.span` would just
+    render "nothing sensitive detected" and defeat the point of the test.
+    """
 
-        result = MagicMock()
-        result.redacted_text = "AFTER [REDACTED]"
-        f = MagicMock()
-        f.description = "secret_scanner:aws_access_key (99%)"
-        result.findings = [f]
-        pipeline = MagicMock()
-        pipeline.inspect = AsyncMock(return_value=result)
-        monkeypatch.setattr(
-            "domestique.gateway.build_wedge_pipeline", MagicMock(return_value=pipeline)
-        )
-        return pipeline
-
-    def test_non_tty_skips_interactive_loop(self, monkeypatch, capsys):
+    def test_non_tty_skips_interactive_loop(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         from domestique.cli import run_demo
 
-        self._pipeline(monkeypatch)
         stdin = MagicMock()
         stdin.isatty.return_value = False
         monkeypatch.setattr("sys.stdin", stdin)
@@ -156,23 +152,20 @@ class TestInteractiveDemo:
         out = capsys.readouterr().out
         assert "try your own" not in out.lower()
 
-    def test_interactive_loop_redacts_user_input(self, monkeypatch, capsys):
+    def test_interactive_loop_redacts_user_input(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         from domestique.cli import run_demo
 
-        pipeline = self._pipeline(monkeypatch)
-        monkeypatch.setattr(
-            "builtins.input", MagicMock(side_effect=["my key AKIA123", ""])
-        )
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["ssn 123-45-6789", ""]))
         assert run_demo(interactive=True) == 0
         out = capsys.readouterr().out
         assert "try your own" in out.lower()
-        assert "AFTER [REDACTED]" in out
-        assert "aws_access_key" in out
-        assert pipeline.inspect.await_count == 2  # canned + one user prompt
+        assert "[US_SSN_REDACTED]" in out
+        assert "redacted" in out.lower()
 
-    def test_interactive_loop_eof_exits_cleanly(self, monkeypatch):
+    def test_interactive_loop_eof_exits_cleanly(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from domestique.cli import run_demo
 
-        self._pipeline(monkeypatch)
         monkeypatch.setattr("builtins.input", MagicMock(side_effect=EOFError))
         assert run_demo(interactive=True) == 0  # must not raise

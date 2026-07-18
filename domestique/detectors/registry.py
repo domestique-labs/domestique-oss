@@ -196,6 +196,7 @@ class Finding:
     detector: str
     category: str
     confidence: float
+    span: Span | None = None
 
     @property
     def description(self) -> str:
@@ -233,6 +234,11 @@ class DetectorPipeline:
         self._detectors = detectors
         self._policy = policy
 
+    @property
+    def policy(self) -> PolicyEngine:
+        """The policy engine this pipeline evaluates against."""
+        return self._policy
+
     async def inspect(self, text: str) -> InspectionResult:
         """Scan *text*, evaluate policy, and return a structured verdict."""
         if not text:
@@ -262,7 +268,12 @@ class DetectorPipeline:
 
         action, reason = self._policy.explain(detections)
         findings = [
-            Finding(detector=d.detector, category=d.category, confidence=d.confidence)
+            Finding(
+                detector=d.detector,
+                category=d.category,
+                confidence=d.confidence,
+                span=d.span,
+            )
             for d in detections
         ]
 

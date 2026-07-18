@@ -99,7 +99,7 @@ class Settings(BaseSettings):
 
     # --- Policy ---
     policy_path: str = Field(
-        default="domestique/policy/rules.yaml",
+        default="domestique/policy/browser-rules.yaml",
         description="Path to the YAML policy file.",
     )
 

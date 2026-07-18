@@ -14,10 +14,18 @@ import argparse
 import asyncio
 import contextlib
 import json
+import re
 import sys
+from typing import TYPE_CHECKING
 
-from domestique import __version__
+from domestique import __version__, console
 from domestique.branding import LOGO, supports_unicode
+from domestique.models import Action
+
+if TYPE_CHECKING:
+    from domestique.config import Settings
+    from domestique.detectors.registry import Finding
+    from domestique.policy import PolicyEngine
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
 
@@ -193,23 +201,207 @@ def _cmd_browser(action: str, url: str) -> int:
     return 1
 
 
+_CATEGORY_LABELS = {
+    "aws_access_key": "AWS access key",
+    "email_address": "Email address",
+    "us_ssn": "US SSN",
+    "phone_number": "Phone number",
+    "credit_card": "Credit card",
+    "github_token": "GitHub token",
+    "jwt": "JWT token",
+    "private_key": "Private key",
+}
+
+
+def _label(category: str) -> str:
+    return _CATEGORY_LABELS.get(category, category.replace("_", " ").capitalize())
+
+
+def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
+    g = console.glyphs()
+    paint = console.Palette(enabled=color)
+    actions = policy.actions
+    redact = "on" if Action.REDACT in actions else "off"
+    block = "on (crown-jewels)" if Action.BLOCK in actions else "off"
+
+    presets = ["minimal", "balanced", "quality", "legacy-cpu"]
+    active = settings.local_llm_preset
+    preset_cells = [
+        paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
+    ]
+
+    tiers = [
+        ("Regex", settings.enable_secret_detection),
+        ("Presidio", settings.enable_pii_detection),
+        ("GLiNER", settings.enable_gliner),
+        ("Semantic", settings.enable_semantic_detection),
+        (f"LLM:{settings.local_llm_model}", settings.enable_local_llm),
+    ]
+    stack_cells = [
+        (paint(f"{g['check']} {name}", "green") if on else paint(f"{g['dot']} {name}", "dim"))
+        for name, on in tiers
+    ]
+
+    rule = "  " + g["rule"] * 58
+    return "\n".join(
+        [
+            "  " + paint("Active configuration", "bold"),
+            rule,
+            f"    Policy           redact {redact}   {g['dot']}   block {block}",
+            "    Hardware preset  " + "  ".join(preset_cells),
+            "    Detection stack  " + "   ".join(stack_cells),
+        ]
+    )
+
+
+def _highlight_secrets(before: str, findings: list[Finding], paint: console.Palette) -> str:
+    """Paint each finding's leaked span red, non-overlapping, left to right."""
+    spans = sorted({(f.span.start, f.span.end) for f in findings if f.span is not None})
+    out: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        if start < cursor:  # skip overlaps
+            continue
+        out.append(before[cursor:start])
+        out.append(paint(before[start:end], "red"))
+        cursor = end
+    out.append(before[cursor:])
+    return "".join(out)
+
+
+def _highlight_tokens(after: str, paint: console.Palette) -> str:
+    return re.sub(
+        r"\[[A-Z0-9_]+_REDACTED\]",
+        lambda m: paint(m.group(0), "green"),
+        after,
+    )
+
+
+def _render_canned(before: str, after: str, findings: list[Finding], *, color: bool) -> str:
+    g = console.glyphs()
+    paint = console.Palette(enabled=color)
+    rule = "  " + g["rule"] * 60
+    lines = [
+        "",
+        "  " + paint("Domestique demo — watch it redact secrets", "bold"),
+        rule,
+        "  BEFORE",
+        "    " + _highlight_secrets(before, findings, paint),
+        "",
+        f"  AFTER {g['arrow']} sent to the model",
+        "    " + _highlight_tokens(after, paint),
+        rule,
+        "  Findings",
+    ]
+    for f in findings:
+        lines.append(
+            f"    {paint(g['check'], 'green')} {_label(f.category):<16} {f.confidence:.0%}"
+        )
+    return "\n".join(lines)
+
+
+def _truncate(value: str, width: int = 22) -> str:
+    value = value.strip()
+    if len(value) <= width:
+        return value
+    keep = width - 1
+    return value[: keep // 2] + "…" + value[-(keep - keep // 2) :]
+
+
+def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
+    g = console.glyphs()
+    paint = console.Palette(enabled=color)
+
+    # dedupe by span, keep highest confidence per span
+    best: dict[tuple[int, int], Finding] = {}
+    for f in findings:
+        if f.span is None:
+            continue
+        key = (f.span.start, f.span.end)
+        if key not in best or f.confidence > best[key].confidence:
+            best[key] = f
+    ordered = sorted(best.values(), key=lambda f: f.span.start if f.span else 0)
+
+    if not ordered:
+        return f"  {g['dot']} nothing sensitive detected"
+
+    rows = []
+    for f in ordered:
+        assert f.span is not None
+        leaked = _truncate(before[f.span.start : f.span.end])
+        token = f"[{f.category.upper()}_REDACTED]"
+        rows.append((_label(f.category), leaked, token, f"{f.confidence:.0%}"))
+
+    lw = max(len(r[0]) for r in rows)
+    vw = max(len(r[1]) for r in rows)
+    out = [f"  {paint(g['check'], 'green')} redacted {len(rows)} secret(s)"]
+    for label, leaked, token, conf in rows:
+        out.append(
+            f"    {paint(g['check'], 'green')} {label:<{lw}}  "
+            f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
+            f"{paint(token, 'green')}  {paint(conf, 'dim')}"
+        )
+    return "\n".join(out)
+
+
+def _quiet_logs_for_demo() -> None:
+    """Silence info-level process logs so the demo output stays clean.
+
+    Domestique never calls ``structlog.configure()`` elsewhere, so structlog's
+    unconfigured default — a ``ConsoleRenderer`` that always emits ANSI color
+    to stdout, tty or not — is what fires when the policy/pipeline loaders
+    log (e.g. ``policy_loaded``). Left alone, that padded dev-format line
+    ("[info     ] policy_loaded            path=...") interleaves into the
+    rendered demo on every run. This is called only by ``run_demo``, so
+    raising the threshold to WARNING affects the demo command and nothing
+    else: the config header already reports the policy + rule count, so the
+    info line is pure noise here, while real warnings (e.g. ``gliner_not_cached``)
+    still surface.
+
+    The factory below resolves ``sys.stderr`` at each call instead of once
+    here (``structlog.PrintLoggerFactory(file=sys.stderr)`` would capture it
+    once): structlog only re-resolves the *current* stdout dynamically, any
+    other stream is bound at configure time, which would go stale across a
+    stream swap (e.g. pytest's per-test capsys/capfd redirection).
+    """
+    import logging
+
+    import structlog
+
+    def _stderr_logger_factory(*_args: object) -> structlog.PrintLogger:
+        return structlog.PrintLogger(file=sys.stderr)
+
+    structlog.configure(
+        processors=[
+            *structlog.get_config()["processors"][:-1],
+            structlog.dev.ConsoleRenderer(colors=console.supports_color(sys.stderr)),
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING),
+        logger_factory=_stderr_logger_factory,
+    )
+
+
 def run_demo(*, interactive: bool | None = None) -> int:
     """Canned before/after redaction, then (on a TTY) an interactive loop.
 
-    ``interactive=None`` auto-detects: the try-your-own loop only runs when
-    stdin is a real TTY, so pipes/CI/subprocess smoke tests see exactly the
-    canned output and exit.
+    Builds the pipeline from the user's loaded config so the header and the
+    redaction reflect the same detectors ("run the real stack"). Fresh
+    machine -> Settings() defaults, shown honestly.
     """
-    from domestique.gateway import build_wedge_pipeline
+    from domestique.config_loader import settings_from_config
+    from domestique.gateway import build_cli_pipeline
 
-    pipeline = build_wedge_pipeline()
+    _quiet_logs_for_demo()
+    color = console.supports_color()
+    settings = settings_from_config()
+    pipeline = build_cli_pipeline(settings)
+    # Reuse the pipeline's own policy for the header — loading it a second
+    # time via from_yaml_default() re-parsed the YAML and double-logged.
+    print(_render_config_header(settings, pipeline.policy, color=color))
+
     result = asyncio.run(pipeline.inspect(_DEMO_PROMPT))
     after = result.redacted_text or _DEMO_PROMPT
-    print("Domestique demo - watch it redact secrets before they reach the LLM.\n")
-    print("BEFORE:\n" + _DEMO_PROMPT + "\n")
-    print("AFTER (sent to the model):\n" + after + "\n")
-    if result.findings:
-        print("Findings: " + ", ".join(f.description for f in result.findings))
+    print(_render_canned(_DEMO_PROMPT, after, result.findings, color=color))
 
     if interactive is None:
         try:
@@ -217,21 +409,21 @@ def run_demo(*, interactive: bool | None = None) -> int:
         except ValueError:
             interactive = False
     if interactive:
-        print("\nNow try your own - paste a prompt with (fake!) secrets, Enter to finish.")
+        g = console.glyphs()
+        print(
+            f"\n  Now try your own {g['arrow']} paste anything with secrets — real or "
+            "fake, it never leaves your machine ;)  Enter on a blank line to finish."
+        )
         while True:
             try:
-                text = input("\nprompt> ").strip()
+                text = input("\n  prompt> ").strip()
             except (EOFError, KeyboardInterrupt):
                 print()
                 break
             if not text:
                 break
             res = asyncio.run(pipeline.inspect(text))
-            print("AFTER:    " + (res.redacted_text or text))
-            if res.findings:
-                print("Findings: " + ", ".join(f.description for f in res.findings))
-            else:
-                print("Findings: none - nothing sensitive detected")
+            print(_render_ledger(text, res.findings, color=color))
     return 0
 
 

@@ -165,8 +165,8 @@ domestique/
     registry.py       # Detector registry + pipeline
     local_llm.py      # Ollama LLM classifier (Gemma / Qwen3)
   policy/
-    rules.yaml        # Default (enterprise) block-first rules
-    wedge_rules.yaml  # CLI-wedge redact-first policy
+    browser-rules.yaml # Browser/enterprise block-first policy
+    cli-rules.yaml     # CLI proxy redact-first policy
   config.py           # Settings model (env-driven)
 
 app/                  # Browser mode + native desktop app + dashboard

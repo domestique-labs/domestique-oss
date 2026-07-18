@@ -8,16 +8,16 @@ from domestique.detectors.registry import DetectorPipeline, build_detectors
 from domestique.models import Action
 from domestique.policy import PolicyEngine
 
-_WEDGE = Path("domestique/policy/wedge_rules.yaml")
+_CLI = Path("domestique/policy/cli-rules.yaml")
 
 
 def _pipeline() -> DetectorPipeline:
     settings = Settings()
-    return DetectorPipeline(build_detectors(settings), PolicyEngine.from_yaml(_WEDGE))
+    return DetectorPipeline(build_detectors(settings), PolicyEngine.from_yaml(_CLI))
 
 
 def test_wedge_policy_file_exists():
-    assert _WEDGE.exists()
+    assert _CLI.exists()
 
 
 def test_aws_access_key_is_redacted_not_blocked():
