@@ -112,7 +112,9 @@ def _cmd_start(host: str, port: int, *, no_setup: bool = False) -> int:
     _maybe_offer_first_run_setup(no_setup)
 
     print(_banner(host, port))
-    uvicorn.run(create_gateway(), host=host, port=port)
+    from domestique.vault import build_default_token_service
+
+    uvicorn.run(create_gateway(token_service=build_default_token_service()), host=host, port=port)
     return 0
 
 
