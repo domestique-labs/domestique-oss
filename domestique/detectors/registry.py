@@ -307,8 +307,14 @@ class DetectorPipeline:
         )
 
 
-def create_detector_pipeline(settings: Settings | None = None) -> DetectorPipeline:
+def create_detector_pipeline(
+    settings: Settings | None = None,
+    token_service: TokenService | None = None,
+) -> DetectorPipeline:
     """Build the full detection pipeline used by the browser MITM addon.
+
+    A session-scoped ``TokenService`` is created by default so browser-path
+    redactions mint numbered reversible tokens like the CLI gateway does.
 
     Loads detectors from ``Settings`` and the policy from
     ``settings.policy_path``. The policy file path is resolved relative to the
@@ -327,9 +333,16 @@ def create_detector_pipeline(settings: Settings | None = None) -> DetectorPipeli
         repo_root = Path(__file__).resolve().parent.parent.parent
         policy_path = repo_root / policy_path
 
+    if token_service is None:
+        from domestique.vault.service import TokenService
+        from domestique.vault.session import SessionStore
+
+        token_service = TokenService(SessionStore(), None)
+
     return DetectorPipeline(
         detectors=build_detectors(settings),
         policy=PolicyEngine.from_yaml(policy_path),
+        token_service=token_service,
     )
 
 

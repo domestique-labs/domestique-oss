@@ -27,10 +27,12 @@ Thread Safety:
 from __future__ import annotations
 
 import re
-import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+
+from domestique.vault.service import TOKEN_RE
+from domestique.vault.session import SessionStore
 
 
 class RedactionAction(Enum):
@@ -79,109 +81,30 @@ class TokenMapping:
     created_at: float = field(default_factory=time.time)
 
 
-class TokenStore:
-    """Session-scoped bidirectional token registry.
+class TokenStore(SessionStore):
+    """Back-compat facade over :class:`domestique.vault.session.SessionStore`.
 
-    Stores mappings between tokens and original sensitive values.
-    Thread-safe for concurrent proxy requests.
-
-    Tokens are deterministic within a session: the same input value
-    always maps to the same token (enables consistent conversation).
+    The vault package is the single implementation of numbered-token
+    minting; this subclass only preserves the historical SDK surface
+    (``session_id`` argument and text-level ``detokenize``).
     """
 
     def __init__(self, session_id: str | None = None, ttl: float = 3600.0) -> None:
-        """Initialize a token store.
-
-        Args:
-            session_id: Optional session identifier for logging.
-            ttl: Time-to-live in seconds for tokens (default: 1 hour).
-        """
+        super().__init__(ttl=ttl)
         self._session_id = session_id or "default"
-        self._ttl = ttl
-        self._lock = threading.Lock()
-        # value -> token mapping (for tokenization)
-        self._forward: dict[str, str] = {}
-        # token -> TokenMapping (for de-tokenization)
-        self._reverse: dict[str, TokenMapping] = {}
-        # Counter per category for generating sequential tokens
-        self._counters: dict[str, int] = {}
-
-    def tokenize(self, value: str, category: str) -> str:
-        """Replace a sensitive value with a deterministic token.
-
-        If the same value was already tokenized in this session,
-        returns the same token (consistency across conversation turns).
-
-        Args:
-            value: The sensitive text to replace.
-            category: PII category (e.g., "SSN", "EMAIL").
-
-        Returns:
-            Token string like "[SSN_1]" or "[EMAIL_2]".
-        """
-        with self._lock:
-            # Return existing token for same value
-            if value in self._forward:
-                return self._forward[value]
-
-            # Generate new sequential token
-            prefix = category.upper()
-            count = self._counters.get(prefix, 0) + 1
-            self._counters[prefix] = count
-            token = f"[{prefix}_{count}]"
-
-            # Store bidirectional mapping
-            self._forward[value] = token
-            self._reverse[token] = TokenMapping(
-                token=token,
-                original=value,
-                category=category,
-            )
-            return token
 
     def detokenize(self, text: str) -> str:
-        """Replace all tokens in text with their original values.
+        """Replace all known tokens in *text* with their original values.
 
-        Args:
-            text: Text potentially containing tokens like [SSN_1].
-
-        Returns:
-            Text with tokens replaced by original sensitive values.
+        Unknown tokens (never minted here) are left in place — the model
+        may hallucinate token-shaped text and we must not guess.
         """
-        with self._lock:
-            result = text
-            for token, mapping in self._reverse.items():
-                result = result.replace(token, mapping.original)
-            return result
 
-    def clear(self) -> None:
-        """Clear all token mappings (end of session)."""
-        with self._lock:
-            self._forward.clear()
-            self._reverse.clear()
-            self._counters.clear()
+        def _sub(match: re.Match[str]) -> str:
+            original = self.lookup(match.group(0))
+            return original if original is not None else match.group(0)
 
-    @property
-    def size(self) -> int:
-        """Number of active token mappings."""
-        with self._lock:
-            return len(self._reverse)
-
-    def cleanup_expired(self) -> int:
-        """Remove expired tokens. Returns count of removed tokens."""
-        now = time.time()
-        removed = 0
-        with self._lock:
-            expired_tokens = [
-                token
-                for token, mapping in self._reverse.items()
-                if now - mapping.created_at > self._ttl
-            ]
-            for token in expired_tokens:
-                mapping = self._reverse.pop(token)
-                self._forward.pop(mapping.original, None)
-                removed += 1
-        return removed
+        return TOKEN_RE.sub(_sub, text)
 
 
 class RedactionEngine:
