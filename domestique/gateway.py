@@ -29,6 +29,8 @@ from domestique.redact import apply_field_redactions
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
+    from domestique.vault.service import TokenService
+
 logger = structlog.get_logger()
 
 # path -> (provider, extraction kind)
@@ -80,12 +82,20 @@ def upstream_base(provider: str) -> str:
     return override.rstrip("/") if override else _DEFAULT_UPSTREAMS[provider]
 
 
-def build_wedge_pipeline(settings: Settings | None = None) -> DetectorPipeline:
-    """Build the detection pipeline with the redact-first wedge policy."""
+def build_wedge_pipeline(
+    settings: Settings | None = None,
+    token_service: TokenService | None = None,
+) -> DetectorPipeline:
+    """Build the detection pipeline with the redact-first wedge policy.
+
+    With a ``token_service`` the pipeline mints reversible numbered tokens
+    (``[SSN_1]``) instead of flat ``[..._REDACTED]`` placeholders.
+    """
     settings = settings or Settings()
     return DetectorPipeline(
         detectors=build_detectors(settings),
         policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        token_service=token_service,
     )
 
 
