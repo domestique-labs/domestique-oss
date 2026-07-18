@@ -14,7 +14,7 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from bench.eval.mock_upstream import serve
+from benchmarks.eval.mock_upstream import serve
 
 
 class MockProvider:

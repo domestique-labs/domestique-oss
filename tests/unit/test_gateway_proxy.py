@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from bench.eval.mock_upstream import serve
+from benchmarks.eval.mock_upstream import serve
 from domestique.gateway import create_gateway
 
 

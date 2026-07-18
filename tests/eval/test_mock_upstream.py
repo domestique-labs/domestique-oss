@@ -1,6 +1,6 @@
 import httpx
 
-from bench.eval.mock_upstream import running_mock
+from benchmarks.eval.mock_upstream import running_mock
 
 
 def test_mock_records_body_and_returns_openai_shape():

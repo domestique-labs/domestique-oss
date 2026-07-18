@@ -17,7 +17,7 @@ import random
 from dataclasses import dataclass
 from typing import Iterator
 
-from bench.dataset import BenchCase
+from benchmarks.datasets.dataset import BenchCase
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from bench.eval.__main__ import compare, regressions, run_eval
-from bench.eval.metrics import Metrics
+from benchmarks.eval.__main__ import compare, regressions, run_eval
+from benchmarks.eval.metrics import Metrics
 
-DATA = Path("bench/eval/data/corpus.jsonl")
+DATA = Path("benchmarks/eval/data/corpus.jsonl")
 
 
 def _m(**kw):

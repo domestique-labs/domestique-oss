@@ -1,5 +1,5 @@
-from bench.eval.corpus import CorpusRow
-from bench.eval.runner import classify_action, observe_corpus
+from benchmarks.eval.corpus import CorpusRow
+from benchmarks.eval.runner import classify_action, observe_corpus
 
 
 def test_classify_action_rules():

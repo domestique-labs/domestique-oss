@@ -6,8 +6,8 @@ from dataclasses import dataclass
 
 import httpx
 
-from bench.eval.corpus import CorpusRow
-from bench.eval.mock_upstream import MockUpstreamHandle, running_mock, serve
+from benchmarks.eval.corpus import CorpusRow
+from benchmarks.eval.mock_upstream import MockUpstreamHandle, running_mock, serve
 
 
 @dataclass(frozen=True)

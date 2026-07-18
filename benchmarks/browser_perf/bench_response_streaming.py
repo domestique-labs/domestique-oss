@@ -42,8 +42,8 @@ Two numbers are reported:
 
 Usage
 -----
-    .venv/Scripts/python.exe -m bench.browser_perf.bench_response_streaming
-    .venv/Scripts/python.exe -m bench.browser_perf.bench_response_streaming \\
+    .venv/Scripts/python.exe -m benchmarks.browser_perf.bench_response_streaming
+    .venv/Scripts/python.exe -m benchmarks.browser_perf.bench_response_streaming \\
         --chunks 60 --delay-ms 15 --scan-delay-ms 5 --runs 5
 
 To capture a real BEFORE/AFTER comparison, run this once against the

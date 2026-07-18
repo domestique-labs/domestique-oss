@@ -38,8 +38,8 @@ jobs:
         run: |
           # Freeze the PR's corpus so both runs score against identical inputs,
           # even if this PR edits the corpus.
-          cp bench/eval/data/corpus.jsonl "$RUNNER_TEMP/corpus.jsonl"
-          python -m bench.eval run \
+          cp benchmarks/eval/data/corpus.jsonl "$RUNNER_TEMP/corpus.jsonl"
+          python -m benchmarks.eval run \
             --corpus "$RUNNER_TEMP/corpus.jsonl" \
             --out "$RUNNER_TEMP/pr-results.json" \
             --commit "${{ github.event.pull_request.head.sha }}"
@@ -48,7 +48,7 @@ jobs:
         run: |
           git checkout --quiet --detach "${{ github.event.pull_request.base.sha }}"
           pip install -e ".[dev]"
-          python -m bench.eval run \
+          python -m benchmarks.eval run \
             --corpus "$RUNNER_TEMP/corpus.jsonl" \
             --out "$RUNNER_TEMP/main-results.json" \
             --commit "${{ github.event.pull_request.base.sha }}"
@@ -57,7 +57,7 @@ jobs:
 
       - name: Compare + regression gate (main vs PR)
         run: |
-          python -m bench.eval compare \
+          python -m benchmarks.eval compare \
             --main "$RUNNER_TEMP/main-results.json" \
             --pr "$RUNNER_TEMP/pr-results.json" \
             --fail-on-regression | tee scorecard.md

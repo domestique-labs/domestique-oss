@@ -24,17 +24,22 @@ app/  ──depends on──▶  domestique/        (one direction only)
 > `domestique/redaction.py`, moved here from `app/services/`) lives in core so the
 > library stays installable and testable on its own.
 
-## Benchmarks vs. evaluation
+## Benchmarks & evaluation
 
-Two top-level suites with distinct purposes — kept separate on purpose:
+All benchmark and evaluation suites live under a single top-level `benchmarks/`,
+split into subpackages by what they measure:
 
-| Dir | Purpose | Entry points |
+| Subpackage | Purpose | Entry point |
 |---|---|---|
-| `bench/` | **Deterministic detection-quality eval harness** — labeled corpus, bypass/FP/F1/latency metrics, PR scorecard, plus browser-perf micro-benchmarks. | `python -m bench.eval` · `bench/eval/`, `bench/browser_perf/` |
-| `benchmarks/` | **File-scanning benchmark** — measures detection over a dataset of documents/images (PDF/CSV/PNG/OCR). | `benchmarks/file_scanning/run_benchmark.py` |
+| `benchmarks/eval/` | **Deterministic detection-quality gate** — labeled corpus, bypass/FP/F1/latency metrics, baseline comparison + PR scorecard. This is the CI quality gate. | `python -m benchmarks.eval` |
+| `benchmarks/datasets/` | **Detection-accuracy sweeps** over custom + public corpora (hand-crafted cases + public HuggingFace datasets). | `python -m benchmarks.datasets.evaluate` |
+| `benchmarks/browser_perf/` | **Browser-mode latency micro-benchmark** — response-streaming overhead. | `python -m benchmarks.browser_perf.bench_response_streaming` |
+| `benchmarks/file_scanning/` | **File-scanning benchmark** — detection over documents/images (PDF/CSV/PNG/OCR). | `python -m benchmarks.file_scanning.run_benchmark` |
 
-Rule of thumb: **`bench/` scores the firewall's decisions** (the CI quality gate);
-**`benchmarks/` scores file/attachment scanning** on a sample corpus.
+Rule of thumb: `eval/` and `datasets/` **score the firewall's decisions** (accuracy);
+`browser_perf/` scores **latency**; `file_scanning/` scores **file/attachment scanning**.
+`benchmarks/eval/mock_upstream.py` also provides the mock upstream server the core
+test suite imports.
 
 ## Tests
 - `tests/` — core (`domestique/`) unit, integration, and eval tests.

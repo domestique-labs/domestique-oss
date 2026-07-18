@@ -4,7 +4,7 @@ Runs all detector configurations against real public datasets and generates
 an interactive HTML report with charts and tables.
 
 Usage (from domestique/):
-    .venv/bin/python bench/comprehensive_eval.py
+    .venv/bin/python benchmarks/datasets/comprehensive_eval.py
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 # Ensure project root importable
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bench.dataset import ALL_CASES, BenchCase
-from bench.public_datasets import (
+from benchmarks.datasets.dataset import ALL_CASES, BenchCase
+from benchmarks.datasets.public_datasets import (
     load_ai4privacy_300k,
     load_ai4privacy_400k,
     load_secrets_benchmark,
@@ -933,7 +933,7 @@ async def main() -> None:
 
     # ── Generate HTML report ─────────────────────────────────────────────
     print("\n  Generating HTML report...")
-    report_path = str(Path(__file__).parent.parent / "reports" / "benchmark_report.html")
+    report_path = str(Path(__file__).parent.parent.parent / "reports" / "benchmark_report.html")
     os.makedirs(os.path.dirname(report_path), exist_ok=True)
     generate_html_report(results, len(all_cases), dataset_counts, report_path)
 

@@ -1,5 +1,5 @@
-from bench.eval.corpus import CorpusRow
-from bench.eval.metrics import compute_metrics
+from benchmarks.eval.corpus import CorpusRow
+from benchmarks.eval.metrics import compute_metrics
 
 
 def _rows():
