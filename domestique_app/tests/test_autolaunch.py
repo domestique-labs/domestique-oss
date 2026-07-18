@@ -23,7 +23,9 @@ def manager(tmp_path, monkeypatch):
     monkeypatch.setattr("domestique_app.services.autolaunch.is_windows", lambda: False)
     plist_path = tmp_path / "LaunchAgents" / f"{BUNDLE_ID}.plist"
     monkeypatch.setattr("domestique_app.services.autolaunch.LAUNCH_AGENT_PLIST", plist_path)
-    monkeypatch.setattr("domestique_app.services.autolaunch.LAUNCH_AGENT_DIR", tmp_path / "LaunchAgents")
+    monkeypatch.setattr(
+        "domestique_app.services.autolaunch.LAUNCH_AGENT_DIR", tmp_path / "LaunchAgents"
+    )
     return AutoLaunchManager()
 
 

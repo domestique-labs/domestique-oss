@@ -181,7 +181,10 @@ class AutoLaunchManager:
                 winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_READ
             ) as key:
                 value, _ = winreg.QueryValueEx(key, APP_NAME)
-            return "domestique_app.main" in value or "from domestique_app.main import launch" in value
+            return (
+                "domestique_app.main" in value
+                or "from domestique_app.main import launch" in value
+            )
         except FileNotFoundError:
             return False
 

@@ -16,9 +16,9 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from domestique.branding import LOGO, supports_unicode
 from domestique_app.config.store import ConfigStore
 from domestique_app.server.api import start_api_server
-from domestique.branding import LOGO, supports_unicode
 
 if TYPE_CHECKING:
     from collections.abc import Callable

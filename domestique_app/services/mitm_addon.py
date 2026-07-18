@@ -531,12 +531,12 @@ class DomestiqueAddon:
 
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
+        from domestique.detectors.registry import create_detector_pipeline
         from domestique_app.services.pipeline_config import (
             config_hash,
             load_config_dict,
             settings_from_config,
         )
-        from domestique.detectors.registry import create_detector_pipeline
 
         raw_config = load_config_dict()
         effective_config, profile_note = self._resolve_hardware_profile(raw_config)
@@ -1229,7 +1229,11 @@ class DomestiqueAddon:
         broken policy file and re-saving config rebuilds the pipeline either
         way -- whether or not the previous background build already failed.
         """
-        from domestique_app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+        from domestique_app.services.pipeline_config import (
+            config_hash,
+            config_mtime_ns,
+            load_config_dict,
+        )
 
         mtime = config_mtime_ns()
         if mtime == getattr(self, "_config_mtime", 0):

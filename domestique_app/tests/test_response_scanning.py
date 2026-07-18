@@ -10,9 +10,9 @@ import pytest
 
 pytest.importorskip("mitmproxy")  # requires the [browser-proxy] extra; skip cleanly when absent
 
-from domestique_app.services.mitm_addon import DomestiqueAddon
 from domestique.detectors.registry import Finding, InspectionResult
 from domestique.models import Action
+from domestique_app.services.mitm_addon import DomestiqueAddon
 
 _TEST_PATTERNS = [
     (r"\b\d{3}-\d{2}-\d{4}\b", "us_ssn"),
