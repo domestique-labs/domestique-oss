@@ -84,7 +84,7 @@ def bench_m8_stream(service: TokenService) -> dict[str, float]:
     service.tokenize("123-45-6789", "us_ssn")
     chunks = []
     for i in range(200):
-        chunks.append(f"delta {i} [US_SSN" if i % 5 == 0 else f"_1] plain piece {i} ")
+        chunks.append(f"delta {i} [SSN" if i % 5 == 0 else f"_1] plain piece {i} ")
     samples: list[float] = []
     st = StreamDetokenizer(service)
     max_held = 0
