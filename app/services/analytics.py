@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(str, Enum):  # noqa: UP042  # str-mixin str() semantics kept intentionally
     """Risk level classification."""
 
     LOW = "low"
@@ -235,7 +235,7 @@ class AnomalyDetector:
             anomalies.append(
                 Anomaly(
                     signal="high_request_rate",
-                    description=f"Request rate ({rpm:.0f}/min) exceeds threshold ({self._max_rpm:.0f}/min)",
+                    description=f"Request rate ({rpm:.0f}/min) exceeds threshold ({self._max_rpm:.0f}/min)",  # noqa: E501
                     severity=min(1.0, rpm / (self._max_rpm * 2)),
                     current_value=rpm,
                     baseline_value=self._max_rpm,
@@ -248,7 +248,7 @@ class AnomalyDetector:
             anomalies.append(
                 Anomaly(
                     signal="high_block_rate",
-                    description=f"Block rate ({block_rate:.1%}) exceeds threshold ({self._max_block_rate:.1%})",
+                    description=f"Block rate ({block_rate:.1%}) exceeds threshold ({self._max_block_rate:.1%})",  # noqa: E501
                     severity=min(1.0, block_rate / self._max_block_rate),
                     current_value=block_rate,
                     baseline_value=self._max_block_rate,
@@ -261,7 +261,7 @@ class AnomalyDetector:
             anomalies.append(
                 Anomaly(
                     signal="high_volume",
-                    description=f"Data volume ({volume:,} bytes) exceeds threshold ({self._max_volume:,})",
+                    description=f"Data volume ({volume:,} bytes) exceeds threshold ({self._max_volume:,})",  # noqa: E501
                     severity=min(1.0, volume / (self._max_volume * 2)),
                     current_value=volume,
                     baseline_value=self._max_volume,
@@ -274,7 +274,7 @@ class AnomalyDetector:
             anomalies.append(
                 Anomaly(
                     signal="large_payloads",
-                    description=f"Average payload ({avg:.0f} bytes) exceeds threshold ({self._max_content:.0f})",
+                    description=f"Average payload ({avg:.0f} bytes) exceeds threshold ({self._max_content:.0f})",  # noqa: E501
                     severity=min(1.0, avg / (self._max_content * 2)),
                     current_value=avg,
                     baseline_value=self._max_content,

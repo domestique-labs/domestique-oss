@@ -9,13 +9,14 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 import objc
 from AppKit import NSObject
 from Foundation import NSLog as _NSLog
 
 
-def NSLog(msg):
+def NSLog(msg: str) -> None:  # noqa: N802
     """NSLog wrapper that handles non-ASCII characters."""
     try:
         _NSLog(msg)
@@ -23,11 +24,11 @@ def NSLog(msg):
         _NSLog(msg.encode("ascii", "replace").decode("ascii"))
 
 
-from app.config.store import ConfigStore
-from app.native.status_bar import StatusBar
-from app.services.benchmark import BenchmarkService
-from app.services.proxy import ProxyService
-from app.services.watchdog import ProtectionState, Watchdog
+from app.config.store import ConfigStore  # noqa: E402
+from app.native.status_bar import StatusBar  # noqa: E402
+from app.services.benchmark import BenchmarkService  # noqa: E402
+from app.services.proxy import ProxyService  # noqa: E402
+from app.services.watchdog import ProtectionState, Watchdog  # noqa: E402
 
 
 class AppDelegate(NSObject):
@@ -36,7 +37,7 @@ class AppDelegate(NSObject):
     Handles lifecycle events and wires together UI and services.
     """
 
-    def applicationDidFinishLaunching_(self, notification) -> None:
+    def applicationDidFinishLaunching_(self, notification: Any) -> None:  # noqa: N802
         """Called by AppKit once the app is fully initialized."""
         self._proxy = ProxyService()
         self._benchmark = BenchmarkService(on_complete=self._on_benchmark_complete)
@@ -85,12 +86,14 @@ class AppDelegate(NSObject):
         except Exception as e:
             NSLog(f"Domestique: cert setup error: {e}")
 
-    def applicationShouldHandleReopen_hasVisibleWindows_(self, app, has_visible) -> bool:
+    def applicationShouldHandleReopen_hasVisibleWindows_(  # noqa: N802
+        self, app: Any, has_visible: Any
+    ) -> bool:
         """Re-open dashboard in browser when user clicks Dock icon."""
         webbrowser.open("http://127.0.0.1:9876/")
         return True
 
-    def applicationWillTerminate_(self, notification) -> None:
+    def applicationWillTerminate_(self, notification: Any) -> None:  # noqa: N802
         """Clean shutdown - stop all proxies and watchdog."""
         self._shutting_down = True
         # Stop watchdog first to prevent it from restarting things
@@ -101,14 +104,14 @@ class AppDelegate(NSObject):
             svc = get_browser_proxy_service()
             if svc.is_running:
                 svc.stop()
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         self._proxy.stop()
 
     # --- Actions (called by StatusBar and Dashboard) -----------------
 
     @objc.IBAction
-    def toggleFirewall_(self, sender) -> None:
+    def toggleFirewall_(self, sender: Any) -> None:  # noqa: N802
         """Toggle protection on/off - syncs menu bar + dashboard state."""
         from app.server.api import get_browser_proxy_service
 
@@ -120,17 +123,17 @@ class AppDelegate(NSObject):
             threading.Thread(target=self._start_protection, daemon=True).start()
 
     @objc.IBAction
-    def showWindow_(self, sender) -> None:
+    def showWindow_(self, sender: Any) -> None:  # noqa: N802
         """Open the dashboard in the default browser."""
         webbrowser.open("http://127.0.0.1:9876/")
 
     @objc.IBAction
-    def runBenchmark_(self, sender) -> None:
+    def runBenchmark_(self, sender: Any) -> None:  # noqa: N802
         """Trigger a benchmark run."""
         self._benchmark.start()
 
     @objc.IBAction
-    def viewReport_(self, sender) -> None:
+    def viewReport_(self, sender: Any) -> None:  # noqa: N802
         """Open the last benchmark report."""
         self._benchmark.open_report()
 
@@ -162,7 +165,7 @@ class AppDelegate(NSObject):
             try:
                 cfg = json.loads(cfg_path.read_text())
                 stack = cfg.get("detection_stack", {})
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
             import platform as _plat
@@ -186,7 +189,7 @@ class AppDelegate(NSObject):
                     if model in loaded:
                         NSLog(f"Domestique: {model} already in memory - skipping warmup")
                         continue
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
 
                 NSLog(f"Domestique: loading {model} into memory...")
@@ -232,9 +235,9 @@ class AppDelegate(NSObject):
             _api._startup_state["detail"] = ""
             NSLog("Domestique: protection active")
 
-            try:
+            try:  # noqa: SIM105
                 self._sync_ui(active=True)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass  # UI sync is non-critical
 
         except Exception as e:
@@ -245,7 +248,7 @@ class AppDelegate(NSObject):
 
                 _api2._startup_state["phase"] = "error"
                 _api2._startup_state["detail"] = err_msg
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
             self._sync_ui(active=False)
 
@@ -286,7 +289,7 @@ class AppDelegate(NSObject):
                 if current_state != last_state:
                     self._status_bar.set_active(current_state)
                     last_state = current_state
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
             time.sleep(2)
 

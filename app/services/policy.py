@@ -66,17 +66,13 @@ class MatchCondition:
         """Check if all conditions match the given context."""
         if self.category and self.category != context.category:
             return False
-        if self.destination:
-            if not self._matches_destination(context.destination):
-                return False
+        if self.destination and not self._matches_destination(context.destination):
+            return False
         if self.source_app and self.source_app != context.source_app:
             return False
         if self.time_range and not self._in_time_range():
             return False
-        if self.min_confidence is not None:
-            if context.confidence < self.min_confidence:
-                return False
-        return True
+        return not (self.min_confidence is not None and context.confidence < self.min_confidence)
 
     def _matches_destination(self, dest: str) -> bool:
         """Match destination with wildcard support."""

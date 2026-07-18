@@ -9,7 +9,10 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from domestique.config import Settings
 
 _CONFIG_PATH = Path.home() / ".domestique" / "config.json"
 
@@ -34,10 +37,11 @@ def config_hash(config: dict) -> str:
         "gliner_labels": config.get("gliner_labels", []),
         "gliner_threshold": config.get("gliner_threshold", 0.5),
     }
-    return hashlib.md5(json.dumps(relevant, sort_keys=True).encode()).hexdigest()
+    # md5 used purely as a config-change cache key (fast, non-security digest).
+    return hashlib.md5(json.dumps(relevant, sort_keys=True).encode()).hexdigest()  # noqa: S324
 
 
-def settings_from_config(config: dict | None = None):
+def settings_from_config(config: dict | None = None) -> Settings:
     """Build a domestique.config.Settings from dashboard config dict.
 
     Delegates to domestique.config_loader (single source of truth for the

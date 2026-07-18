@@ -211,7 +211,8 @@ class TestScanFile:
         assert not result.contains_sensitive
 
     def test_custom_detector(self):
-        custom = lambda text: [{"category": "custom", "value": "x"}] if "secret" in text else []
+        def custom(text):
+            return [{"category": "custom", "value": "x"}] if "secret" in text else []
         data = b"This has a secret word"
         result = scan_file(data, filename="test.txt", detector_fn=custom)
         assert result.contains_sensitive

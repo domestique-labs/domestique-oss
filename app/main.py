@@ -8,16 +8,24 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import contextlib
 import signal
 import sys
 import time
 import webbrowser
 from pathlib import Path
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 
 from app.config.store import ConfigStore
 from app.server.api import start_api_server
 from domestique.branding import LOGO, supports_unicode
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from types import FrameType
+    from urllib.request import OpenerDirector
+
+    from app.services.tray import SystemTray
 
 DASHBOARD_PATH = Path(__file__).parent / "assets" / "dashboard.html"
 DEFAULT_API_PORT = 9876
@@ -83,10 +91,8 @@ def _configure_console_utf8() -> None:
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     for stream in (sys.stdout, sys.stderr):
         if stream is not None and hasattr(stream, "reconfigure"):
-            try:
+            with contextlib.suppress(Exception):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -186,10 +192,8 @@ def _launch_macos(*, api_port: int) -> None:
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     for stream in (sys.stdout, sys.stderr):
         if stream and hasattr(stream, "reconfigure"):
-            try:
+            with contextlib.suppress(Exception):
                 stream.reconfigure(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
 
     print(_render_app_banner(api_port), flush=True)
 
@@ -302,7 +306,7 @@ def _ensure_cert_generated_portable() -> None:
             )
             if cert_manager.install_and_trust():
                 print(
-                    "  ✓ Certificate trusted — HTTPS interception will work without browser warnings."
+                    "  ✓ Certificate trusted — HTTPS interception will work without browser warnings."  # noqa: E501
                 )
             elif sys.platform.startswith("linux"):
                 print("  ⚠ Automatic trust isn't implemented on Linux yet (manual trust needed).")
@@ -365,7 +369,7 @@ def _launch_portable(*, api_port: int, open_dashboard: bool) -> NoReturn:
     # System tray icon (portable mode, any OS) — mirrors the macOS StatusBar.
     tray = _start_system_tray(api_port)
 
-    def _shutdown(_signum=None, _frame=None) -> None:
+    def _shutdown(_signum: int | None = None, _frame: FrameType | None = None) -> None:
         if tray:
             tray.stop()
         _cleanup_services()
@@ -413,7 +417,7 @@ def _detect_accelerator() -> dict:
     if platform.system() == "Darwin" and platform.machine() in ("arm64", "aarch64"):
         try:
             r = subprocess.run(
-                ["sysctl", "-n", "hw.memsize"],
+                ["sysctl", "-n", "hw.memsize"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -424,13 +428,13 @@ def _detect_accelerator() -> dict:
         chip = "Apple Silicon"
         try:
             r = subprocess.run(
-                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                ["sysctl", "-n", "machdep.cpu.brand_string"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
             chip = r.stdout.strip() or chip
-        except Exception:
+        except Exception:  # noqa: S110
             pass
         return {
             "type": "apple_silicon",
@@ -446,7 +450,7 @@ def _detect_accelerator() -> dict:
     nvidia_smi = shutil.which("nvidia-smi")
     if nvidia_smi:
         try:
-            r = subprocess.run(
+            r = subprocess.run(  # noqa: S603
                 [
                     nvidia_smi,
                     "--query-gpu=name,memory.total,memory.free",
@@ -469,14 +473,14 @@ def _detect_accelerator() -> dict:
                     "OLLAMA_KEEP_ALIVE": "30m",
                 },
             }
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     # AMD ROCm GPU
     rocm_smi = shutil.which("rocm-smi")
     if rocm_smi:
         try:
-            r = subprocess.run(
+            r = subprocess.run(  # noqa: S603
                 [rocm_smi, "--showmeminfo", "vram", "--csv"],
                 capture_output=True,
                 text=True,
@@ -495,7 +499,7 @@ def _detect_accelerator() -> dict:
                             "OLLAMA_KEEP_ALIVE": "30m",
                         },
                     }
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
     # CPU fallback
@@ -513,8 +517,8 @@ def _wait_for_command(
     name: str,
     attempts: int = 5,
     delay_seconds: float = 1.0,
-    which=None,
-    sleep=time.sleep,
+    which: Callable[[str], str | None] | None = None,
+    sleep: Callable[[float], object] = time.sleep,
 ) -> str | None:
     """Poll ``which(name)`` a few times, sleeping between attempts.
 
@@ -602,7 +606,7 @@ def _ensure_ollama() -> None:
             print("▶ Ollama not found — installing via winget...")
             try:
                 subprocess.run(
-                    [
+                    [  # noqa: S607
                         "winget",
                         "install",
                         "Ollama.Ollama",
@@ -614,7 +618,7 @@ def _ensure_ollama() -> None:
                 )
                 # Refresh PATH after install
                 user_path = subprocess.run(
-                    [
+                    [  # noqa: S607
                         "powershell",
                         "-NoProfile",
                         "-Command",
@@ -636,7 +640,7 @@ def _ensure_ollama() -> None:
             if brew:
                 print("▶ Ollama not found — installing via brew...")
                 try:
-                    subprocess.run([brew, "install", "ollama"], capture_output=True, timeout=300)
+                    subprocess.run([brew, "install", "ollama"], capture_output=True, timeout=300)  # noqa: S603
                     ollama_bin = shutil.which("ollama")
                 except Exception as exc:
                     print(f"  ⚠ Ollama install failed: {exc}")
@@ -663,14 +667,14 @@ def _ensure_ollama() -> None:
         print("▶ Starting Ollama server...")
         try:
             if os.name == "nt":
-                subprocess.Popen(
+                subprocess.Popen(  # noqa: S603
                     [ollama_bin, "serve"],
                     creationflags=subprocess.CREATE_NO_WINDOW,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                 )
             else:
-                subprocess.Popen(
+                subprocess.Popen(  # noqa: S603
                     [ollama_bin, "serve"],
                     start_new_session=True,
                     stdout=subprocess.DEVNULL,
@@ -703,7 +707,7 @@ def _ensure_ollama() -> None:
         # the user should see download progress.
         print(_pull_notice(model), flush=True)
         try:
-            subprocess.run([ollama_bin, "pull", model], timeout=600)
+            subprocess.run([ollama_bin, "pull", model], timeout=600)  # noqa: S603
             print(f"  ✓ {model} ready")
         except Exception as exc:
             print(f"  ⚠ Model pull failed: {exc}")
@@ -716,7 +720,9 @@ def _ensure_ollama() -> None:
     _benchmark_and_warm(model, hw, opener)
 
 
-def _ollama_infer(opener, model: str, text: str, num_predict: int = 5) -> dict | None:
+def _ollama_infer(
+    opener: OpenerDirector, model: str, text: str, num_predict: int = 5
+) -> dict | None:
     """Run a single Ollama inference and return timing metadata."""
     import json
     import urllib.request
@@ -743,7 +749,7 @@ def _ollama_infer(opener, model: str, text: str, num_predict: int = 5) -> dict |
         return None
 
 
-def _benchmark_and_warm(model: str, hw: dict, opener) -> None:
+def _benchmark_and_warm(model: str, hw: dict, opener: OpenerDirector) -> None:
     """Benchmark inference, choose optimal backend, and pre-warm the model.
 
     On systems with a discrete GPU, runs 3 quick inferences on the current
@@ -807,7 +813,7 @@ def _benchmark_and_warm(model: str, hw: dict, opener) -> None:
             headers={"Content-Type": "application/json"},
         )
         opener.open(req, timeout=10)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     time.sleep(1)
 
@@ -835,7 +841,7 @@ def _benchmark_and_warm(model: str, hw: dict, opener) -> None:
             headers={"Content-Type": "application/json"},
         )
         opener.open(req, timeout=10)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     time.sleep(1)
 
@@ -856,7 +862,7 @@ def _tray_available() -> bool:
         return False
 
 
-def _start_system_tray(api_port: int):
+def _start_system_tray(api_port: int) -> SystemTray | None:
     """Start the system tray icon in portable mode. Returns the tray or None.
 
     ``SystemTray`` imports pystray lazily *inside its background thread*, so a
@@ -893,7 +899,7 @@ def _start_system_tray(api_port: int):
                 proxy.start(config)
                 config.proxy_enabled = True
                 ConfigStore.save(config)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
     def _toggle_browser() -> None:
@@ -912,7 +918,7 @@ def _start_system_tray(api_port: int):
                 config.browser_interception = True
                 config.browser_interception_configured = True
                 ConfigStore.save(config)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
     def _quit() -> None:
@@ -931,18 +937,16 @@ def _start_system_tray(api_port: int):
     return tray
 
 
-def _tray_sync_loop(tray) -> None:
+def _tray_sync_loop(tray: SystemTray) -> None:
     """Poll proxy status and keep the tray icon in sync."""
     from app.server.api import get_browser_proxy_service, get_proxy_service
 
     while True:
-        try:
+        with contextlib.suppress(Exception):
             tray.set_states(
                 api_active=get_proxy_service().is_running,
                 browser_active=get_browser_proxy_service().is_running,
             )
-        except Exception:
-            pass
         time.sleep(3)
 
 
@@ -961,7 +965,7 @@ def _auto_start_proxies() -> None:
         if not proxy.is_running:
             try:
                 proxy.start(config)
-                print("▶ Firewall proxy auto-started (port %d)" % config.proxy_port)
+                print("▶ Firewall proxy auto-started (port %d)" % config.proxy_port)  # noqa: UP031
             except Exception as exc:
                 print(f"  ⚠ Firewall proxy auto-start failed: {exc}")
 
@@ -989,7 +993,7 @@ def _auto_start_proxies() -> None:
                 if not bp.is_setup:
                     bp.setup()
                 bp.start()
-                print("▶ Browser proxy auto-started (port %d)" % bp.PROXY_PORT)
+                print("▶ Browser proxy auto-started (port %d)" % bp.PROXY_PORT)  # noqa: UP031
             except Exception as exc:
                 print(f"  ⚠ Browser proxy auto-start failed: {exc}")
 
@@ -1006,7 +1010,7 @@ def _cleanup_services() -> None:
         proxy = get_proxy_service()
         if proxy.is_running:
             proxy.stop()
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 

@@ -11,9 +11,12 @@ import sys
 import threading
 import time
 import webbrowser
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -108,7 +111,7 @@ class BenchmarkService:
             return
 
         try:
-            proc = subprocess.Popen(
+            proc = subprocess.Popen(  # noqa: S603
                 [sys.executable, str(script)],
                 cwd=str(PROJECT_ROOT),
                 stdout=subprocess.PIPE,

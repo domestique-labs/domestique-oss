@@ -29,7 +29,7 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 
 
-class ApprovalStatus(str, Enum):
+class ApprovalStatus(str, Enum):  # noqa: UP042  # str-mixin str() semantics kept intentionally
     """Lifecycle states for a pending approval."""
 
     PENDING = "pending"
@@ -92,7 +92,7 @@ class ApprovalManager:
     Singleton - use get_approval_manager() to access.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._lock = threading.Lock()
         self._pending: dict[str, PendingApproval] = {}
         self._csrf_token: str = secrets.token_urlsafe(32)

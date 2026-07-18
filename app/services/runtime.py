@@ -6,7 +6,10 @@ import os
 import socket
 import subprocess
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def is_macos() -> bool:
