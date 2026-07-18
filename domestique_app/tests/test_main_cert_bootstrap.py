@@ -70,7 +70,10 @@ class TestEnsureCertGeneratedPortable:
         with (
             patch("domestique_app.server.api.get_browser_proxy_service", return_value=svc),
             patch("domestique_app.services.cert_manager.is_cert_trusted", return_value=False),
-            patch("domestique_app.services.cert_manager.install_and_trust", side_effect=RuntimeError("boom")),
+            patch(
+                "domestique_app.services.cert_manager.install_and_trust",
+                side_effect=RuntimeError("boom"),
+            ),
         ):
             main._ensure_cert_generated_portable()  # must not raise
 

@@ -38,9 +38,9 @@ pytest.importorskip("mitmproxy")  # requires the [browser-proxy] extra; skip cle
 
 from mitmproxy.test import tflow, tutils
 
-from domestique_app.services.mitm_addon import DomestiqueAddon
 from domestique.detectors.registry import Finding, InspectionResult
 from domestique.models import Action
+from domestique_app.services.mitm_addon import DomestiqueAddon
 
 
 class _StubPipeline:
@@ -98,7 +98,11 @@ def _addon_with(pipeline: _StubPipeline) -> DomestiqueAddon:
     differs from what it last saw) does not silently swap our stub back out
     for the real, environment-dependent pipeline.
     """
-    from domestique_app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+    from domestique_app.services.pipeline_config import (
+        config_hash,
+        config_mtime_ns,
+        load_config_dict,
+    )
 
     addon = DomestiqueAddon()
     addon._detector = pipeline

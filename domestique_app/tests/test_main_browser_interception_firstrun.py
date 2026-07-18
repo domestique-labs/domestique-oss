@@ -43,7 +43,8 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             bp = self._fake_bp()
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):
@@ -68,7 +69,8 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             bp = self._fake_bp()
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):
@@ -91,7 +93,8 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             bp = self._fake_bp()
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):
@@ -106,7 +109,8 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             bp = self._fake_bp(is_running=True)
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):
@@ -122,7 +126,8 @@ class TestAutoStartProxiesBrowserInterceptionFirstRun:
             bp.start.side_effect = RuntimeError("mitmdump exploded")
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):
@@ -292,7 +297,8 @@ class TestBrowserInterceptionRaceRegression:
             bp = self._fake_bp()
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):
@@ -324,7 +330,8 @@ class TestBrowserInterceptionRaceRegression:
             bp = self._fake_bp()
             with (
                 patch(
-                    "domestique_app.server.api.get_proxy_service", return_value=MagicMock(is_running=False)
+                    "domestique_app.server.api.get_proxy_service",
+                    return_value=MagicMock(is_running=False),
                 ),
                 patch("domestique_app.server.api.get_browser_proxy_service", return_value=bp),
             ):

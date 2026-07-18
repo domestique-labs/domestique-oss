@@ -34,9 +34,9 @@ from mitmproxy import http as mitm_http
 from mitmproxy.net import encoding as mitm_encoding
 from mitmproxy.test import tflow, tutils
 
-from domestique_app.services.mitm_addon import DomestiqueAddon
 from domestique.detectors.registry import Finding, InspectionResult
 from domestique.models import Action
+from domestique_app.services.mitm_addon import DomestiqueAddon
 
 
 class _StubPipeline:

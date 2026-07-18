@@ -139,7 +139,11 @@ class TestLoadDoesNotBlockOnPipelineConstruction:
 class TestInspectHoldsThenInspects:
     @pytest.mark.asyncio
     async def test_inspect_holds_until_ready_then_inspects_normally(self):
-        from domestique_app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+        from domestique_app.services.pipeline_config import (
+            config_hash,
+            config_mtime_ns,
+            load_config_dict,
+        )
 
         addon = DomestiqueAddon()
         addon._detector_ready.clear()
@@ -221,7 +225,11 @@ class TestExistingFailClosedBehaviorPreserved:
         """Real detector-scan errors (e.g. GLiNER not cached surfaced as a
         pipeline exception) must still block -- unaffected by the new
         readiness gating once the pipeline itself is up."""
-        from domestique_app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+        from domestique_app.services.pipeline_config import (
+            config_hash,
+            config_mtime_ns,
+            load_config_dict,
+        )
 
         class _BoomPipeline:
             async def inspect(self, text):
@@ -318,7 +326,11 @@ class TestDetectorSelfHealsAfterTransientFailure:
         """Without a config change, retries shouldn't fire on every single
         request -- only once per DETECTOR_RETRY_BACKOFF_S -- so a storm of
         blocked requests can't hammer a still-broken dependency."""
-        from domestique_app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+        from domestique_app.services.pipeline_config import (
+            config_hash,
+            config_mtime_ns,
+            load_config_dict,
+        )
 
         addon = DomestiqueAddon()
         addon.DETECTOR_RETRY_BACKOFF_S = 999.0
