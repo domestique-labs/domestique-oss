@@ -207,7 +207,7 @@ class Finding:
 class InspectionResult:
     """Result returned by ``DetectorPipeline.inspect``.
 
-    Shape is intentionally compatible with what ``app/services/mitm_addon.py``
+    Shape is intentionally compatible with what ``domestique_app/services/mitm_addon.py``
     consumes today: ``should_block``, ``findings`` (with ``.description``),
     and ``redacted_text``.
     """

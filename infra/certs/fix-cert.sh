@@ -14,12 +14,12 @@
 
 set -euo pipefail
 
-# This script lives in infra/certs/; the project root (where the `app` package
+# This script lives in infra/certs/; the project root (where the `domestique_app` package
 # and .venv live) is two levels up.
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-# The `app` package lives in the project root and is not pip-installed.
+# The `domestique_app` package lives in the project root and is not pip-installed.
 export PYTHONUTF8=1
 export PYTHONPATH="$ROOT"
 
@@ -37,7 +37,7 @@ CA_PEM="$HOME/.domestique/ca/domestique-ca.pem"
 
 echo "Generating the Domestique CA (if missing) ..."
 "$PY" - <<'PY'
-from app.services.interceptor import generate_ca
+from domestique_app.services.interceptor import generate_ca
 cert, _key = generate_ca()
 print("CA file:", cert)
 PY

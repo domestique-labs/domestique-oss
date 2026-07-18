@@ -13,10 +13,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 class TestPipelineConfig:
-    """Tests for app.services.pipeline_config helpers."""
+    """Tests for domestique_app.services.pipeline_config helpers."""
 
     def test_settings_from_config_balanced(self):
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         cfg = {
             "detection_stack": {
@@ -32,7 +32,7 @@ class TestPipelineConfig:
         assert s.local_llm_model == "qwen3:1.7b"
 
     def test_settings_from_config_quality(self):
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         cfg = {
             "detection_stack": {
@@ -46,7 +46,7 @@ class TestPipelineConfig:
         assert s.local_llm_model.startswith("gemma4:e2b")
 
     def test_settings_from_config_regex_only(self):
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         cfg = {
             "detection_stack": {
@@ -62,7 +62,7 @@ class TestPipelineConfig:
     def test_settings_from_config_legacy_cpu(self):
         """legacy-cpu must resolve to llama3.2:1b — the model the installer
         actually pulls for this preset (C4 regression guard)."""
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         cfg = {
             "detection_stack": {
@@ -76,7 +76,7 @@ class TestPipelineConfig:
         assert s.local_llm_model == "llama3.2:1b"
 
     def test_settings_custom_prompt(self):
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         cfg = {
             "detection_stack": {"regex": True},
@@ -86,7 +86,7 @@ class TestPipelineConfig:
         assert s.local_llm_system_prompt == "My custom prompt"
 
     def test_settings_disabled_patterns(self):
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         cfg = {
             "detection_stack": {"regex": True},
@@ -97,34 +97,34 @@ class TestPipelineConfig:
         assert "email_address" in s.disabled_builtin_patterns
 
     def test_config_hash_changes_on_stack_change(self):
-        from app.services.pipeline_config import config_hash
+        from domestique_app.services.pipeline_config import config_hash
 
         cfg1 = {"detection_stack": {"regex": True, "qwen3_1_7b": True}}
         cfg2 = {"detection_stack": {"regex": True, "qwen3_1_7b": False}}
         assert config_hash(cfg1) != config_hash(cfg2)
 
     def test_config_hash_changes_on_prompt_change(self):
-        from app.services.pipeline_config import config_hash
+        from domestique_app.services.pipeline_config import config_hash
 
         cfg1 = {"detection_stack": {"regex": True}, "classifier_prompt": "prompt A"}
         cfg2 = {"detection_stack": {"regex": True}, "classifier_prompt": "prompt B"}
         assert config_hash(cfg1) != config_hash(cfg2)
 
     def test_config_hash_stable_for_same_config(self):
-        from app.services.pipeline_config import config_hash
+        from domestique_app.services.pipeline_config import config_hash
 
         cfg = {"detection_stack": {"regex": True}, "classifier_prompt": "test"}
         assert config_hash(cfg) == config_hash(cfg)
 
     def test_config_hash_ignores_irrelevant_fields(self):
-        from app.services.pipeline_config import config_hash
+        from domestique_app.services.pipeline_config import config_hash
 
         cfg1 = {"detection_stack": {"regex": True}, "proxy_port": 8000}
         cfg2 = {"detection_stack": {"regex": True}, "proxy_port": 9999}
         assert config_hash(cfg1) == config_hash(cfg2)
 
     def test_settings_from_empty_config(self):
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
 
         s = settings_from_config({})
         # Defaults: regex only
@@ -133,14 +133,14 @@ class TestPipelineConfig:
 
 
 @pytest.mark.skip(
-    reason="Stale: app.server.api._detector_cache was refactored away. "
+    reason="Stale: domestique_app.server.api._detector_cache was refactored away. "
     "Re-point these at the current pipeline-cache implementation before re-enabling."
 )
 class TestDetectorCacheSingleton:
     """Tests that scan + benchmark share the same pipeline."""
 
     def test_cache_returns_same_pipeline_on_repeated_calls(self):
-        from app.server.api import _detector_cache
+        from domestique_app.server.api import _detector_cache
 
         _detector_cache.invalidate()
         p1, _ = _detector_cache.get()
@@ -148,7 +148,7 @@ class TestDetectorCacheSingleton:
         assert p1 is p2  # same object, not rebuilt
 
     def test_cache_rebuilds_after_invalidate(self):
-        from app.server.api import _detector_cache
+        from domestique_app.server.api import _detector_cache
 
         _detector_cache.invalidate()
         p1, _ = _detector_cache.get()
@@ -161,7 +161,7 @@ class TestCrossPlatform:
     """Tests that core pipeline components work without macOS-specific deps."""
 
     def test_pipeline_config_importable(self):
-        from app.services.pipeline_config import (
+        from domestique_app.services.pipeline_config import (
             settings_from_config,
             config_hash,
             load_config_dict,
@@ -173,7 +173,7 @@ class TestCrossPlatform:
 
     def test_settings_from_config_no_platform_deps(self):
         """settings_from_config should not import AppKit or other macOS deps."""
-        from app.services.pipeline_config import settings_from_config
+        from domestique_app.services.pipeline_config import settings_from_config
         s = settings_from_config({"detection_stack": {"regex": True}})
         assert s.enable_secret_detection is True
 

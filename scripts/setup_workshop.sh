@@ -89,7 +89,7 @@ fi
 echo ""
 echo "══════════════════════════════════════════════════════════════"
 echo "  ✅ Setup complete! Run the app:"
-echo "     .venv/bin/python -c 'from app.main import launch; launch()'"
+echo "     .venv/bin/python -c 'from domestique_app.main import launch; launch()'"
 echo ""
 echo "  Run the benchmark:"
 echo "     .venv/bin/python bench/comprehensive_eval.py"

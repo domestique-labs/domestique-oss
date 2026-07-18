@@ -7,15 +7,15 @@ Last updated: 2026-05-26
 Domestique is a Python LLM data-loss-prevention proxy. It has two related surfaces:
 
 - `domestique/`: the core FastAPI inspection proxy, detector registry, policy engine, audit logging, SDK helpers, and upstream forwarding.
-- `app/`: the desktop control app, local dashboard API, dashboard HTML, proxy lifecycle management, browser HTTPS interception, benchmark runner, and platform integration.
+- `domestique_app/`: the desktop control app, local dashboard API, dashboard HTML, proxy lifecycle management, browser HTTPS interception, benchmark runner, and platform integration.
 
-The original desktop app was macOS-first. It imported AppKit at module import time, used LaunchAgents, `networksetup`, `security`, `lsof`, `scutil`, and PF firewall rules directly. That made `python -m app` fail immediately on Windows with `ModuleNotFoundError: No module named 'AppKit'`.
+The original desktop app was macOS-first. It imported AppKit at module import time, used LaunchAgents, `networksetup`, `security`, `lsof`, `scutil`, and PF firewall rules directly. That made `python -m domestique_app` fail immediately on Windows with `ModuleNotFoundError: No module named 'AppKit'`.
 
 ## Important Entry Points
 
-- `python -m app`: launches the desktop app. It now auto-selects native AppKit mode on macOS and portable browser-dashboard mode on Windows/Linux.
-- `python -m app --mode portable`: forces the portable dashboard mode on any OS.
-- `python -m app --no-browser`: starts the local dashboard API without opening a browser.
+- `python -m domestique_app`: launches the desktop app. It now auto-selects native AppKit mode on macOS and portable browser-dashboard mode on Windows/Linux.
+- `python -m domestique_app --mode portable`: forces the portable dashboard mode on any OS.
+- `python -m domestique_app --no-browser`: starts the local dashboard API without opening a browser.
 - `run.ps1`: PowerShell wrapper for Windows.
 - `run.bat`: Windows launcher for Command Prompt, Explorer, and double-click use.
 - `run.sh`: shell wrapper for macOS/Linux.
@@ -23,11 +23,11 @@ The original desktop app was macOS-first. It imported AppKit at module import ti
 
 ## Runtime Architecture
 
-1. `app.main` loads persisted config via `ConfigStore`.
-2. `app.server.api.start_api_server()` starts a localhost API on `127.0.0.1:9876`.
-3. The dashboard at `app/assets/dashboard.html` calls that API.
+1. `domestique_app.main` loads persisted config via `ConfigStore`.
+2. `domestique_app.server.api.start_api_server()` starts a localhost API on `127.0.0.1:9876`.
+3. The dashboard at `domestique_app/assets/dashboard.html` calls that API.
 4. `ProxyService` starts the API proxy with `uvicorn domestique.app:create_app --factory`.
-5. `BrowserProxyService` starts `mitmdump` with `app/services/mitm_addon.py`, generates a PAC file, installs/trusts a local CA where supported, and points the OS proxy at the local MITM proxy.
+5. `BrowserProxyService` starts `mitmdump` with `domestique_app/services/mitm_addon.py`, generates a PAC file, installs/trusts a local CA where supported, and points the OS proxy at the local MITM proxy.
 
 ## Configuration And Data
 
@@ -67,7 +67,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-python -m app
+python -m domestique_app
 ```
 
 To run without opening a browser:
@@ -98,18 +98,18 @@ Browser interception on Windows uses current-user certificate/proxy settings:
 
 ## Cross-Platform Changes Made
 
-- `app/main.py` no longer imports AppKit at module import time.
-- `app/main.py` now has native and portable launch modes.
-- `app/__main__.py` exposes a small CLI: `--mode`, `--api-port`, and `--no-browser`.
+- `domestique_app/main.py` no longer imports AppKit at module import time.
+- `domestique_app/main.py` now has native and portable launch modes.
+- `domestique_app/__main__.py` exposes a small CLI: `--mode`, `--api-port`, and `--no-browser`.
 - `run.ps1` was added for Windows.
 - `run.bat` was added for Command Prompt, Explorer, and double-click launches.
-- `run.sh` now delegates to `python -m app` instead of sourcing a hard-coded Unix venv path.
-- `app/services/runtime.py` centralizes OS checks, port checks, venv interpreter discovery, and child-process group kwargs.
-- `app/services/notifications.py` provides best-effort macOS/Windows notifications with no required dependency.
-- `app/services/proxy.py` uses socket-based port readiness checks and Windows-safe `subprocess.Popen` kwargs.
-- `app/services/interceptor.py` now has Windows CA trust and Windows current-user proxy support, while preserving guarded macOS behavior.
-- `app/services/watchdog.py` uses socket-based health checks and avoids macOS-only PF/scutil logic off macOS.
-- `app/services/autolaunch.py` supports Windows Run key auto-launch while preserving macOS LaunchAgent behavior.
+- `run.sh` now delegates to `python -m domestique_app` instead of sourcing a hard-coded Unix venv path.
+- `domestique_app/services/runtime.py` centralizes OS checks, port checks, venv interpreter discovery, and child-process group kwargs.
+- `domestique_app/services/notifications.py` provides best-effort macOS/Windows notifications with no required dependency.
+- `domestique_app/services/proxy.py` uses socket-based port readiness checks and Windows-safe `subprocess.Popen` kwargs.
+- `domestique_app/services/interceptor.py` now has Windows CA trust and Windows current-user proxy support, while preserving guarded macOS behavior.
+- `domestique_app/services/watchdog.py` uses socket-based health checks and avoids macOS-only PF/scutil logic off macOS.
+- `domestique_app/services/autolaunch.py` supports Windows Run key auto-launch while preserving macOS LaunchAgent behavior.
 - `pyproject.toml` now separates optional extras for `browser-proxy`, `file-scanning`, `macos-native`, and `desktop`.
 - `litellm` is constrained to `>=1.80,<1.81` because the newest 1.x wheel currently fails to install on this Windows path due to a long packaged fixture path.
 - `pydantic` is constrained to `<2.12` so the optional `mitmproxy>=12,<13` stack can share a compatible `typing-extensions` range with the core app.
@@ -125,12 +125,12 @@ Browser interception on Windows uses current-user certificate/proxy settings:
 ## Useful Verification Commands
 
 ```powershell
-python -m compileall app domestique
-python -m app --help
-python -m app --no-browser
+python -m compileall domestique_app domestique
+python -m domestique_app --help
+python -m domestique_app --no-browser
 ```
 
-Once `python -m app --no-browser` is running, verify:
+Once `python -m domestique_app --no-browser` is running, verify:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:9876/api/status
