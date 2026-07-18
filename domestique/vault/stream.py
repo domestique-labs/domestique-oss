@@ -16,21 +16,35 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+#: Longest rendered token we will ever mint (``[PREFIX_n]``). Owned by the
+#: mint site (``session.render_token`` guarantees it); imported here so the
+#: hold-back bound can never drift out of sync with what minting produces.
+from domestique.vault.session import MAX_TOKEN_LEN
+
 if TYPE_CHECKING:
+    from collections.abc import Set as AbstractSet
+
     from domestique.vault.service import TokenService
 
-#: Longest rendered token we will ever mint (``[PREFIX_n]``).
-MAX_TOKEN_LEN = 32
+__all__ = ["MAX_TOKEN_LEN", "StreamDetokenizer"]
 
 #: An unterminated token candidate at end-of-buffer: ``[``, ``[SSN``, ``[SSN_1``.
 _PARTIAL_TOKEN_TAIL = re.compile(r"\[[A-Z0-9_]*$")
 
 
 class StreamDetokenizer:
-    """Stateful per-response rewriter over a ``TokenService``."""
+    """Stateful per-response rewriter over a ``TokenService``.
 
-    def __init__(self, service: TokenService) -> None:
+    ``allowed`` scopes which token strings this rewriter may reverse. When
+    given (the gateway passes the set of tokens minted for the request being
+    answered), any token outside it — e.g. one echoed from another
+    conversation, or hallucinated — is left verbatim, so a response can only
+    ever reveal secrets that its own request redacted.
+    """
+
+    def __init__(self, service: TokenService, allowed: AbstractSet[str] | None = None) -> None:
         self._service = service
+        self._allowed = allowed
         self._held = ""
         self.unknown_tokens: list[str] = []
 
@@ -57,7 +71,7 @@ class StreamDetokenizer:
         emit, self._held = buf[:cut], buf[cut:]
         if not emit:
             return ""
-        out, unknown = self._service.detokenize_text(emit)
+        out, unknown = self._service.detokenize_text(emit, self._allowed)
         self.unknown_tokens.extend(unknown)
         return out
 

@@ -216,6 +216,10 @@ class InspectionResult:
     reason: str
     findings: list[Finding] = field(default_factory=list)
     redacted_text: str | None = None
+    #: Reversible tokens this redaction actually minted/used, e.g.
+    #: ``{"[SSN_1]"}``. Only these — never a token-shaped string the user
+    #: happened to type — are safe for the response detokenizer to reverse.
+    minted_tokens: set[str] = field(default_factory=set)
 
     @property
     def should_block(self) -> bool:
@@ -285,14 +289,16 @@ class DetectorPipeline:
         ]
 
         redacted_text: str | None = None
+        minted_tokens: set[str] = set()
         if action is Action.REDACT and detections:
-            redacted_text = _redact_text(text, detections, self._token_service)
+            redacted_text, minted_tokens = _redact_text(text, detections, self._token_service)
 
         return InspectionResult(
             action=action,
             reason=reason,
             findings=findings,
             redacted_text=redacted_text,
+            minted_tokens=minted_tokens,
         )
 
 
@@ -335,36 +341,72 @@ def create_detector_pipeline(
     )
 
 
+def _redaction_priority(det: Detection) -> tuple[int, float]:
+    """Ranking used to pick the category when overlapping spans are merged.
+
+    Pinned-vault detections are user-confirmed secrets and win outright;
+    otherwise the highest-confidence detection's category is used.
+    """
+    return (1 if det.detector == "pinned_vault" else 0, det.confidence)
+
+
 def _redact_text(
     text: str, detections: list[Detection], token_service: TokenService | None = None
-) -> str:
+) -> tuple[str, set[str]]:
     """Replace each detection span with a redaction marker.
+
+    Returns ``(redacted_text, minted_tokens)`` where ``minted_tokens`` are
+    exactly the reversible tokens this call produced — the scope the response
+    detokenizer is allowed to reverse.
 
     With a ``TokenService``, markers are reversible numbered tokens like
     ``[SSN_1]`` (distinct values → distinct numbers); without one, the
     legacy irreversible ``[CATEGORY_REDACTED]`` placeholder is used.
 
-    Spans are processed right-to-left so earlier offsets stay valid.
-    Overlapping spans are coalesced by skipping any detection whose end
-    extends past the next-earliest start we have already redacted.
+    Overlapping spans are coalesced into their **union** and redacted as one
+    token, never dropped. Dropping an overlapping detection (the previous
+    behaviour) forwarded the exclusive prefix of the dropped span to the
+    provider in cleartext — e.g. two spans over ``123-45-6789`` and its
+    ``5-6789`` tail leaked ``123-4``. Disjoint spans that merely touch
+    (``a.end == b.start``) are kept separate so two adjacent distinct
+    secrets still get two tokens. The merged span's category comes from its
+    highest-priority member (see ``_redaction_priority``).
     """
-    sorted_dets = sorted(detections, key=lambda d: d.span.start, reverse=True)
-    last_start = len(text) + 1
-    redacted = text
-    for det in sorted_dets:
-        if det.span.end > last_start:
-            continue
-        value = text[det.span.start : det.span.end]
-        if token_service is not None and value:
-            placeholder = token_service.tokenize(value, det.category)
-            token_service.record_sighting(value, det.category)
-        elif token_service is not None:
-            continue  # zero-length span (e.g. detector_error) — nothing to tokenize
+    # Drop zero-length spans (e.g. the synthetic detector_error marker at
+    # (0, 0)) — they carry no text to redact.
+    spans = [d for d in detections if d.span.end > d.span.start]
+    if not spans:
+        return text, set()
+    spans.sort(key=lambda d: (d.span.start, d.span.end))
+
+    # Coalesce true overlaps into (start, end, category) unions.
+    merged: list[tuple[int, int, str]] = []
+    cur_start = spans[0].span.start
+    cur_end = spans[0].span.end
+    cur_best = spans[0]
+    for det in spans[1:]:
+        if det.span.start < cur_end:  # overlap (touching is not overlap)
+            cur_end = max(cur_end, det.span.end)
+            if _redaction_priority(det) > _redaction_priority(cur_best):
+                cur_best = det
         else:
-            placeholder = f"[{det.category.upper()}_REDACTED]"
-        redacted = redacted[: det.span.start] + placeholder + redacted[det.span.end :]
-        last_start = det.span.start
-    return redacted
+            merged.append((cur_start, cur_end, cur_best.category))
+            cur_start, cur_end, cur_best = det.span.start, det.span.end, det
+    merged.append((cur_start, cur_end, cur_best.category))
+
+    # Apply right-to-left so earlier offsets stay valid as we splice.
+    redacted = text
+    minted: set[str] = set()
+    for start, end, category in reversed(merged):
+        value = text[start:end]
+        if token_service is not None:
+            placeholder = token_service.tokenize(value, category)
+            token_service.record_sighting(value, category)
+            minted.add(placeholder)
+        else:
+            placeholder = f"[{category.upper()}_REDACTED]"
+        redacted = redacted[:start] + placeholder + redacted[end:]
+    return redacted, minted
 
 
 def _scan_pinned(text: str, token_service: TokenService) -> list[Detection]:
