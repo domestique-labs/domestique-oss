@@ -18,6 +18,7 @@ Architecture:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -31,12 +32,15 @@ import time
 # through mitmproxy, creating a deadlock.
 import urllib.request as _urllib_req
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.error import URLError
 from urllib.request import Request
 
 from mitmproxy import ctx, http
 from mitmproxy.net import encoding as mitm_encoding
+
+if TYPE_CHECKING:
+    from mitmproxy.addonmanager import Loader
 
 _direct_opener = _urllib_req.build_opener(_urllib_req.ProxyHandler({}))
 _direct_urlopen = _direct_opener.open
@@ -71,7 +75,6 @@ _MIN_USABLE_VRAM_GB = 2.0
 _STACK_SAFE_DEFAULTS = {
     "regex": True,
     "gliner_pii": False,
-    "openai_privacy_filter": False,
     "gemma4_e2b": False,
     "qwen3_1_7b": True,
     "legacy_cpu": False,
@@ -139,7 +142,7 @@ class _InspectResult:
 
     def __init__(
         self, findings: list, should_block: bool = False, redacted_text: str | None = None
-    ):
+    ) -> None:
         self.findings = findings
         self.should_block = should_block
         self.redacted_text = redacted_text
@@ -148,7 +151,7 @@ class _InspectResult:
 class _Finding:
     """A single finding from the detection pipeline."""
 
-    def __init__(self, category: str, confidence: float, description: str):
+    def __init__(self, category: str, confidence: float, description: str) -> None:
         self.category = category
         self.confidence = confidence
         self.description = description
@@ -157,7 +160,7 @@ class _Finding:
 class _DetectorPipeline:
     """Wraps a list of detectors into a unified pipeline with an inspect() method."""
 
-    def __init__(self, detectors):
+    def __init__(self, detectors: list[Any]) -> None:
         self._detectors = detectors
 
     async def inspect(self, text: str) -> _InspectResult:
@@ -173,7 +176,7 @@ class _DetectorPipeline:
                             description=f"{d.detector}: {d.category} ({d.confidence:.0%})",
                         )
                     )
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         should_block = any(f.confidence >= 0.7 for f in all_findings)
@@ -266,7 +269,7 @@ class DomestiqueAddon:
         "/init",
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._detector = None
         self._data_dir = Path.home() / ".domestique"
         self._stats = {
@@ -315,7 +318,7 @@ class DomestiqueAddon:
         # the done callback. See response() / _scan_response_bytes_async().
         self._background_tasks: set[asyncio.Task] = set()
 
-    def _persist_stats(self):
+    def _persist_stats(self) -> None:
         """Write stats to a shared file for the dashboard to read.
 
         Includes ``light_profile_active`` (see ``_init_detector`` /
@@ -332,7 +335,7 @@ class DomestiqueAddon:
         except OSError:
             pass
 
-    def _log_request(self, entry: dict):
+    def _log_request(self, entry: dict) -> None:
         """Append a request entry to the JSON lines log file."""
         try:
             with open(self._log_file, "a") as f:
@@ -342,7 +345,7 @@ class DomestiqueAddon:
         except OSError:
             pass
 
-    def _trim_log(self):
+    def _trim_log(self) -> None:
         """Keep only the last MAX_LOG_ENTRIES in the log file."""
         try:
             lines = self._log_file.read_text().strip().split("\n")
@@ -429,7 +432,7 @@ class DomestiqueAddon:
             return str(model) if model else ""
         return ""
 
-    def load(self, loader):
+    def load(self, loader: Loader) -> None:
         """Called when the addon is loaded.
 
         mitmproxy does not accept connections on the proxy port until this
@@ -453,7 +456,7 @@ class DomestiqueAddon:
         ).start()
         self._warmup_llm()
 
-    def _build_detector_pipeline_background(self):
+    def _build_detector_pipeline_background(self) -> None:
         """Build the detector pipeline off the mitmproxy event loop.
 
         Runs on the thread started from ``load()``. On success, sets
@@ -510,7 +513,7 @@ class DomestiqueAddon:
             await loop.run_in_executor(None, self._detector_ready.wait, timeout)
         return self._detector_ready.is_set() and self._detector is not None
 
-    def _init_detector(self):
+    def _init_detector(self) -> None:
         """Build detection pipeline from config. Called once at startup (in
         the background -- see ``load()``) and again whenever the on-disk
         config changes (hot-reload path in ``_inspect()``).
@@ -603,7 +606,7 @@ class DomestiqueAddon:
         )
         return effective, note
 
-    def _warmup_llm(self):
+    def _warmup_llm(self) -> None:
         """Pre-load Ollama model so first request doesn't block."""
         import threading
 
@@ -621,7 +624,7 @@ class DomestiqueAddon:
         if not model:
             return
 
-        def _warmup():
+        def _warmup() -> None:
             try:
                 import json as _json
                 import urllib.request as _req
@@ -706,10 +709,8 @@ class DomestiqueAddon:
             # Log raw body snippet for conversation endpoints to help debug extraction
             raw_snippet = ""
             if "conversation" in path:
-                try:
+                with contextlib.suppress(Exception):
                     raw_snippet = flow.request.content.decode("utf-8", errors="replace")[:500]
-                except Exception:
-                    pass
             self._log_request(
                 {
                     "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -950,7 +951,7 @@ class DomestiqueAddon:
                 proxy_mode="browser",
             )
             get_audit_store().record(event)
-        except Exception:
+        except Exception:  # noqa: S110
             pass  # Never let audit failure affect request path
 
     # --- Approval flow -----------------------------------------------
@@ -1036,7 +1037,7 @@ class DomestiqueAddon:
                     "content_preview": redacted_preview,
                 }
             ).encode()
-            req = Request(
+            req = Request(  # noqa: S310
                 f"{self._api_base}/api/approvals",
                 data=payload,
                 headers={"Content-Type": "application/json"},
@@ -1062,7 +1063,7 @@ class DomestiqueAddon:
         while time.time() < deadline:
             time.sleep(poll_interval)
             try:
-                req = Request(
+                req = Request(  # noqa: S310
                     f"{self._api_base}/api/approvals/{approval_id}",
                     method="GET",
                 )
@@ -1101,10 +1102,8 @@ class DomestiqueAddon:
 
         # Try JSON parsing first
         body = None
-        try:
+        with contextlib.suppress(json.JSONDecodeError, UnicodeDecodeError):
             body = json.loads(raw)
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            pass
 
         if body and isinstance(body, dict):
             # Try OpenAI-compatible format (most common)
@@ -1151,7 +1150,7 @@ class DomestiqueAddon:
                 # Only return if body is substantial (not tiny pings)
                 if len(text) > 50:
                     return text
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         return None
@@ -1312,7 +1311,7 @@ class DomestiqueAddon:
 
         Note: detector scan methods (GLiNER, regex) do CPU-bound work inside
         async scan(). For a single-user desktop proxy this is fine. For
-        multi-user enterprise deployments, wrap in asyncio.to_thread() to
+        multi-user deployments, wrap in asyncio.to_thread() to
         avoid blocking mitmproxy's event loop on slow detectors.
 
         Startup race: the pipeline is now built on a background thread (see
@@ -1810,7 +1809,7 @@ class DomestiqueAddon:
                             texts.append(delta.get("text", ""))
                 except json.JSONDecodeError:
                     pass
-        except Exception:
+        except Exception:  # noqa: S110
             pass
 
         return "".join(texts) if texts else None
@@ -1932,7 +1931,7 @@ def _extract_generic_content(body: dict) -> str | None:
     return "\n".join(meaningful) if meaningful else None
 
 
-def _extract_texts_recursive(obj, texts: list, depth: int = 0):
+def _extract_texts_recursive(obj: object, texts: list, depth: int = 0) -> None:
     """Recursively find all text strings in a nested structure."""
     if depth > 10:
         return
@@ -1940,7 +1939,7 @@ def _extract_texts_recursive(obj, texts: list, depth: int = 0):
         if len(obj) > 5:
             texts.append(obj)
     elif isinstance(obj, dict):
-        for key, val in obj.items():
+        for _key, val in obj.items():
             _extract_texts_recursive(val, texts, depth + 1)
     elif isinstance(obj, list):
         for item in obj:
@@ -1958,12 +1957,10 @@ def _is_metadata(text: str) -> bool:
     if _re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", text):
         return True
     # Timezone names
-    if text.count("/") == 1 and all(c.isalpha() or c in "/_" for c in text):
-        return True
-    return False
+    return bool(text.count("/") == 1 and all(c.isalpha() or c in "/_" for c in text))
 
 
-def _find_base64_data(obj, depth: int = 0) -> list[dict]:
+def _find_base64_data(obj: object, depth: int = 0) -> list[dict]:
     """Recursively find base64-encoded file data in a JSON structure.
 
     Looks for patterns used by major LLM APIs:
@@ -2003,7 +2000,7 @@ def _find_base64_data(obj, depth: int = 0) -> list[dict]:
 
         # Generic: look for file_data, image_data, attachment fields
         for key in ("file_data", "image_data", "attachment", "file_content"):
-            if key in obj and isinstance(obj[key], str) and len(obj[key]) > 100:
+            if key in obj and isinstance(obj[key], str) and len(obj[key]) > 100:  # noqa: SIM102
                 if _looks_like_base64(obj[key]):
                     results.append({"data": obj[key], "filename": obj.get("filename", "")})
 

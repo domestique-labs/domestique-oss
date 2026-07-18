@@ -1,4 +1,4 @@
-"""Tests for the enterprise audit logging system."""
+"""Tests for the audit logging system."""
 
 from __future__ import annotations
 
@@ -164,7 +164,7 @@ class TestAuditStore:
         assert parsed["destination"] == "chatgpt.com"
 
     def test_get_stats(self, audit_store):
-        for i in range(3):
+        for _i in range(3):
             audit_store.record(
                 create_audit_event(action=AuditAction.BLOCK, destination="api.openai.com")
             )
@@ -213,7 +213,7 @@ class TestRetentionPolicy:
         store._enforce_retention()
 
         # Events from "today" should be cleared with max_age_days=0
-        results = store.query()
+        store.query()
         # Note: max_age_days=0 means delete events older than 0 days from now
         # which means everything before right now - so recent events may remain
         store.stop()

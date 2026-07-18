@@ -14,8 +14,14 @@ from __future__ import annotations
 
 import threading
 import webbrowser
-from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    import pystray
+    from PIL.Image import Image
 
 _ASSETS = Path(__file__).parent.parent / "assets" / "images"
 _ICON_PATH = _ASSETS / "logo-64.png"
@@ -132,14 +138,14 @@ class SystemTray:
         if self._icon:
             self._icon.stop()
 
-    def _handle_toggle_api(self, icon, item) -> None:
+    def _handle_toggle_api(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         self._on_toggle_api()
 
-    def _handle_toggle_browser(self, icon, item) -> None:
+    def _handle_toggle_browser(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         self._on_toggle_browser()
 
-    def _handle_dashboard(self, icon, item) -> None:
+    def _handle_dashboard(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         webbrowser.open(self._dashboard_url)
 
-    def _handle_quit(self, icon, item) -> None:
+    def _handle_quit(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         self._on_quit()

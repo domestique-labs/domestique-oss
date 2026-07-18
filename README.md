@@ -14,7 +14,7 @@
 
 <!-- Badges are added in the README-badges change (#23); when merged they slot in here, centered. -->
 
-**Contents** · [Quick start](#quick-start) · [How it works](#how-it-works) · [Browser mode &amp; Enterprise](#browser-mode-optional--enterprise) · [License](#license)
+**Contents** · [Quick start](#quick-start) · [How it works](#how-it-works) · [Browser mode](#browser-mode-optional) · [License](#license)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/domestique-labs/domestique-oss/ci.yml?branch=main&label=CI)](https://github.com/domestique-labs/domestique-oss/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
@@ -93,11 +93,11 @@ nuanced content, install the optional detectors:
 
 ---
 
-## Browser mode (optional) & Enterprise
+## Browser mode (optional)
 
 Domestique also has an optional **browser mode** — it can intercept web LLM UIs
-(ChatGPT, Claude, Gemini, Copilot, and others) through a local proxy — and commercial
-**Enterprise** editions for fleets. The developer CLI wedge above is the fastest way to
+(ChatGPT, Claude, Gemini, Copilot, and others) through a local proxy. The developer
+CLI wedge above is the fastest way to
 get value — no CA, no system proxy, no admin. Browser mode below is more invasive by nature:
 it trusts a local CA and sets a system proxy so it can inspect HTTPS traffic from your browser.
 
@@ -134,14 +134,13 @@ entirely — a silent DLP blind spot. For a reliable browser-mode test or deploy
 turn QUIC off. A helper is included for the Chromium browsers:
 
 ```powershell
-# Chrome / Brave / Edge — writes the standard QuicAllowed enterprise policy
-# (the same lever MDM pulls fleet-wide). Auto-elevates via UAC. -Enable to revert.
+# Chrome / Brave / Edge — writes the standard QuicAllowed machine-wide policy
+# (the same lever device-management tools pull). Auto-elevates via UAC. -Enable to revert.
 scripts/toggle-quic.ps1 -Browser chrome        # or: brave | edge
 ```
 
 For **Opera** and **Firefox** the script prints the correct manual step (they use
-different mechanisms). Enterprise editions enforce this fleet-wide automatically via
-browser policy and by blocking outbound UDP/443 at the firewall.
+different mechanisms).
 
 ### Detection presets (Tier 3 LLM classifier)
 
@@ -165,8 +164,8 @@ domestique/
     registry.py       # Detector registry + pipeline
     local_llm.py      # Ollama LLM classifier (Gemma / Qwen3)
   policy/
-    rules.yaml        # Default (enterprise) block-first rules
-    wedge_rules.yaml  # CLI-wedge redact-first policy
+    browser-rules.yaml # Browser block-first policy
+    cli-rules.yaml     # CLI proxy redact-first policy
   config.py           # Settings model (env-driven)
 
 app/                  # Browser mode + native desktop app + dashboard
@@ -177,7 +176,4 @@ app/                  # Browser mode + native desktop app + dashboard
 **[Apache License 2.0](./LICENSE)** — open source. Use it, modify it, ship it, contribute
 back. See [`NOTICE`](./NOTICE).
 
-This is the **Community Edition**: the full single-device LLM firewall, free and open. The
-commercial Domestique editions — fleet management, non-bypassable MDM enforcement, compliance
-automation, analytics, and support — are separate proprietary products. "Domestique" is a
-trademark of Domestique Labs; the license covers the code, not the name.
+The full single-device LLM firewall is free and open under Apache-2.0.

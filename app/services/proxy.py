@@ -16,8 +16,8 @@ import sys
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from app.config.schema import AppConfig
 from app.config.store import APP_DATA_DIR
 from app.services.runtime import (
     is_macos,
@@ -25,6 +25,9 @@ from app.services.runtime import (
     is_windows,
     subprocess_group_kwargs,
 )
+
+if TYPE_CHECKING:
+    from app.config.schema import AppConfig
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -94,9 +97,9 @@ class ProxyService:
 
         env = self._build_env(config)
         APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        self._log_file = open(APP_DATA_DIR / "firewall.log", "a")
+        self._log_file = open(APP_DATA_DIR / "firewall.log", "a")  # noqa: SIM115
 
-        self._process = subprocess.Popen(
+        self._process = subprocess.Popen(  # noqa: S603
             [
                 sys.executable,
                 "-m",
@@ -329,7 +332,7 @@ class BrowserProxyService:
 
         addon_path = Path(__file__).parent / "mitm_addon.py"
         APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        log_file = open(APP_DATA_DIR / "browser_proxy.log", "a")
+        log_file = open(APP_DATA_DIR / "browser_proxy.log", "a")  # noqa: SIM115
 
         # Find mitmdump - prefer the project venv (reliable, avoids py2app
         # PATH contamination on macOS), then PATH, then alongside the running
@@ -408,7 +411,7 @@ class BrowserProxyService:
                 "--quiet",
             ]
 
-        self._process = subprocess.Popen(
+        self._process = subprocess.Popen(  # noqa: S603
             cmd,
             cwd=str(PROJECT_ROOT),
             env=env,
@@ -437,7 +440,7 @@ class BrowserProxyService:
                 try:
                     err = log_path.read_text().split("\n")[-3:]
                     err = "\n".join(err)
-                except Exception:
+                except Exception:  # noqa: S110
                     pass
                 self._process = None
                 raise RuntimeError(f"mitmdump exited immediately: {err}")
@@ -521,8 +524,8 @@ class BrowserProxyService:
             )
         # macOS and Linux: use lsof to find and kill the listener
         try:
-            result = subprocess.run(
-                ["lsof", "-ti", f":{self.PROXY_PORT}", "-sTCP:LISTEN"],
+            result = subprocess.run(  # noqa: S603
+                ["lsof", "-ti", f":{self.PROXY_PORT}", "-sTCP:LISTEN"],  # noqa: S607
                 capture_output=True,
                 text=True,
             )
@@ -543,8 +546,8 @@ class BrowserProxyService:
 
         pids = self._find_windows_mitmproxy_pids()
         for pid in pids:
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
+            subprocess.run(  # noqa: S603
+                ["taskkill", "/PID", str(pid), "/T", "/F"],  # noqa: S607
                 capture_output=True,
                 text=True,
             )
@@ -576,8 +579,8 @@ class BrowserProxyService:
             """
         )
         try:
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", script],
+            result = subprocess.run(  # noqa: S603
+                ["powershell", "-NoProfile", "-Command", script],  # noqa: S607
                 capture_output=True,
                 text=True,
             )

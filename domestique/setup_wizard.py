@@ -540,7 +540,6 @@ def _detection_stack_of(data: dict[str, object]) -> dict[str, object]:
 def apply_wizard_config(
     *,
     gliner: bool,
-    openai_filter: bool,
     preset: str | None,
     browser: bool,
 ) -> Path:
@@ -557,7 +556,6 @@ def apply_wizard_config(
     stack = _detection_stack_of(data)
     stack["regex"] = True
     stack["gliner_pii"] = gliner
-    stack["openai_privacy_filter"] = openai_filter
     stack_key = PRESET_TO_STACK_KEY.get(preset) if preset else None
     for key in ALL_LLM_STACK_KEYS:
         stack[key] = key == stack_key
@@ -958,7 +956,6 @@ class WizardChoices:
     """What the user picked during the ``domestique setup`` walkthrough."""
 
     gliner: bool
-    openai_filter: bool
     preset: str | None
     browser: bool
     desktop_ui: bool
@@ -973,13 +970,6 @@ def _gliner_why(hw: HardwareProfile) -> str:
     return (
         f"why: catches names/addresses/emails that regex can't; with your "
         f"{hw.ram_gb:g} GB RAM the 300 MB model runs comfortably (~20 ms/prompt)."
-    )
-
-
-def _openai_filter_why(hw: HardwareProfile) -> str:
-    return (
-        f"why: GLiNER already covers most of what this 1.5B-parameter model finds; "
-        f"it adds ~130 ms/prompt and competes for your {hw.ram_gb:g} GB RAM."
     )
 
 
@@ -1039,10 +1029,6 @@ def _wizard_walkthrough(hw: HardwareProfile, *, yes: bool) -> WizardChoices:
     _print(f"  {_gliner_why(hw)}")
     gliner = _decide("  enable GLiNER PII detection?", default=hw.ram_gb >= 8, yes=yes)
 
-    section("Tier 2 - OpenAI Privacy Filter (~1.5 GB)")
-    _print(f"  {_openai_filter_why(hw)}")
-    openai_filter = _decide("  enable the OpenAI Privacy Filter?", default=False, yes=yes)
-
     section("Tier 3 - local LLM classifier (via Ollama)")
     _print(f"  {_tier3_why(hw, recommended)}")
     if yes:
@@ -1071,7 +1057,6 @@ def _wizard_walkthrough(hw: HardwareProfile, *, yes: bool) -> WizardChoices:
 
     return WizardChoices(
         gliner=gliner,
-        openai_filter=openai_filter,
         preset=preset,
         browser=browser,
         desktop_ui=desktop_ui,
@@ -1093,7 +1078,6 @@ def _confirm_wizard_plan(choices: WizardChoices, extras: list[str]) -> bool:
     section("plan")
     _print("  Tier 1 regex        always on")
     _print(f"  GLiNER PII          {'yes (~300 MB)' if choices.gliner else 'no'}")
-    _print(f"  OpenAI Privacy      {'yes (~1.5 GB)' if choices.openai_filter else 'no'}")
     if choices.preset:
         info = LLM_PRESETS[choices.preset]
         _print(f"  Tier 3 LLM          {choices.preset} ({info['model']}, ~{info['size_gb']} GB)")
@@ -1170,7 +1154,6 @@ def run_wizard(*, yes: bool = False, demo: bool = True) -> int:
 
     cfg_path = apply_wizard_config(
         gliner=choices.gliner,
-        openai_filter=choices.openai_filter,
         preset=choices.preset,
         browser=choices.browser,
     )

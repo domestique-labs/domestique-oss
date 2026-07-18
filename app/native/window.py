@@ -92,7 +92,7 @@ class MainWindow:
         if DASHBOARD_PATH.exists():
             import time
 
-            cache_bust = int(time.time())
+            int(time.time())
             url = NSURL.fileURLWithPath_(str(DASHBOARD_PATH))
             # Force reload by using loadFileURL which doesn't cache as aggressively
             self._webview.loadFileURL_allowingReadAccessToURL_(

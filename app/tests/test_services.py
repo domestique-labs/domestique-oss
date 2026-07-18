@@ -73,7 +73,7 @@ class TestProxyService:
         argv = mock_popen.call_args[0][0]
         host = argv[argv.index("--host") + 1]
         assert host == "127.0.0.1"
-        assert "0.0.0.0" not in argv
+        assert "0.0.0.0" not in argv  # noqa: S104
 
     @patch("subprocess.Popen")
     def test_start_honors_explicit_bind_all_opt_in(self, mock_popen):
@@ -83,14 +83,14 @@ class TestProxyService:
         mock_popen.return_value = mock_proc
 
         svc = ProxyService()
-        config = AppConfig(proxy_port=9000, proxy_host="0.0.0.0")
+        config = AppConfig(proxy_port=9000, proxy_host="0.0.0.0")  # noqa: S104
 
         with patch("builtins.open", mock_open()):
             svc.start(config)
 
         argv = mock_popen.call_args[0][0]
         host = argv[argv.index("--host") + 1]
-        assert host == "0.0.0.0"
+        assert host == "0.0.0.0"  # noqa: S104
 
     @patch("subprocess.Popen")
     def test_start_raises_if_already_running(self, mock_popen):

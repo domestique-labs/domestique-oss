@@ -31,4 +31,4 @@ Current history is minimal (`init`), so use concise, imperative subjects such as
 
 ## Security & Configuration Tips
 
-Never commit real provider keys or generated certificates. Keep local secrets in `.env`, update `.env.example` when adding required settings, and review changes to `domestique/policy/rules.yaml`, `infra/certs/`, and `infra/dns/` carefully because they affect enforcement and deployment behavior.
+Never commit real provider keys or generated certificates. Keep local secrets in `.env`, update `.env.example` when adding required settings, and review changes to `domestique/policy/browser-rules.yaml`, `infra/certs/`, and `infra/dns/` carefully because they affect enforcement and deployment behavior.

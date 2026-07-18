@@ -23,8 +23,8 @@ Security Model:
       also configure a blanket ProxyServer / -setsecurewebproxy /
       -setwebproxy, because that would route ALL HTTP/HTTPS traffic through
       mitmproxy - breaking unrelated apps (IDEs, package managers, git,
-      corporate tools) whenever they don't trust our CA or mitmproxy isn't
-      running, and conflicting with any corporate proxy already configured.
+      other tools) whenever they don't trust our CA or mitmproxy isn't
+      running, and conflicting with any existing proxy already configured.
       Tools that don't evaluate the system PAC (some CLIs/daemons) are out
       of scope for this browser-proxy path; point them at
       http://127.0.0.1:<port> directly via the CLI-integration mode instead.
@@ -40,14 +40,19 @@ Security Model:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
 import socket
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.services.runtime import is_macos, is_windows
+
+if TYPE_CHECKING:
+    import winreg
 
 CA_DIR = Path.home() / ".domestique" / "ca"
 CA_KEY_PATH = CA_DIR / "domestique-ca.key"
@@ -160,7 +165,7 @@ def _generate_ca_cryptography() -> tuple[Path, Path]:
     subject = issuer = x509.Name(
         [
             x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Domestique Enterprise Security"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Domestique"),
             x509.NameAttribute(NameOID.COMMON_NAME, "Domestique Local CA"),
         ]
     )
@@ -224,7 +229,7 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
             "or install OpenSSL."
         )
 
-    subprocess.run(
+    subprocess.run(  # noqa: S603
         [openssl, "genrsa", "-out", str(CA_KEY_PATH), "4096"],
         check=True,
         capture_output=True,
@@ -240,7 +245,7 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
         "\n"
         "[req_dn]\n"
         "CN = Domestique Local CA\n"
-        "O = Domestique Enterprise Security\n"
+        "O = Domestique\n"
         "C = US\n"
         "\n"
         "[v3_ca]\n"
@@ -248,7 +253,7 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
         "keyUsage = critical, keyCertSign, cRLSign\n"
         "subjectKeyIdentifier = hash\n"
     )
-    subprocess.run(
+    subprocess.run(  # noqa: S603
         [
             openssl,
             "req",
@@ -292,8 +297,8 @@ def install_ca_to_keychain(cert_path: Path | None = None) -> bool:
         return False
 
     if is_windows():
-        result = subprocess.run(
-            ["certutil", "-user", "-addstore", "Root", str(cert)],
+        result = subprocess.run(  # noqa: S603
+            ["certutil", "-user", "-addstore", "Root", str(cert)],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -303,8 +308,8 @@ def install_ca_to_keychain(cert_path: Path | None = None) -> bool:
         return False
 
     # Add to login keychain
-    result = subprocess.run(
-        [
+    result = subprocess.run(  # noqa: S603
+        [  # noqa: S607
             "security",
             "add-trusted-cert",
             "-r",
@@ -326,8 +331,8 @@ def is_ca_installed() -> bool:
     """
     for name in ("Domestique Local CA", "LLM Firewall Local CA"):
         if is_windows():
-            result = subprocess.run(
-                ["certutil", "-user", "-store", "Root", name],
+            result = subprocess.run(  # noqa: S603
+                ["certutil", "-user", "-store", "Root", name],  # noqa: S607
                 capture_output=True,
                 text=True,
             )
@@ -338,8 +343,8 @@ def is_ca_installed() -> bool:
         if not is_macos():
             return False
 
-        result = subprocess.run(
-            ["security", "find-certificate", "-c", name],
+        result = subprocess.run(  # noqa: S603
+            ["security", "find-certificate", "-c", name],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -418,9 +423,9 @@ def enable_system_proxy(port: int = 8080) -> bool:
         # through 127.0.0.1:{port}; every other host evaluates to DIRECT.
         # We deliberately do NOT also call -setsecurewebproxy/-setwebproxy -
         # those set a blanket system proxy that would route ALL HTTP/HTTPS
-        # traffic (Cursor's backend, pip, git, corporate tools, etc.) through
+        # traffic (Cursor's backend, pip, git, other tools, etc.) through
         # mitmproxy, breaking those apps whenever they don't trust our CA or
-        # mitmproxy isn't running, and conflicting with any corporate proxy
+        # mitmproxy isn't running, and conflicting with any existing proxy
         # already configured on the machine.
         #
         # Tradeoff: some CLIs/daemons don't evaluate the system PAC at all
@@ -435,12 +440,12 @@ def enable_system_proxy(port: int = 8080) -> bool:
         # briefly. The existing guidance to restart the browser after
         # enabling interception addresses this; it is a browser-side caching
         # behavior, not something a blanket proxy is needed to fix.
-        subprocess.run(
-            ["networksetup", "-setautoproxyurl", interface, pac_url],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setautoproxyurl", interface, pac_url],  # noqa: S607
             capture_output=True,
         )
-        subprocess.run(
-            ["networksetup", "-setautoproxystate", interface, "on"],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setautoproxystate", interface, "on"],  # noqa: S607
             capture_output=True,
         )
 
@@ -448,22 +453,22 @@ def enable_system_proxy(port: int = 8080) -> bool:
         # blanket-era install of Domestique (before this PAC-only fix). We
         # never SET these to "on" - only ever turn them off - so this is a
         # no-op on a fresh install where they were never configured.
-        subprocess.run(
-            ["networksetup", "-setsecurewebproxystate", interface, "off"],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setsecurewebproxystate", interface, "off"],  # noqa: S607
             capture_output=True,
         )
-        subprocess.run(
-            ["networksetup", "-setwebproxystate", interface, "off"],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setwebproxystate", interface, "off"],  # noqa: S607
             capture_output=True,
         )
 
     # Flush DNS cache to force fresh lookups (PAC host resolution, etc.)
-    subprocess.run(["dscacheutil", "-flushcache"], capture_output=True)
+    subprocess.run(["dscacheutil", "-flushcache"], capture_output=True)  # noqa: S607
 
     # Verify at least one interface has the PAC enabled
     for interface in interfaces:
-        check = subprocess.run(
-            ["networksetup", "-getautoproxyurl", interface],
+        check = subprocess.run(  # noqa: S603
+            ["networksetup", "-getautoproxyurl", interface],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -498,16 +503,16 @@ def disable_system_proxy() -> bool:
         # turn off. The securewebproxy/webproxy -off calls are kept as
         # defensive no-ops in case an older Domestique version left one of
         # those set on this machine (pre PAC-only fix).
-        subprocess.run(
-            ["networksetup", "-setsecurewebproxystate", interface, "off"],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setsecurewebproxystate", interface, "off"],  # noqa: S607
             capture_output=True,
         )
-        subprocess.run(
-            ["networksetup", "-setwebproxystate", interface, "off"],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setwebproxystate", interface, "off"],  # noqa: S607
             capture_output=True,
         )
-        subprocess.run(
-            ["networksetup", "-setautoproxystate", interface, "off"],
+        subprocess.run(  # noqa: S603
+            ["networksetup", "-setautoproxystate", interface, "off"],  # noqa: S607
             capture_output=True,
         )
     return True
@@ -522,7 +527,7 @@ def _get_all_active_interfaces() -> list[str]:
         return _get_non_macos_interfaces()
 
     result = subprocess.run(
-        ["networksetup", "-listallnetworkservices"],
+        ["networksetup", "-listallnetworkservices"],  # noqa: S607
         capture_output=True,
         text=True,
     )
@@ -535,12 +540,13 @@ def _get_all_active_interfaces() -> list[str]:
         if line.startswith("*"):
             continue  # Disabled interface
         # Check if this interface has an IP
-        status = subprocess.run(
-            ["networksetup", "-getinfo", line],
+        status = subprocess.run(  # noqa: S603
+            ["networksetup", "-getinfo", line],  # noqa: S607
             capture_output=True,
             text=True,
         )
-        if "IP address" in status.stdout and "0.0.0.0" not in status.stdout:
+        # "0.0.0.0" here is a substring test on `networksetup` output, not a bind address.
+        if "IP address" in status.stdout and "0.0.0.0" not in status.stdout:  # noqa: S104
             active.append(line)
 
     return active if active else ["Wi-Fi"]
@@ -569,12 +575,12 @@ def _enable_windows_proxy(port: int) -> bool:
     INTERCEPTED_DOMAINS through 127.0.0.1:{port}; every other host evaluates
     to DIRECT in FindProxyForURL. We deliberately do NOT also set
     ProxyServer/ProxyOverride - that is a blanket system proxy that routes
-    ALL HTTP/HTTPS traffic (Cursor's backend, pip, git, corporate tools,
+    ALL HTTP/HTTPS traffic (Cursor's backend, pip, git, other tools,
     etc.) through mitmproxy, breaking those apps whenever they don't trust
-    our CA or mitmproxy isn't running, and conflicting with any corporate
+    our CA or mitmproxy isn't running, and conflicting with any existing
     proxy already configured on this machine (see
     _backup_windows_proxy_settings - if the user already had an
-    AutoConfigURL, e.g. a corporate PAC, we back it up and restore it on
+    AutoConfigURL, e.g. a existing PAC, we back it up and restore it on
     disable rather than leave our own PAC in place).
 
     Idempotency note: we also unconditionally DELETE ProxyServer/
@@ -644,8 +650,8 @@ def _backup_windows_proxy_settings(key_path: str) -> None:
 def _restore_windows_proxy() -> bool:
     """Restore Windows proxy values saved by _backup_windows_proxy_settings.
 
-    This also restores a pre-existing corporate AutoConfigURL: if the user
-    already had their own PAC configured (common on managed/enterprise
+    This also restores a pre-existing existing AutoConfigURL: if the user
+    already had their own PAC configured (common on managed
     machines) before enabling Domestique, _backup_windows_proxy_settings
     captured it, and the loop below writes that exact value back rather
     than just deleting AutoConfigURL. If the user never had one, the
@@ -653,11 +659,11 @@ def _restore_windows_proxy() -> bool:
     "no PAC configured" state.
 
     FOLLOW-UP (not implemented here): while Domestique interception is
-    *enabled*, we overwrite the corporate AutoConfigURL wholesale rather
-    than chaining to it (e.g. having our PAC delegate to the corporate PAC
-    for domains we don't care about). For an enterprise/Pro deployment,
+    *enabled*, we overwrite the existing AutoConfigURL wholesale rather
+    than chaining to it (e.g. having our PAC delegate to the existing PAC
+    for domains we don't care about). For a managed deployment,
     chaining would be safer than a full overwrite-and-restore, since any
-    corporate PAC logic (e.g. internal domains needing a specific proxy)
+    existing PAC logic (e.g. internal domains needing a specific proxy)
     is inactive for the duration Domestique is on. Restore-on-disable (below)
     mitigates the risk once the user turns interception off, but does not
     help while it's running.
@@ -691,13 +697,11 @@ def _restore_windows_proxy() -> bool:
     return True
 
 
-def _delete_winreg_value(key, name: str) -> None:
+def _delete_winreg_value(key: winreg.HKEYType, name: str) -> None:
     import winreg
 
-    try:
+    with contextlib.suppress(FileNotFoundError):
         winreg.DeleteValue(key, name)
-    except FileNotFoundError:
-        pass
 
 
 def _windows_proxy_points_to_domestique(key_path: str, pac_url: str) -> bool:
@@ -725,7 +729,7 @@ def _refresh_windows_proxy_settings() -> None:
         internet_option_refresh = 37
         ctypes.windll.Wininet.InternetSetOptionW(0, internet_option_settings_changed, 0, 0)
         ctypes.windll.Wininet.InternetSetOptionW(0, internet_option_refresh, 0, 0)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
 

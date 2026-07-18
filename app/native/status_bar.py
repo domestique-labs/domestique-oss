@@ -7,6 +7,7 @@ active, faded when disabled - like Notion and other native macOS apps.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from AppKit import (
     NSImage,
@@ -35,7 +36,7 @@ class StatusBar:
     # Class-level retain prevents garbage collection
     _instance = None
 
-    def __init__(self, delegate) -> None:
+    def __init__(self, delegate: Any) -> None:
         self._delegate = delegate
 
         # Fixed square width (same as Notion, Dropbox, etc.)
@@ -102,7 +103,7 @@ class StatusBar:
         menu = NSMenu.new()
 
         # App name header (non-interactive)
-        header = self._add_item(menu, "Domestique", action=None, enabled=False)
+        self._add_item(menu, "Domestique", action=None, enabled=False)
 
         # Status label
         self._status_label = self._add_item(

@@ -11,6 +11,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 _SECRET = "AKIAIOSFODNN7EXAMPLE"
 
@@ -38,3 +42,38 @@ def test_demo_subprocess_redacts_secret():
     after_block = out.split("AFTER")[-1]
     assert _SECRET not in after_block
     assert "REDACTED" in out
+
+
+class TestDemoFormatting:
+    def test_canned_output_has_config_header_and_findings(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from domestique.cli import run_demo
+
+        run_demo(interactive=False)
+        out = capsys.readouterr().out
+        assert "Active configuration" in out
+        assert "Detection stack" in out
+        assert "BEFORE" in out and "AFTER" in out
+        assert "[AWS_ACCESS_KEY_REDACTED]" in out
+
+    def test_non_tty_emits_no_ansi(self, capsys: pytest.CaptureFixture[str]) -> None:
+        from domestique.cli import run_demo
+
+        # capsys makes stdout a non-tty -> color must be off
+        run_demo(interactive=False)
+        out = capsys.readouterr().out
+        assert "\033[" not in out
+
+    def test_interactive_ledger_on_user_input(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from domestique.cli import run_demo
+
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["ssn 123-45-6789", ""]))
+        run_demo(interactive=True)
+        out = capsys.readouterr().out
+        assert "redacted" in out
+        assert "[US_SSN_REDACTED]" in out

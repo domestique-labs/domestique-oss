@@ -1,7 +1,7 @@
 """LLM Firewall - Audit logger.
 
 Emits structured JSONL events for every firewall decision. Designed for
-ingestion by enterprise SIEM systems (Splunk, Sentinel, ELK).
+ingestion by SIEM systems (Splunk, Sentinel, ELK).
 
 Performance: writes are buffered and flushed periodically or at shutdown.
 Audit logging is entirely non-blocking - failures are logged but never

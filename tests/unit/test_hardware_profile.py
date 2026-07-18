@@ -85,7 +85,6 @@ class TestLightProfileStack:
         light = _light_profile_stack({})
         assert light["regex"] is True
         assert light["gliner_pii"] is False
-        assert light["openai_privacy_filter"] is False
         assert light["gemma4_e2b"] is False
         assert light["legacy_cpu"] is False
 
@@ -300,7 +299,6 @@ class TestAddonHardwareProfileWiring:
                 "detection_stack": {
                     "regex": True,
                     "gliner_pii": False,
-                    "openai_privacy_filter": False,
                     "gemma4_e2b": False,
                     "qwen3_1_7b": True,
                     "legacy_cpu": False,

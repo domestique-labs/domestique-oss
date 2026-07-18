@@ -44,7 +44,7 @@ class TestWalkthroughPromptsFailSafeOnEof:
 
     def test_wizard_plan_confirm_eof_aborts(self, eof_stdin):
         choices = wizard.WizardChoices(
-            gliner=True, openai_filter=False, preset="legacy-cpu", browser=False, desktop_ui=False
+            gliner=True, preset="legacy-cpu", browser=False, desktop_ui=False
         )
         assert wizard._confirm_wizard_plan(choices, ["ner"]) is False
 

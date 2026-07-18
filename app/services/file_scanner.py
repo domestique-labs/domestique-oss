@@ -27,6 +27,10 @@ import time
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -352,7 +356,11 @@ def extract_text(data: bytes, filename: str = "") -> ExtractionResult:
 # ---------------------------------------------------------------------------
 
 
-def scan_file(data: bytes, filename: str = "", detector_fn=None) -> ScanResult:
+def scan_file(
+    data: bytes,
+    filename: str = "",
+    detector_fn: Callable[[str], list[dict]] | None = None,
+) -> ScanResult:
     """Scan a file for sensitive content.
 
     This is the main entry point. It:
@@ -414,7 +422,11 @@ def scan_file(data: bytes, filename: str = "", detector_fn=None) -> ScanResult:
     )
 
 
-def scan_base64(encoded: str, filename: str = "", detector_fn=None) -> ScanResult:
+def scan_base64(
+    encoded: str,
+    filename: str = "",
+    detector_fn: Callable[[str], list[dict]] | None = None,
+) -> ScanResult:
     """Scan base64-encoded file content.
 
     Common in LLM API payloads where images are sent as base64 strings.

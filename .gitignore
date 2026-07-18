@@ -25,3 +25,6 @@ reports/
 .claude/
 .superpowers/
 docs/superpowers/
+
+# macOS Finder metadata
+.DS_Store

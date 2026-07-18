@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import plistlib
 import subprocess
@@ -60,8 +61,8 @@ class AutoLaunchManager:
 
         # Check LaunchAgent plist exists and is loaded
         if LAUNCH_AGENT_PLIST.exists():
-            result = subprocess.run(
-                ["launchctl", "list", BUNDLE_ID],
+            result = subprocess.run(  # noqa: S603
+                ["launchctl", "list", BUNDLE_ID],  # noqa: S607
                 capture_output=True,
                 text=True,
             )
@@ -152,12 +153,12 @@ class AutoLaunchManager:
     def _load_launch_agent(self) -> None:
         """Load the LaunchAgent with launchctl."""
         # Unload first to avoid "already loaded" errors
-        subprocess.run(
-            ["launchctl", "unload", str(LAUNCH_AGENT_PLIST)],
+        subprocess.run(  # noqa: S603
+            ["launchctl", "unload", str(LAUNCH_AGENT_PLIST)],  # noqa: S607
             capture_output=True,
         )
-        result = subprocess.run(
-            ["launchctl", "load", str(LAUNCH_AGENT_PLIST)],
+        result = subprocess.run(  # noqa: S603
+            ["launchctl", "load", str(LAUNCH_AGENT_PLIST)],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -166,8 +167,8 @@ class AutoLaunchManager:
 
     def _unload_launch_agent(self) -> None:
         """Unload the LaunchAgent."""
-        subprocess.run(
-            ["launchctl", "unload", str(LAUNCH_AGENT_PLIST)],
+        subprocess.run(  # noqa: S603
+            ["launchctl", "unload", str(LAUNCH_AGENT_PLIST)],  # noqa: S607
             capture_output=True,
         )
 
@@ -209,11 +210,8 @@ class AutoLaunchManager:
 
         with winreg.CreateKeyEx(
             winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE
-        ) as key:
-            try:
-                winreg.DeleteValue(key, APP_NAME)
-            except FileNotFoundError:
-                pass
+        ) as key, contextlib.suppress(FileNotFoundError):
+            winreg.DeleteValue(key, APP_NAME)
         logger.info("Windows auto-launch disabled")
         return True
 
@@ -231,7 +229,7 @@ def generate_installer_script() -> str:
     Returns the script content as a string.
     """
     return """#!/bin/bash
-# Domestique Installer - One-line enterprise deployment
+# Domestique Installer - One-line deployment
 # Usage: curl -sSL https://domestique.dev/install | bash
 set -euo pipefail
 
@@ -324,4 +322,4 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 echo "✅ Domestique uninstalled."
-"""
+"""  # noqa: E501

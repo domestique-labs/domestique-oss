@@ -8,7 +8,7 @@ scanned request must be flagged with the distinct, actionable category
 that every other unexpected detector exception collapses into.
 
 It also asserts the fail-closed BLOCK decision itself: ``domestique/policy/
-rules.yaml`` has an explicit ``block-detector-failures`` rule matching both
+browser-rules.yaml`` has an explicit ``block-detector-failures`` rule matching both
 ``detector_error`` and ``gliner_not_cached`` at high confidence, so a
 synthetic failure finding must always resolve to ``Action.BLOCK`` /
 ``should_block is True`` - never silently ALLOW.

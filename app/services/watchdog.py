@@ -23,11 +23,14 @@ import logging
 import subprocess
 import threading
 import time
-from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.services.runtime import is_macos, is_port_listening, is_windows
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger("domestique.watchdog")
 
@@ -290,8 +293,8 @@ class Watchdog:
         for domain in INTERCEPTED_DOMAINS:
             # Resolve domain to IPs (best-effort, may not catch all CDN IPs)
             try:
-                result = subprocess.run(
-                    ["dig", "+short", domain],
+                result = subprocess.run(  # noqa: S603
+                    ["dig", "+short", domain],  # noqa: S607
                     capture_output=True,
                     text=True,
                     timeout=5,
@@ -300,18 +303,18 @@ class Watchdog:
                     line = line.strip()
                     if line and not line.endswith("."):
                         rules.append(f"block drop out proto tcp from any to {line} port 443")
-            except Exception:
+            except Exception:  # noqa: S110
                 pass
 
         rules_file.write_text("\n".join(rules) + "\n")
 
         # Load rules (requires root - will fail silently without sudo)
-        subprocess.run(
-            ["sudo", "-n", "pfctl", "-f", str(rules_file)],
+        subprocess.run(  # noqa: S603
+            ["sudo", "-n", "pfctl", "-f", str(rules_file)],  # noqa: S607
             capture_output=True,
         )
         subprocess.run(
-            ["sudo", "-n", "pfctl", "-e"],
+            ["sudo", "-n", "pfctl", "-e"],  # noqa: S607
             capture_output=True,
         )
         logger.info("PF fail-closed rules applied")
@@ -326,7 +329,7 @@ class Watchdog:
             rules_file.unlink()
         # Reload default rules
         subprocess.run(
-            ["sudo", "-n", "pfctl", "-f", "/etc/pf.conf"],
+            ["sudo", "-n", "pfctl", "-f", "/etc/pf.conf"],  # noqa: S607
             capture_output=True,
         )
         logger.info("PF fail-closed rules removed")
@@ -338,7 +341,7 @@ def _verify_system_proxy_config() -> str:
 
     if is_macos():
         proxy_check = subprocess.run(
-            ["scutil", "--proxy"],
+            ["scutil", "--proxy"],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -390,7 +393,7 @@ def verify_interception_chain(proxy_port: int = 8080) -> dict:
         import urllib.request
 
         req = urllib.request.Request("http://127.0.0.1:9876/proxy.pac")
-        resp = urllib.request.urlopen(req, timeout=3)
+        resp = urllib.request.urlopen(req, timeout=3)  # noqa: S310
         pac_content = resp.read().decode()
         results["pac_server"] = "ok" if "FindProxyForURL" in pac_content else "invalid"
     except Exception as e:

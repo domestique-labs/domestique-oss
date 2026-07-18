@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 
-class InjectionCategory(str, Enum):
+class InjectionCategory(str, Enum):  # noqa: UP042  # str-mixin str() semantics kept intentionally
     """Categories of prompt injection attacks."""
 
     SYSTEM_PROMPT_EXTRACTION = "system_prompt_extraction"
@@ -43,7 +43,7 @@ class InjectionCategory(str, Enum):
     JAILBREAK = "jailbreak"
 
 
-class Severity(str, Enum):
+class Severity(str, Enum):  # noqa: UP042  # str-mixin str() semantics kept intentionally
     """Severity of detected injection attempt."""
 
     LOW = "low"
@@ -130,7 +130,7 @@ _INJECTION_PATTERNS: list[InjectionPattern] = [
     InjectionPattern(
         name="verbatim_request",
         pattern=re.compile(
-            r"(?:repeat|recite|echo|verbatim|word.for.word)\s+(?:everything|all|every instruction)",
+            r"(?:repeat|recite|echo|verbatim|word.for.word)\s+(?:everything|all|every instruction)",  # noqa: E501
             re.IGNORECASE,
         ),
         category=InjectionCategory.SYSTEM_PROMPT_EXTRACTION,

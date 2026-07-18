@@ -34,8 +34,8 @@ def is_cert_trusted() -> bool:
         return False
 
     if sys.platform == "darwin":
-        result = subprocess.run(
-            ["security", "verify-cert", "-c", str(CA_CERT)],
+        result = subprocess.run(  # noqa: S603
+            ["security", "verify-cert", "-c", str(CA_CERT)],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -44,8 +44,8 @@ def is_cert_trusted() -> bool:
     if sys.platform == "win32":
         # Check if the CA is in the current user's Root store
         for name in ("Domestique Local CA", "LLM Firewall Local CA"):
-            result = subprocess.run(
-                ["certutil", "-user", "-store", "Root", name],
+            result = subprocess.run(  # noqa: S603
+                ["certutil", "-user", "-store", "Root", name],  # noqa: S607
                 capture_output=True,
                 text=True,
             )
@@ -65,8 +65,8 @@ def _extract_issuer_der(cert_path: Path) -> bytes:
     """
     import re
 
-    result = subprocess.run(
-        ["openssl", "asn1parse", "-in", str(cert_path)],
+    result = subprocess.run(  # noqa: S603
+        ["openssl", "asn1parse", "-in", str(cert_path)],  # noqa: S607
         capture_output=True,
         text=True,
         check=True,
@@ -81,8 +81,8 @@ def _extract_issuer_der(cert_path: Path) -> bytes:
         raise ValueError("Cannot locate issuer in certificate ASN.1 structure")
 
     issuer_offset = offsets[1]
-    r = subprocess.run(
-        [
+    r = subprocess.run(  # noqa: S603
+        [  # noqa: S607
             "openssl",
             "asn1parse",
             "-in",
@@ -120,24 +120,26 @@ def install_and_trust() -> bool:
     login_kc = Path.home() / "Library" / "Keychains" / "login.keychain-db"
 
     # Step 1 -- add to login keychain (idempotent)
-    subprocess.run(
-        ["security", "add-certificates", "-k", str(login_kc), str(CA_CERT)],
+    subprocess.run(  # noqa: S603
+        ["security", "add-certificates", "-k", str(login_kc), str(CA_CERT)],  # noqa: S607
         capture_output=True,
     )
 
     # Step 2 -- build trust plist
     try:
-        cert_der = subprocess.run(
-            ["openssl", "x509", "-in", str(CA_CERT), "-outform", "DER"],
+        cert_der = subprocess.run(  # noqa: S603
+            ["openssl", "x509", "-in", str(CA_CERT), "-outform", "DER"],  # noqa: S607
             capture_output=True,
             check=True,
         ).stdout
 
-        sha1 = hashlib.sha1(cert_der).hexdigest().upper()
+        # SHA-1 certificate fingerprint: an identity/display value (the standard
+        # fingerprint form shown by browsers/openssl), not a security hash.
+        sha1 = hashlib.sha1(cert_der).hexdigest().upper()  # noqa: S324
 
         serial_hex = (
-            subprocess.run(
-                ["openssl", "x509", "-in", str(CA_CERT), "-serial", "-noout"],
+            subprocess.run(  # noqa: S603
+                ["openssl", "x509", "-in", str(CA_CERT), "-serial", "-noout"],  # noqa: S607
                 capture_output=True,
                 text=True,
                 check=True,
@@ -166,8 +168,8 @@ def install_and_trust() -> bool:
             tmp_path = tmp.name
 
         # Step 3 -- import into user trust domain
-        result = subprocess.run(
-            ["security", "trust-settings-import", "-d", tmp_path],
+        result = subprocess.run(  # noqa: S603
+            ["security", "trust-settings-import", "-d", tmp_path],  # noqa: S607
             capture_output=True,
             text=True,
         )
@@ -192,8 +194,8 @@ def _install_and_trust_windows() -> bool:
     Uses ``certutil -user -addstore Root`` which does NOT require admin
     privileges — it writes to HKCU\\Software\\Microsoft\\SystemCertificates.
     """
-    result = subprocess.run(
-        ["certutil", "-user", "-addstore", "Root", str(CA_CERT)],
+    result = subprocess.run(  # noqa: S603
+        ["certutil", "-user", "-addstore", "Root", str(CA_CERT)],  # noqa: S607
         capture_output=True,
         text=True,
     )

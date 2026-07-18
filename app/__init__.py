@@ -1,6 +1,6 @@
 """Domestique desktop application.
 
-Provides enterprise-grade data loss prevention controls for LLM API traffic.
+Provides data loss prevention controls for LLM API traffic.
 On macOS it can use the native AppKit shell; on Windows and Linux it runs the
 same local API with the dashboard in the default browser.
 

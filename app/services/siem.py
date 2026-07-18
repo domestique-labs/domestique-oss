@@ -1,4 +1,4 @@
-"""SIEM integration - output audit events to enterprise security platforms.
+"""SIEM integration - output audit events to SIEM/security platforms.
 
 Supports multiple output formats and transports:
 - Syslog (RFC 5424) for Splunk, QRadar, Elastic
@@ -27,9 +27,11 @@ import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from queue import Empty, Full, Queue
+from typing import TYPE_CHECKING
 from urllib.request import Request, urlopen
 
-from app.services.audit import AuditEvent
+if TYPE_CHECKING:
+    from app.services.audit import AuditEvent
 
 logger = logging.getLogger("domestique.siem")
 
@@ -55,7 +57,7 @@ class SIEMBackend(ABC):
         """Send multiple events. Returns count of successful sends."""
         return sum(1 for e in events if self.send(e))
 
-    def close(self) -> None:
+    def close(self) -> None:  # noqa: B027
         """Clean up resources."""
         pass
 
@@ -261,7 +263,7 @@ class WebhookBackend(SIEMBackend):
     def send(self, event: AuditEvent) -> bool:
         try:
             data = json.dumps(event.to_dict()).encode("utf-8")
-            req = Request(
+            req = Request(  # noqa: S310
                 self._url,
                 data=data,
                 headers={
@@ -271,7 +273,7 @@ class WebhookBackend(SIEMBackend):
                 },
                 method="POST",
             )
-            resp = urlopen(req, timeout=self._timeout)
+            resp = urlopen(req, timeout=self._timeout)  # noqa: S310
             return 200 <= resp.status < 300
         except Exception as e:
             logger.debug(f"Webhook send failed: {e}")
@@ -283,7 +285,7 @@ class WebhookBackend(SIEMBackend):
             return 0
         try:
             data = json.dumps([e.to_dict() for e in events]).encode("utf-8")
-            req = Request(
+            req = Request(  # noqa: S310
                 self._url,
                 data=data,
                 headers={
@@ -294,7 +296,7 @@ class WebhookBackend(SIEMBackend):
                 },
                 method="POST",
             )
-            resp = urlopen(req, timeout=self._timeout)
+            resp = urlopen(req, timeout=self._timeout)  # noqa: S310
             if 200 <= resp.status < 300:
                 return len(events)
         except Exception as e:
@@ -315,7 +317,7 @@ class FileBackend(SIEMBackend):
     def __init__(self, path: Path | None = None) -> None:
         self._path = path or (Path.home() / ".domestique" / "siem" / "events.jsonl")
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._file = open(self._path, "a", buffering=1)
+        self._file = open(self._path, "a", buffering=1)  # noqa: SIM115
 
     @property
     def name(self) -> str:

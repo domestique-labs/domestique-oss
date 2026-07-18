@@ -28,7 +28,7 @@ Nothing yet published to a package index — the `0.1.0` items below ship from s
   No API key, no network, nothing to configure.
 - OpenAI front doors: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`.
 - Anthropic front door: `/v1/messages` (native, with `anthropic-version` passthrough).
-- Redact-by-default policy (`domestique/policy/wedge_rules.yaml`): the loudest secrets
+- Redact-by-default policy (`domestique/policy/cli-rules.yaml`): the loudest secrets
   (private keys, cloud secret keys, connection strings) block; everything else redacts
   in place so your workflow keeps working.
 - Streaming preserved end to end (SSE and chunked responses relay untouched, including

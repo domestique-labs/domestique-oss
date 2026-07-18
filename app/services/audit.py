@@ -1,4 +1,4 @@
-"""Enterprise audit logging with structured events, rotation, and retention.
+"""Audit logging with structured events, rotation, and retention.
 
 Provides a comprehensive audit trail for compliance (SOC 2, HIPAA, GDPR Art 30):
 - Structured JSON events with UUID request IDs
@@ -206,7 +206,9 @@ class AuditStore:
             params.append(user)
 
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
-        sql = f"SELECT * FROM audit_events {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"
+        # noqa justification: `where` is assembled only from hardcoded condition
+        # fragments (e.g. "user = ?"); all user values are bound via ? params below.
+        sql = f"SELECT * FROM audit_events {where} ORDER BY timestamp DESC LIMIT ? OFFSET ?"  # noqa: S608
         params.extend([limit, offset])
 
         conn = sqlite3.connect(str(self._db_path))
@@ -325,7 +327,7 @@ class AuditStore:
                 if event is None:
                     break  # Shutdown signal
                 batch.append(event)
-            except Exception:
+            except Exception:  # noqa: S110
                 pass  # Queue.get timeout - flush what we have
 
             # Flush batch if interval elapsed or batch is large
