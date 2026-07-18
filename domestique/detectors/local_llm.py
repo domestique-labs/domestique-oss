@@ -51,7 +51,7 @@ def _resolve_gemma_model() -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Model presets - tuned for different enterprise hardware profiles.
+# Model presets - tuned for different hardware profiles.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 MODEL_PRESETS: dict[str, dict[str, Any]] = {
@@ -84,7 +84,7 @@ MODEL_PRESETS: dict[str, dict[str, Any]] = {
 # System prompt for the LLM classifier.
 # Participants can improve this via the workshop prompt competition.
 _CLASSIFIER_SYSTEM_PROMPT = """\
-You are a DLP classifier. Classify if text contains sensitive enterprise data.
+You are a DLP classifier. Classify if text contains sensitive data.
 
 Categories (pick one):
 - PROPRIETARY_CODE: source code, algorithms, internal tooling

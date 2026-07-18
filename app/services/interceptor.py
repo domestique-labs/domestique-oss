@@ -23,8 +23,8 @@ Security Model:
       also configure a blanket ProxyServer / -setsecurewebproxy /
       -setwebproxy, because that would route ALL HTTP/HTTPS traffic through
       mitmproxy - breaking unrelated apps (IDEs, package managers, git,
-      corporate tools) whenever they don't trust our CA or mitmproxy isn't
-      running, and conflicting with any corporate proxy already configured.
+      other tools) whenever they don't trust our CA or mitmproxy isn't
+      running, and conflicting with any existing proxy already configured.
       Tools that don't evaluate the system PAC (some CLIs/daemons) are out
       of scope for this browser-proxy path; point them at
       http://127.0.0.1:<port> directly via the CLI-integration mode instead.
@@ -165,7 +165,7 @@ def _generate_ca_cryptography() -> tuple[Path, Path]:
     subject = issuer = x509.Name(
         [
             x509.NameAttribute(NameOID.COUNTRY_NAME, "US"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Domestique Enterprise Security"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "Domestique"),
             x509.NameAttribute(NameOID.COMMON_NAME, "Domestique Local CA"),
         ]
     )
@@ -245,7 +245,7 @@ def _generate_ca_openssl() -> tuple[Path, Path]:
         "\n"
         "[req_dn]\n"
         "CN = Domestique Local CA\n"
-        "O = Domestique Enterprise Security\n"
+        "O = Domestique\n"
         "C = US\n"
         "\n"
         "[v3_ca]\n"
@@ -423,9 +423,9 @@ def enable_system_proxy(port: int = 8080) -> bool:
         # through 127.0.0.1:{port}; every other host evaluates to DIRECT.
         # We deliberately do NOT also call -setsecurewebproxy/-setwebproxy -
         # those set a blanket system proxy that would route ALL HTTP/HTTPS
-        # traffic (Cursor's backend, pip, git, corporate tools, etc.) through
+        # traffic (Cursor's backend, pip, git, other tools, etc.) through
         # mitmproxy, breaking those apps whenever they don't trust our CA or
-        # mitmproxy isn't running, and conflicting with any corporate proxy
+        # mitmproxy isn't running, and conflicting with any existing proxy
         # already configured on the machine.
         #
         # Tradeoff: some CLIs/daemons don't evaluate the system PAC at all
@@ -575,12 +575,12 @@ def _enable_windows_proxy(port: int) -> bool:
     INTERCEPTED_DOMAINS through 127.0.0.1:{port}; every other host evaluates
     to DIRECT in FindProxyForURL. We deliberately do NOT also set
     ProxyServer/ProxyOverride - that is a blanket system proxy that routes
-    ALL HTTP/HTTPS traffic (Cursor's backend, pip, git, corporate tools,
+    ALL HTTP/HTTPS traffic (Cursor's backend, pip, git, other tools,
     etc.) through mitmproxy, breaking those apps whenever they don't trust
-    our CA or mitmproxy isn't running, and conflicting with any corporate
+    our CA or mitmproxy isn't running, and conflicting with any existing
     proxy already configured on this machine (see
     _backup_windows_proxy_settings - if the user already had an
-    AutoConfigURL, e.g. a corporate PAC, we back it up and restore it on
+    AutoConfigURL, e.g. a existing PAC, we back it up and restore it on
     disable rather than leave our own PAC in place).
 
     Idempotency note: we also unconditionally DELETE ProxyServer/
@@ -650,8 +650,8 @@ def _backup_windows_proxy_settings(key_path: str) -> None:
 def _restore_windows_proxy() -> bool:
     """Restore Windows proxy values saved by _backup_windows_proxy_settings.
 
-    This also restores a pre-existing corporate AutoConfigURL: if the user
-    already had their own PAC configured (common on managed/enterprise
+    This also restores a pre-existing existing AutoConfigURL: if the user
+    already had their own PAC configured (common on managed
     machines) before enabling Domestique, _backup_windows_proxy_settings
     captured it, and the loop below writes that exact value back rather
     than just deleting AutoConfigURL. If the user never had one, the
@@ -659,11 +659,11 @@ def _restore_windows_proxy() -> bool:
     "no PAC configured" state.
 
     FOLLOW-UP (not implemented here): while Domestique interception is
-    *enabled*, we overwrite the corporate AutoConfigURL wholesale rather
-    than chaining to it (e.g. having our PAC delegate to the corporate PAC
-    for domains we don't care about). For an enterprise/Pro deployment,
+    *enabled*, we overwrite the existing AutoConfigURL wholesale rather
+    than chaining to it (e.g. having our PAC delegate to the existing PAC
+    for domains we don't care about). For a managed deployment,
     chaining would be safer than a full overwrite-and-restore, since any
-    corporate PAC logic (e.g. internal domains needing a specific proxy)
+    existing PAC logic (e.g. internal domains needing a specific proxy)
     is inactive for the duration Domestique is on. Restore-on-disable (below)
     mitigates the risk once the user turns interception off, but does not
     help while it's running.

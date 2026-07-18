@@ -1312,7 +1312,7 @@ class DomestiqueAddon:
 
         Note: detector scan methods (GLiNER, regex) do CPU-bound work inside
         async scan(). For a single-user desktop proxy this is fine. For
-        multi-user enterprise deployments, wrap in asyncio.to_thread() to
+        multi-user deployments, wrap in asyncio.to_thread() to
         avoid blocking mitmproxy's event loop on slow detectors.
 
         Startup race: the pipeline is now built on a background thread (see

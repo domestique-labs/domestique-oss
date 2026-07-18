@@ -1,4 +1,4 @@
-"""SIEM integration - output audit events to enterprise security platforms.
+"""SIEM integration - output audit events to SIEM/security platforms.
 
 Supports multiple output formats and transports:
 - Syslog (RFC 5424) for Splunk, QRadar, Elastic

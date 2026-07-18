@@ -1,4 +1,4 @@
-"""Tests for the enterprise audit logging system."""
+"""Tests for the audit logging system."""
 
 from __future__ import annotations
 

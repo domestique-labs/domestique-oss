@@ -1,6 +1,6 @@
 """Policy-as-code engine - YAML-based configurable firewall rules.
 
-Enables enterprise IT to define detection and response policies declaratively.
+Lets operators define detection and response policies declaratively.
 Policies are version-controlled, hot-reloadable, and support:
 - Per-destination rules (different rules for ChatGPT vs internal LLM)
 - Per-category actions (block SSN, redact email, allow name)

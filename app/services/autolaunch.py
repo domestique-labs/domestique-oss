@@ -229,7 +229,7 @@ def generate_installer_script() -> str:
     Returns the script content as a string.
     """
     return """#!/bin/bash
-# Domestique Installer - One-line enterprise deployment
+# Domestique Installer - One-line deployment
 # Usage: curl -sSL https://domestique.dev/install | bash
 set -euo pipefail
 
