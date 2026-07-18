@@ -25,7 +25,6 @@ class TestDetectionStackConfig:
         stack = DetectionStackConfig()
         assert stack.regex is True
         assert stack.gliner_pii is False
-        assert stack.openai_privacy_filter is False
         assert stack.qwen3_1_7b is True
         assert stack.gemma4_e2b is False
         assert stack.legacy_cpu is False

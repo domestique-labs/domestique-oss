@@ -75,7 +75,6 @@ _MIN_USABLE_VRAM_GB = 2.0
 _STACK_SAFE_DEFAULTS = {
     "regex": True,
     "gliner_pii": False,
-    "openai_privacy_filter": False,
     "gemma4_e2b": False,
     "qwen3_1_7b": True,
     "legacy_cpu": False,

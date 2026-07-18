@@ -521,13 +521,6 @@
         </li>
         <li class="detector-item">
           <div class="detector-info">
-            <div class="detector-name">OpenAI Privacy Filter</div>
-            <div class="detector-meta">Tier 2 · ~130ms · 1.5B params · 8 PII categories</div>
-          </div>
-          <label class="toggle"><input type="checkbox" data-detector="openai_privacy_filter"><span class="slider"></span></label>
-        </li>
-        <li class="detector-item">
-          <div class="detector-info">
             <div class="detector-name">Qwen3 1.7B</div>
             <div class="detector-meta">Tier 3 · ~163ms · 1.8GB VRAM · Best efficiency ⭐</div>
           </div>
@@ -925,7 +918,7 @@ const CONFIG_KEY = 'domestique_config';
 let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || {
   proxy_enabled: false,
   detection_stack: {
-    regex: true, gliner_pii: false, openai_privacy_filter: false,
+    regex: true, gliner_pii: false,
     qwen3_1_7b: true, gemma4_e2b: false, legacy_cpu: false,
   },
   llm_preset: 'balanced',
@@ -933,10 +926,10 @@ let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || {
 
 // Preset definitions
 const PRESETS = {
-  minimal:      { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: false },
-  balanced:     { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
-  quality:      { regex: true, gliner_pii: true,  openai_privacy_filter: false, qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
-  'legacy-cpu': { regex: true, gliner_pii: false, openai_privacy_filter: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: true },
+  minimal:      { regex: true, gliner_pii: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: false },
+  balanced:     { regex: true, gliner_pii: false, qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
+  quality:      { regex: true, gliner_pii: true,  qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
+  'legacy-cpu': { regex: true, gliner_pii: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: true },
 };
 
 function selectPreset(el) {
@@ -2312,7 +2305,6 @@ async function loadBenchConfigSummary() {
     else detectors.push({name: 'Gemma 4 E2B', on: false});
     if (stack.qwen3_1_7b) detectors.push({name: 'Qwen3 1.7B', on: true, note: '~130ms'});
     else detectors.push({name: 'Qwen3 1.7B', on: false});
-    if (stack.openai_privacy_filter) detectors.push({name: 'OPF', on: true});
 
     const enabled = detectors.filter(d => d.on);
     const disabledDets = detectors.filter(d => !d.on);

@@ -20,9 +20,6 @@ class DetectionStackConfig:
     gliner_pii: bool = False
     """Tier 2: GLiNER2-PII zero-shot NER model (300M params). ~20ms. High recall but adds false positives."""  # noqa: E501
 
-    openai_privacy_filter: bool = False
-    """Tier 2: OpenAI Privacy Filter (1.5B params). ~130ms. Heavy."""
-
     gemma4_e2b: bool = False
     """Tier 3: Gemma 4 E2B via Ollama. ~155ms (MLX) / ~285ms (GGUF). Best quality. Needs 32GB+ RAM."""  # noqa: E501
 
