@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import random
+import re
 from pathlib import Path
 
 import pytest
@@ -147,10 +148,10 @@ def test_m5_streaming_matches_nonstreaming_for_all_splits(tmp_path: Path) -> Non
         svc.tokenize(value, cat)
 
     corpus = [
-        "[US_SSN_1] then [US_SSN_2] then [EMAIL_ADDRESS_1]",
-        "hallucinated [US_SSN_9] amid [US_SSN_1]",
-        "adjacent [US_SSN_1][US_SSN_2] and partial [US_SSN trailing",
-        "ends on token [EMAIL_ADDRESS_1]",
+        "[SSN_1] then [SSN_2] then [EMAIL_1]",
+        "hallucinated [SSN_9] amid [SSN_1]",
+        "adjacent [SSN_1][SSN_2] and partial [SSN trailing",
+        "ends on token [EMAIL_1]",
     ]
     rng = random.Random(7)
     for text in corpus:
@@ -169,9 +170,26 @@ def test_m5_streaming_matches_nonstreaming_for_all_splits(tmp_path: Path) -> Non
             assert "".join(out) == expected
 
     st = StreamDetokenizer(svc)
-    result = st.feed("[US_SSN_9]") + st.flush()
-    assert result == "[US_SSN_9]"
-    assert st.unknown_tokens == ["[US_SSN_9]"]
+    result = st.feed("[SSN_9]") + st.flush()
+    assert result == "[SSN_9]"
+    assert st.unknown_tokens == ["[SSN_9]"]
+
+
+@pytest.mark.asyncio
+async def test_m11_token_compactness(tmp_path: Path) -> None:
+    """M11: redaction markers stay cheap for the LLM — every rendered token
+    ≤ 14 chars, corpus average ≤ 10 chars (short semantic aliases)."""
+    svc = _service(tmp_path)
+    pipeline = _pipeline(svc)
+    lengths: list[int] = []
+    for text in M1_CORPUS:
+        result = await pipeline.inspect(text)
+        assert result.redacted_text is not None
+        for prefix, number in re.findall(r"\[([A-Z0-9_]+)_(\d+)\]", result.redacted_text):
+            lengths.append(len(f"[{prefix}_{number}]"))
+    assert lengths, "corpus produced no tokens"
+    assert max(lengths) <= 14, f"oversized token: max {max(lengths)}"
+    assert sum(lengths) / len(lengths) <= 10, f"avg {sum(lengths) / len(lengths):.1f} > 10"
 
 
 def test_m10_security_properties(tmp_path: Path) -> None:

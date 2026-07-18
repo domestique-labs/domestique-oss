@@ -12,10 +12,35 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+#: Short semantic prefixes for verbose detector categories. Redaction
+#: markers ride along on every conversation turn, so their BPE cost
+#: matters; ``[SSN_1]`` reads as clearly to a model as ``[US_SSN_1]`` at
+#: roughly half the tokens. Aliases must stay unique (collision would
+#: merge two categories' counters) and fit the ``[A-Z0-9_]+`` grammar.
+_PREFIX_ALIASES: dict[str, str] = {
+    "us_ssn": "SSN",
+    "email_address": "EMAIL",
+    "phone_number": "PHONE",
+    "credit_card": "CARD",
+    "aws_access_key": "AWSKEY",
+    "aws_secret_key": "AWSSECRET",
+    "private_key": "PRIVKEY",
+    "connection_string": "CONNSTR",
+    "github_token": "GHTOKEN",
+    "github_fine_grained": "GHPAT",
+    "anthropic_key": "ANTKEY",
+    "openai_key": "OAIKEY",
+    "slack_token": "SLACKKEY",
+    "jwt": "JWT",
+    "generic_api_key": "APIKEY",
+    "password_literal": "PASSWORD",
+}
+
 
 def category_prefix(category: str) -> str:
-    """Normalize a detector category to a token prefix (``aws_key`` → ``AWS_KEY``)."""
-    return category.upper()
+    """Token prefix for a detector category: short alias when known
+    (``email_address`` → ``EMAIL``), else uppercased (``codename`` → ``CODENAME``)."""
+    return _PREFIX_ALIASES.get(category.lower(), category.upper())
 
 
 @dataclass
