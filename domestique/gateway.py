@@ -26,6 +26,7 @@ from domestique.extract import extract_texts
 from domestique.models import Action
 from domestique.policy import PolicyEngine
 from domestique.redact import apply_field_redactions
+from domestique.vault.stream import StreamDetokenizer
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
@@ -177,8 +178,44 @@ def _forward_headers(request: Request, provider: str, settings: Settings) -> dic
     return headers
 
 
-def _relay(upstream_resp: httpx.Response) -> StreamingResponse:
-    """Stream an upstream httpx response back to the client, unmodified."""
+def _relay(upstream_resp: httpx.Response, token_service: TokenService | None = None) -> Response:
+    """Stream an upstream response back to the client.
+
+    Without a ``token_service`` (or for non-text payloads) bytes are relayed
+    verbatim. With one, redaction tokens in the response are rewritten back
+    to their original values — buffered for JSON bodies, incrementally (with
+    bounded holdback) for SSE streams.
+    """
+    content_type = upstream_resp.headers.get("content-type", "")
+    out_headers = {
+        k: v for k, v in upstream_resp.headers.items() if k.lower() not in _STRIP_RESPONSE_HEADERS
+    }
+
+    if token_service is not None and "text/event-stream" in content_type:
+        out_headers.pop("content-length", None)
+        return StreamingResponse(
+            _detok_sse_iter(upstream_resp, token_service),
+            status_code=upstream_resp.status_code,
+            headers=out_headers,
+            media_type=content_type,
+        )
+
+    if token_service is not None and "application/json" in content_type:
+        out_headers.pop("content-length", None)
+
+        async def json_iter() -> AsyncIterator[bytes]:
+            try:
+                body = await upstream_resp.aread()
+            finally:
+                await upstream_resp.aclose()
+            yield _detok_json_bytes(body, token_service)
+
+        return StreamingResponse(
+            json_iter(),
+            status_code=upstream_resp.status_code,
+            headers=out_headers,
+            media_type=content_type,
+        )
 
     async def body_iter() -> AsyncIterator[bytes]:
         try:
@@ -187,15 +224,137 @@ def _relay(upstream_resp: httpx.Response) -> StreamingResponse:
         finally:
             await upstream_resp.aclose()
 
-    out_headers = {
-        k: v for k, v in upstream_resp.headers.items() if k.lower() not in _STRIP_RESPONSE_HEADERS
-    }
     return StreamingResponse(
         body_iter(),
         status_code=upstream_resp.status_code,
         headers=out_headers,
         media_type=upstream_resp.headers.get("content-type"),
     )
+
+
+#: JSON keys whose string values carry assistant-visible text.
+_TEXT_KEYS = ("content", "text", "output_text", "delta")
+
+
+def _detok_json_bytes(body: bytes, service: TokenService) -> bytes:
+    """Detokenize every string value in a buffered JSON body."""
+    try:
+        obj = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        return body
+
+    unknown: list[str] = []
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, str):
+            out, unk = service.detokenize_text(node)
+            unknown.extend(unk)
+            return out
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        if isinstance(node, dict):
+            return {k: walk(v) for k, v in node.items()}
+        return node
+
+    result = walk(obj)
+    if unknown:
+        logger.info("unknown_tokens_in_response", tokens=sorted(set(unknown)))
+    return json.dumps(result).encode("utf-8")
+
+
+def _rewrite_sse_event(
+    obj: Any,
+    channels: dict[str, StreamDetokenizer],
+    service: TokenService,
+    *,
+    flush_into: str = "",
+) -> Any:
+    """Feed assistant-text fields of one SSE event through per-key channels.
+
+    ``flush_into`` (used for the synthesized final event) replaces the first
+    text field with the given remainder instead of feeding it.
+    """
+    injected = {"done": False}
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, dict):
+            out: dict[str, Any] = {}
+            for key, value in node.items():
+                if key in _TEXT_KEYS and isinstance(value, str):
+                    if flush_into:
+                        out[key] = "" if injected["done"] else flush_into
+                        injected["done"] = True
+                    else:
+                        channel = channels.setdefault(key, StreamDetokenizer(service))
+                        out[key] = channel.feed(value)
+                else:
+                    out[key] = walk(value)
+            return out
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        return node
+
+    return walk(obj)
+
+
+async def _detok_sse_iter(
+    upstream_resp: httpx.Response, service: TokenService
+) -> AsyncIterator[bytes]:
+    """Rewrite an SSE stream line-by-line, holding back partial tokens.
+
+    Non-``data:`` lines and non-JSON payloads pass through verbatim. Any
+    text still held back at end-of-stream is emitted in a synthesized event
+    cloned from the last text-bearing event, before the terminator.
+    """
+    channels: dict[str, StreamDetokenizer] = {}
+    template: str | None = None
+    buf = b""
+
+    def flush_remainder() -> bytes:
+        remainder = "".join(ch.flush() for ch in channels.values())
+        unknown = sorted({t for ch in channels.values() for t in ch.unknown_tokens})
+        if unknown:
+            logger.info("unknown_tokens_in_response", tokens=unknown)
+        if not remainder or template is None:
+            return b""
+        synthetic = _rewrite_sse_event(
+            json.loads(template), channels, service, flush_into=remainder
+        )
+        return b"data: " + json.dumps(synthetic).encode("utf-8") + b"\n\n"
+
+    def process_line(line: bytes) -> bytes:
+        nonlocal template
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            return line + b"\n"
+        payload = stripped[5:].strip()
+        if payload == b"[DONE]":
+            return flush_remainder() + line + b"\n"
+        try:
+            obj = json.loads(payload)
+        except ValueError:
+            return line + b"\n"
+        template = payload.decode("utf-8", errors="replace")
+        rewritten = _rewrite_sse_event(obj, channels, service)
+        return b"data: " + json.dumps(rewritten).encode("utf-8") + b"\n"
+
+    try:
+        async for chunk in upstream_resp.aiter_raw():
+            buf += chunk
+            out = b""
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                out += process_line(line.rstrip(b"\r"))
+            if out:
+                yield out
+        tail = b""
+        if buf:
+            tail += process_line(buf.rstrip(b"\r"))
+        tail += flush_remainder()
+        if tail:
+            yield tail
+    finally:
+        await upstream_resp.aclose()
 
 
 async def _passthrough(request: Request, provider: str, path: str, raw: bytes) -> Response:
@@ -247,9 +406,17 @@ async def _proxy(request: Request, path: str) -> Response:
     headers = _forward_headers(request, provider, settings)
     headers["content-type"] = "application/json"
 
+    # Only responses to redacted requests can contain our tokens; everything
+    # else relays verbatim (zero-cost fast path). When tokens are in play we
+    # need the response uncompressed to rewrite it.
+    token_service: TokenService | None = getattr(request.app.state, "token_service", None)
+    tokens_active = action is Action.REDACT and token_service is not None
+    if tokens_active:
+        headers["accept-encoding"] = "identity"
+
     upstream_req = client.build_request("POST", url, content=payload, headers=headers)
     upstream_resp = await client.send(upstream_req, stream=True)
-    return _relay(upstream_resp)
+    return _relay(upstream_resp, token_service if tokens_active else None)
 
 
 def create_gateway(
@@ -259,15 +426,26 @@ def create_gateway(
     on_decision: Callable[[Action, list[str], str], None] | None = None,
     audit_path: str | Path | None = None,
     enable_audit: bool = True,
+    token_service: TokenService | None = None,
 ) -> FastAPI:
     """Construct the transparent redacting reverse-proxy app.
 
     ``on_decision`` is invoked (action, categories, host) on each redact/block
     for live terminal feedback. Redact/block decisions are also appended to a
     metadata-only audit log (``enable_audit``) for ``domestique report``.
+
+    A ``TokenService`` (session-only by default) makes redaction reversible:
+    numbered tokens go out, and responses are rewritten back inline. Callers
+    that want the persistent pinned vault (the CLI does) pass a service
+    wired to one.
     """
     resolved = settings or Settings()
-    built_pipeline = pipeline or build_cli_pipeline(resolved)
+    if token_service is None and pipeline is None:
+        from domestique.vault.service import TokenService as _TokenService
+        from domestique.vault.session import SessionStore
+
+        token_service = _TokenService(SessionStore(), None)
+    built_pipeline = pipeline or build_cli_pipeline(resolved, token_service=token_service)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -293,6 +471,7 @@ def create_gateway(
     app.state.settings = resolved
     app.state.pipeline = built_pipeline
     app.state.on_decision = on_decision
+    app.state.token_service = token_service
 
     @app.get("/health")
     async def health() -> dict[str, str]:
