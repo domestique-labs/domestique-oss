@@ -104,7 +104,7 @@ class ProxyService:
                 "domestique.app:create_app",
                 "--factory",
                 "--host",
-                "0.0.0.0",
+                config.proxy_host,
                 "--port",
                 str(config.proxy_port),
             ],

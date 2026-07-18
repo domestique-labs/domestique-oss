@@ -48,6 +48,12 @@ class AppConfig:
     proxy_port: int = 8000
     """Port the proxy listens on."""
 
+    proxy_host: str = "127.0.0.1"
+    """Interface the proxy binds to. Defaults to loopback so the desktop app is
+    not reachable from other machines on the network. Set to "0.0.0.0" to
+    deliberately expose the proxy so other hosts can route through it (mirrors
+    `domestique start --host 0.0.0.0`)."""
+
     detection_stack: DetectionStackConfig = field(default_factory=DetectionStackConfig)
     """Active detectors configuration."""
 
