@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import statistics
 import sys
 import tempfile
@@ -97,6 +98,44 @@ def bench_m8_stream(service: TokenService) -> dict[str, float]:
     return {"p95_ms": _percentile(samples, 95), "max_held_chars": float(max_held)}
 
 
+#: Fixed corpus for the deterministic token-usage metric (mirrors the
+#: M1 corpus shape: same-category multiplicity + mixed categories).
+TOKEN_CORPUS = [
+    "one ssn 123-45-6789 in text",
+    "two ssns 123-45-6789 and 987-65-4321 must differ",
+    "emails a@b.com, c@d.com, and again a@b.com",
+    "mixed 123-45-6789 a@b.com AKIAIOSFODNN7EXAMPLE 987-65-4321",
+    "key sk-proj-abcdefghijklmnopqrstuvwxyz123456 plus mail x@y.io",
+    "cards 4111-1111-1111-1111 and 5500 0000 0000 0004",
+    "phones 555-123-4567 then (555) 987-6543",
+    "github ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 token",
+]
+
+_TOKEN_RE = re.compile(r"\[[A-Z0-9_]+_\d+\]")
+
+
+async def bench_token_usage() -> dict[str, float]:
+    """LLM-facing marker cost over the fixed corpus. Fully deterministic —
+    a fresh service per run, no timing involved."""
+    service = TokenService(SessionStore(), None)
+    pipeline = DetectorPipeline(
+        detectors=[SecretDetector()],
+        policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        token_service=service,
+    )
+    markers: list[str] = []
+    for text in TOKEN_CORPUS:
+        result = await pipeline.inspect(text)
+        if result.redacted_text is not None:
+            markers.extend(_TOKEN_RE.findall(result.redacted_text))
+    total = sum(len(m) for m in markers)
+    return {
+        "markers": float(len(markers)),
+        "total_chars": float(total),
+        "avg_chars": total / len(markers) if markers else 0.0,
+    }
+
+
 def bench_m9_vault(tmp: Path) -> dict[str, float]:
     provider = _StaticKey()
     vault = PinnedVault(tmp / "bench-vault.bin", provider)
@@ -117,8 +156,20 @@ def bench_m9_vault(tmp: Path) -> dict[str, float]:
 
 
 def main() -> int:
+    # Keep stdout pure JSON/scoreboard: library logs (e.g. policy_loaded)
+    # must go to stderr or they corrupt `--json > file.json` in CI.
+    import structlog
+
+    structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--no-gate",
+        action="store_true",
+        help="always exit 0 (CI compare mode: deltas are the signal, "
+        "absolute thresholds on shared runners are noise)",
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -131,6 +182,7 @@ def main() -> int:
         m7 = bench_m7_detokenize(service)
         m8 = bench_m8_stream(service)
         m9 = bench_m9_vault(tmp)
+        token_usage = asyncio.run(bench_token_usage())
 
     checks = {
         "M6 redact p50 < 1ms": m6["p50_ms"] < 1.0,
@@ -146,6 +198,7 @@ def main() -> int:
         "M7": m7,
         "M8": m8,
         "M9": m9,
+        "token_usage": token_usage,
         "pass": all(checks.values()),
         "checks": checks,
     }
@@ -154,7 +207,10 @@ def main() -> int:
     else:
         for name, ok in checks.items():
             print(f"{'PASS' if ok else 'FAIL'}  {name}")
-        print(f"\nnumbers: {json.dumps({k: scoreboard[k] for k in ('M6', 'M7', 'M8', 'M9')})}")
+        keys = ("M6", "M7", "M8", "M9", "token_usage")
+        print(f"\nnumbers: {json.dumps({k: scoreboard[k] for k in keys})}")
+    if args.no_gate:
+        return 0
     return 0 if scoreboard["pass"] else 1
 
 
