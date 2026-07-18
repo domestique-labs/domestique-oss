@@ -7,8 +7,8 @@
   QUIC runs over UDP/443 and bypasses a TCP proxy, creating a DLP blind spot.
 
   Chromium browsers (Chrome / Brave / Edge) expose the standard `QuicAllowed`
-  enterprise policy. This writes it to HKLM (the real machine-policy location,
-  the same lever enterprise MDM uses) and auto-elevates via UAC because the
+  machine-wide Group Policy. This writes it to HKLM (the real machine-policy location,
+  the same lever device-management (MDM) tools use) and auto-elevates via UAC because the
   Policies hive is admin-controlled by design.
 
   Opera, Firefox, and Safari do NOT share that mechanism; for those the script
@@ -53,7 +53,7 @@ if (-not $policyPaths.ContainsKey($Browser)) {
     Write-Host ""
     switch ($Browser) {
         'opera' {
-            Write-Host "Opera uses the Chromium engine but ignores standard enterprise policies."
+            Write-Host "Opera uses the Chromium engine but ignores standard Chromium policies."
             Write-Host "By hand:  opera://flags/#enable-quic  ->  '$(if($Enable){'Enabled'}else{'Disabled'})'  ->  relaunch."
         }
         'firefox' {

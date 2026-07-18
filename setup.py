@@ -40,7 +40,7 @@ else:
         "plist": {
             "CFBundleName": "Domestique",
             "CFBundleDisplayName": "Domestique",
-            "CFBundleIdentifier": "com.enterprise.domestique",
+            "CFBundleIdentifier": "com.domestique.app",
             "CFBundleVersion": "1.0.0",
             "CFBundleShortVersionString": "1.0",
             "LSUIElement": False,  # Show in Dock with our icon

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate a self-signed CA certificate for TLS interception.
-# In production, use your enterprise PKI (Active Directory Certificate Services, etc.)
+# In production, use your PKI (Active Directory Certificate Services, etc.)
 
 set -euo pipefail
 
@@ -85,7 +85,7 @@ openssl x509 -req \
 echo "✓ Generated server certificate: ${SERVER_CERT}"
 echo ""
 echo "=== Next Steps ==="
-echo "1. Deploy ${CA_CERT} to all enterprise devices:"
+echo "1. Deploy ${CA_CERT} to all devices:"
 echo "   - Windows: GPO → Computer Config → Policies → Windows Settings → Security → Public Key → Trusted Root CAs"
 echo "   - macOS: MDM profile or: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ${CA_CERT}"
 echo "   - Linux: cp ${CA_CERT} /usr/local/share/ca-certificates/ && update-ca-certificates"

@@ -2,17 +2,17 @@
 
 ## Overview
 
-This guide covers deploying the Domestique in an enterprise environment so that **all LLM API traffic is transparently intercepted** without requiring per-application configuration changes.
+This guide covers deploying the Domestique in a multi-machine environment so that **all LLM API traffic is transparently intercepted** without requiring per-application configuration changes.
 
 ## Architecture Summary
 
 ```
-[Enterprise Users] → [DNS Override] → [TLS Termination (nginx)] → [Firewall Proxy] → [External LLMs]
+[Users] → [DNS Override] → [TLS Termination (nginx)] → [Firewall Proxy] → [External LLMs]
 ```
 
 The system works by:
 1. Internal DNS resolves LLM provider domains to the firewall proxy IP
-2. Enterprise CA certificate enables TLS interception without errors
+2. CA certificate enables TLS interception without errors
 3. Firewall inspects, filters, and forwards (or blocks) requests
 4. Users and applications require zero configuration changes
 
@@ -21,7 +21,7 @@ The system works by:
 ## Prerequisites
 
 - Internal DNS control (Active Directory DNS, CoreDNS, or similar)
-- Enterprise PKI or ability to deploy a custom CA certificate
+- Your PKI or ability to deploy a custom CA certificate
 - Container runtime (Docker/Kubernetes) for the proxy
 - Network access: proxy must reach external LLM APIs on port 443
 - MDM solution (Intune, Jamf, SCCM) for certificate deployment
@@ -40,7 +40,7 @@ This creates:
 - `ca.key` / `ca.crt` — Root CA (deploy to all clients)
 - `server.key` / `server.crt` — Server cert with SANs for all intercepted domains
 
-**For production**: Use your enterprise PKI to issue the server certificate instead.
+**For production**: Use your PKI to issue the server certificate instead.
 
 ---
 
@@ -206,7 +206,7 @@ tail -f logs/audit.jsonl | jq .
 
 ## Security Hardening Checklist
 
-- [ ] Enterprise CA certificate deployed to all devices
+- [ ] CA certificate deployed to all devices
 - [ ] Direct LLM API access blocked at network firewall
 - [ ] DNS-over-HTTPS disabled on managed devices
 - [ ] Proxy API keys stored in secrets manager (Vault, etc.)

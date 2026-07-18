@@ -1,4 +1,4 @@
-"""Domestique - Enterprise LLM Firewall SDK.
+"""Domestique - LLM Firewall SDK.
 
 Use Domestique as a library to scan and redact sensitive data before sending
 to LLMs. Works standalone (no proxy required) or as a LiteLLM callback.

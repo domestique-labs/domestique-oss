@@ -25,5 +25,4 @@ body:
     attributes:
       label: Scope
       options:
-        - label: This fits the Community Edition (single-device, local-first)
-        - label: This may be a commercial/fleet feature (central management, enforcement, compliance)
+        - label: This fits the project's scope (single-device, local-first)

@@ -14,7 +14,7 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
 
-  # TLS termination - presents enterprise-CA certs to intercepted domains.
+  # TLS termination - presents CA certs to intercepted domains.
   nginx:
     image: nginx:alpine
     ports:

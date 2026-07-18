@@ -365,13 +365,13 @@ class TestWindowsSystemProxyPACOnly:
         assert "ProxyServer" not in store
         assert "ProxyOverride" not in store
 
-    def test_enable_backs_up_and_disable_restores_existing_corporate_pac(
+    def test_enable_backs_up_and_disable_restores_existing_system_pac(
         self, tmp_path, monkeypatch
     ):
         store = _install_fake_winreg(monkeypatch)
         self._patch_platform(monkeypatch, tmp_path)
 
-        # Simulate a machine that already had a corporate PAC configured by IT.
+        # Simulate a machine that already had an existing PAC configured on the machine.
         store["AutoConfigURL"] = {
             "value": "http://corp-proxy.example.com/corp.pac",
             "kind": 1,

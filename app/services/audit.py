@@ -1,4 +1,4 @@
-"""Enterprise audit logging with structured events, rotation, and retention.
+"""Audit logging with structured events, rotation, and retention.
 
 Provides a comprehensive audit trail for compliance (SOC 2, HIPAA, GDPR Art 30):
 - Structured JSON events with UUID request IDs
