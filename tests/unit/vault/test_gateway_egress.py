@@ -142,3 +142,26 @@ def test_token_free_request_is_proxied_verbatim(monkeypatch: Any) -> None:
 
     body = resp.json()
     assert body["choices"][0]["message"]["content"] == "echo: perfectly clean message"
+
+
+def test_cross_conversation_token_not_reversed(monkeypatch: Any) -> None:
+    """A token minted for one request must not be reversed in another
+    request's response, even though the gateway shares one process store."""
+    provider = EchoProvider()
+    with serve(provider.build_app()) as base:
+        monkeypatch.setenv("DOMESTIQUE_OPENAI_UPSTREAM", base)
+        app, _svc = _gateway_with_service(monkeypatch, provider)
+        with serve(app) as gw:
+            # Conversation B: its SSN is redacted to [SSN_1]; B's own reply
+            # (echoed) is correctly restored for B.
+            resp_b = _post(gw, "conv B ssn 444-44-4444")
+            assert "444-44-4444" in resp_b.json()["choices"][0]["message"]["content"]
+
+            # Conversation A: has its own SSN (gets a *different* token) and
+            # additionally echoes B's [SSN_1] as literal text.
+            resp_a = _post(gw, "conv A ssn 111-11-1111 and echoing [SSN_1]")
+
+    a_content = resp_a.json()["choices"][0]["message"]["content"]
+    assert "111-11-1111" in a_content        # A's own secret restored
+    assert "[SSN_1]" in a_content            # B's token left verbatim
+    assert "444-44-4444" not in a_content    # B's secret never leaks into A

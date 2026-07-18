@@ -30,6 +30,7 @@ from domestique.vault.stream import StreamDetokenizer
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
+    from collections.abc import Set as AbstractSet
 
     from domestique.vault.service import TokenService
 
@@ -103,27 +104,35 @@ def build_cli_pipeline(
 
 async def _scan_and_redact(
     pipeline: DetectorPipeline, body: dict[str, Any], kind: str
-) -> tuple[Action, str, dict[str, Any], list[str]]:
-    """Return ``(action, reason, possibly-redacted body, driving categories)``.
+) -> tuple[Action, str, dict[str, Any], list[str], set[str]]:
+    """Return ``(action, reason, redacted body, driving categories, minted tokens)``.
 
-    The category list feeds the live ticker and the metadata-only audit log; it
-    never contains any prompt text.
+    ``categories`` feeds the live ticker and the metadata-only audit log; it
+    never contains any prompt text. ``minted`` is exactly the tokens present in
+    the outbound (redacted) request — response detokenization is scoped to it so
+    a reply can only ever reveal secrets this request itself redacted, never a
+    token minted for another conversation sharing the process-wide store.
     """
     texts = extract_texts(body, kind)
     redactions: list[tuple[str, str]] = []
     categories: set[str] = set()
+    minted: set[str] = set()
     for field_path, text in texts:
         result = await pipeline.inspect(text)
         if result.action is Action.BLOCK:
             blocked = sorted({f.category for f in result.findings})
-            return Action.BLOCK, result.reason, body, blocked
+            return Action.BLOCK, result.reason, body, blocked, set()
         if result.action is Action.REDACT and result.redacted_text is not None:
             redactions.append((field_path, result.redacted_text))
             categories.update(f.category for f in result.findings)
+            # Precisely the tokens this redaction minted — NOT every
+            # token-shaped substring in the body, so a literal ``[SSN_1]``
+            # the user typed can never widen the response's reversal scope.
+            minted.update(result.minted_tokens)
     if redactions:
         redacted_body = apply_field_redactions(body, redactions)
-        return Action.REDACT, "redacted", redacted_body, sorted(categories)
-    return Action.ALLOW, "", body, []
+        return Action.REDACT, "redacted", redacted_body, sorted(categories), minted
+    return Action.ALLOW, "", body, [], set()
 
 
 def _upstream_host(provider: str) -> str:
@@ -178,13 +187,18 @@ def _forward_headers(request: Request, provider: str, settings: Settings) -> dic
     return headers
 
 
-def _relay(upstream_resp: httpx.Response, token_service: TokenService | None = None) -> Response:
+def _relay(
+    upstream_resp: httpx.Response,
+    token_service: TokenService | None = None,
+    allowed: AbstractSet[str] | None = None,
+) -> Response:
     """Stream an upstream response back to the client.
 
     Without a ``token_service`` (or for non-text payloads) bytes are relayed
     verbatim. With one, redaction tokens in the response are rewritten back
     to their original values — buffered for JSON bodies, incrementally (with
-    bounded holdback) for SSE streams.
+    bounded holdback) for SSE streams. ``allowed`` scopes which tokens may be
+    reversed to the ones this request minted (see ``_scan_and_redact``).
     """
     content_type = upstream_resp.headers.get("content-type", "")
     out_headers = {
@@ -194,7 +208,7 @@ def _relay(upstream_resp: httpx.Response, token_service: TokenService | None = N
     if token_service is not None and "text/event-stream" in content_type:
         out_headers.pop("content-length", None)
         return StreamingResponse(
-            _detok_sse_iter(upstream_resp, token_service),
+            _detok_sse_iter(upstream_resp, token_service, allowed),
             status_code=upstream_resp.status_code,
             headers=out_headers,
             media_type=content_type,
@@ -208,7 +222,7 @@ def _relay(upstream_resp: httpx.Response, token_service: TokenService | None = N
                 body = await upstream_resp.aread()
             finally:
                 await upstream_resp.aclose()
-            yield _detok_json_bytes(body, token_service)
+            yield _detok_json_bytes(body, token_service, allowed)
 
         return StreamingResponse(
             json_iter(),
@@ -236,7 +250,9 @@ def _relay(upstream_resp: httpx.Response, token_service: TokenService | None = N
 _TEXT_KEYS = ("content", "text", "output_text", "delta")
 
 
-def _detok_json_bytes(body: bytes, service: TokenService) -> bytes:
+def _detok_json_bytes(
+    body: bytes, service: TokenService, allowed: AbstractSet[str] | None = None
+) -> bytes:
     """Detokenize every string value in a buffered JSON body."""
     try:
         obj = json.loads(body)
@@ -247,7 +263,7 @@ def _detok_json_bytes(body: bytes, service: TokenService) -> bytes:
 
     def walk(node: Any) -> Any:
         if isinstance(node, str):
-            out, unk = service.detokenize_text(node)
+            out, unk = service.detokenize_text(node, allowed)
             unknown.extend(unk)
             return out
         if isinstance(node, list):
@@ -267,6 +283,7 @@ def _rewrite_sse_event(
     channels: dict[str, StreamDetokenizer],
     service: TokenService,
     *,
+    allowed: AbstractSet[str] | None = None,
     flush_into: str = "",
 ) -> Any:
     """Feed assistant-text fields of one SSE event through per-key channels.
@@ -285,7 +302,7 @@ def _rewrite_sse_event(
                         out[key] = "" if injected["done"] else flush_into
                         injected["done"] = True
                     else:
-                        channel = channels.setdefault(key, StreamDetokenizer(service))
+                        channel = channels.setdefault(key, StreamDetokenizer(service, allowed))
                         out[key] = channel.feed(value)
                 else:
                     out[key] = walk(value)
@@ -298,7 +315,9 @@ def _rewrite_sse_event(
 
 
 async def _detok_sse_iter(
-    upstream_resp: httpx.Response, service: TokenService
+    upstream_resp: httpx.Response,
+    service: TokenService,
+    allowed: AbstractSet[str] | None = None,
 ) -> AsyncIterator[bytes]:
     """Rewrite an SSE stream line-by-line, holding back partial tokens.
 
@@ -318,7 +337,7 @@ async def _detok_sse_iter(
         if not remainder or template is None:
             return b""
         synthetic = _rewrite_sse_event(
-            json.loads(template), channels, service, flush_into=remainder
+            json.loads(template), channels, service, allowed=allowed, flush_into=remainder
         )
         return b"data: " + json.dumps(synthetic).encode("utf-8") + b"\n\n"
 
@@ -335,7 +354,7 @@ async def _detok_sse_iter(
         except ValueError:
             return line + b"\n"
         template = payload.decode("utf-8", errors="replace")
-        rewritten = _rewrite_sse_event(obj, channels, service)
+        rewritten = _rewrite_sse_event(obj, channels, service, allowed=allowed)
         return b"data: " + json.dumps(rewritten).encode("utf-8") + b"\n"
 
     try:
@@ -390,7 +409,9 @@ async def _proxy(request: Request, path: str) -> Response:
     if not isinstance(parsed, dict):
         return await _passthrough(request, provider, path, raw)
 
-    action, reason, out_body, categories = await _scan_and_redact(pipeline, parsed, kind)
+    action, reason, out_body, categories, allowed_tokens = await _scan_and_redact(
+        pipeline, parsed, kind
+    )
     host = _upstream_host(provider)
     if action is Action.BLOCK:
         # The clean ticker (_emit_decision) + metadata audit log are the block's
@@ -416,7 +437,11 @@ async def _proxy(request: Request, path: str) -> Response:
 
     upstream_req = client.build_request("POST", url, content=payload, headers=headers)
     upstream_resp = await client.send(upstream_req, stream=True)
-    return _relay(upstream_resp, token_service if tokens_active else None)
+    return _relay(
+        upstream_resp,
+        token_service if tokens_active else None,
+        allowed_tokens if tokens_active else None,
+    )
 
 
 def create_gateway(

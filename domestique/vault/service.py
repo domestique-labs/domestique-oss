@@ -14,6 +14,8 @@ import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Set as AbstractSet
+
     from domestique.vault.pinned import PinnedVault
     from domestique.vault.session import SessionStore
 
@@ -54,14 +56,48 @@ class TokenService:
                 return pinned_token
         return self.session.tokenize(value, category)
 
-    def detokenize_text(self, text: str) -> tuple[str, list[str]]:
-        """Replace known tokens with originals; return (text, unknown_tokens)."""
+    def pin(self, value: str, category: str) -> str:
+        """Promote *value* into the persistent pinned vault safely.
+
+        The pinned and session stores share one ``[PREFIX_n]`` namespace but
+        count independently, and ``detokenize_text`` resolves session-first —
+        so a pin whose index collides with a live session token would make
+        that token reverse to the wrong value. This reserves an index above
+        *both* stores' current max for the prefix, then re-floors the session
+        counter above the new pinned index so future session tokens stay
+        clear. Use this rather than ``PinnedVault.pin`` directly whenever the
+        vault shares a live ``SessionStore``. Returns '' if no pinned vault.
+        """
+        if self.pinned is None:
+            return ""
+        floor = max(self.pinned.max_index(category), self.session.max_index(category)) + 1
+        token = self.pinned.pin(value, category, min_index=floor)
+        self.sync_counter_floors()
+        return token
+
+    def detokenize_text(
+        self, text: str, allowed: AbstractSet[str] | None = None
+    ) -> tuple[str, list[str]]:
+        """Replace known tokens with originals; return (text, unknown_tokens).
+
+        ``allowed`` scopes reversal to a specific set of token strings. The
+        gateway passes the tokens minted for the request being answered, so a
+        token minted in another conversation (or hallucinated) is never
+        reversed here even though the process-wide store could resolve it —
+        this is what keeps one conversation's secret out of another's reply.
+        When ``allowed`` is ``None`` (default) every known token resolves,
+        preserving the original process-global behaviour for callers that
+        don't need scoping.
+        """
         unknown: list[str] = []
         if "[" not in text:
             return text, unknown
 
         def _sub(match: re.Match[str]) -> str:
             token = match.group(0)
+            if allowed is not None and token not in allowed:
+                unknown.append(token)
+                return token
             original = self.session.lookup(token)
             if original is None and self.pinned is not None:
                 original = self.pinned.lookup_token(token)
