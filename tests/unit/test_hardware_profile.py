@@ -2,7 +2,7 @@
 
 Context: on weak hardware (no usable GPU and/or low RAM), building the full
 detector stack (GLiNER, local-LLM tier) can be very slow or OOM the addon
-process. ``app/services/mitm_addon.py`` gates those heavy tiers behind a
+process. ``domestique_app/services/mitm_addon.py`` gates those heavy tiers behind a
 hardware check reused from ``scripts/install.py`` (no new hardware-detection
 code): on low-resource machines it auto-selects a light, regex-only profile
 unless the user explicitly opted into a heavier detector.
@@ -29,7 +29,7 @@ import pytest
 # `.[dev]` only. These tests run wherever `.[browser-proxy]`/`.[desktop]` is present.
 pytest.importorskip("mitmproxy")
 
-from app.services.mitm_addon import (  # noqa: E402  (import after importorskip guard)
+from domestique_app.services.mitm_addon import (  # noqa: E402  (import after importorskip guard)
     DomestiqueAddon,
     _detect_low_resource_hardware,
     _light_profile_stack,
@@ -38,7 +38,7 @@ from app.services.mitm_addon import (  # noqa: E402  (import after importorskip 
 
 @pytest.fixture(autouse=True)
 def mock_ctx():
-    with patch("app.services.mitm_addon.ctx") as mock:
+    with patch("domestique_app.services.mitm_addon.ctx") as mock:
         mock.log = MagicMock()
         yield mock
 
@@ -174,7 +174,7 @@ class TestAddonHardwareProfileWiring:
         settings_seen: list = []
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -192,7 +192,7 @@ class TestAddonHardwareProfileWiring:
         settings_seen: list = []
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -212,7 +212,7 @@ class TestAddonHardwareProfileWiring:
         settings_seen: list = []
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "gliner_pii": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -230,7 +230,7 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: True
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -238,7 +238,7 @@ class TestAddonHardwareProfileWiring:
         ):
             addon._init_detector()
 
-        from app.services.mitm_addon import ctx as patched_ctx
+        from domestique_app.services.mitm_addon import ctx as patched_ctx
 
         warn_messages = [call.args[0] for call in patched_ctx.log.warn.call_args_list]
         assert any("light profile" in msg for msg in warn_messages), (
@@ -250,7 +250,7 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: False
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -258,7 +258,7 @@ class TestAddonHardwareProfileWiring:
         ):
             addon._init_detector()
 
-        from app.services.mitm_addon import ctx as patched_ctx
+        from domestique_app.services.mitm_addon import ctx as patched_ctx
 
         assert patched_ctx.log.warn.call_count == 0
 
@@ -270,7 +270,7 @@ class TestAddonHardwareProfileWiring:
             calls.append(1)
             return False
 
-        with patch("app.services.mitm_addon._detect_low_resource_hardware", side_effect=_tracked):
+        with patch("domestique_app.services.mitm_addon._detect_low_resource_hardware", side_effect=_tracked):
             addon._hardware_is_low_resource()
             addon._hardware_is_low_resource()
             addon._hardware_is_low_resource()
@@ -289,7 +289,7 @@ class TestAddonHardwareProfileWiring:
         settings_seen: list = []
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={
                 # A real on-disk config always serializes every
                 # DetectionStackConfig field (AppConfig.to_dict()) -- here
@@ -330,7 +330,7 @@ class TestAddonHardwareProfileWiring:
         settings_seen: list = []
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -361,7 +361,7 @@ class TestLightProfileSurfacedInStats:
         addon._hardware_is_low_resource = lambda: True
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",
@@ -380,7 +380,7 @@ class TestLightProfileSurfacedInStats:
         addon._hardware_is_low_resource = lambda: False
 
         with patch(
-            "app.services.pipeline_config.load_config_dict",
+            "domestique_app.services.pipeline_config.load_config_dict",
             return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
         ), patch(
             "domestique.detectors.registry.create_detector_pipeline",

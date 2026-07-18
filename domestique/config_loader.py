@@ -1,7 +1,7 @@
 """Load ~/.domestique/config.json and map it to a domestique Settings.
 
 This is the single source of truth for the detection-stack -> Settings
-mapping. app/services/pipeline_config.py delegates here (app->domestique is
+mapping. domestique_app/services/pipeline_config.py delegates here (domestique_app->domestique is
 the allowed import direction), so the browser dashboard and the CLI demo
 build identical Settings from the same config.
 """

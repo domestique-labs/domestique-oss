@@ -20,23 +20,23 @@ else:
 
     APP = ["app_entry.py"]
     DATA_FILES = [
-        ("", ["app/assets/dashboard.html"]),
-        ("assets", ["app/assets/icon.icns", "app/assets/icon.png"]),
+        ("", ["domestique_app/assets/dashboard.html"]),
+        ("assets", ["domestique_app/assets/icon.icns", "domestique_app/assets/icon.png"]),
         (
             "assets/images",
             [
-                "app/assets/images/logo-512.png",
-                "app/assets/images/menubar-icon.png",
-                "app/assets/images/menubar-icon@2x.png",
-                "app/assets/images/menubar-icon-disabled.png",
-                "app/assets/images/menubar-icon-disabled@2x.png",
+                "domestique_app/assets/images/logo-512.png",
+                "domestique_app/assets/images/menubar-icon.png",
+                "domestique_app/assets/images/menubar-icon@2x.png",
+                "domestique_app/assets/images/menubar-icon-disabled.png",
+                "domestique_app/assets/images/menubar-icon-disabled@2x.png",
             ],
         ),
     ]
 
     OPTIONS = {
         "argv_emulation": False,
-        "iconfile": "app/assets/icon.icns",
+        "iconfile": "domestique_app/assets/icon.icns",
         "plist": {
             "CFBundleName": "Domestique",
             "CFBundleDisplayName": "Domestique",
@@ -46,7 +46,7 @@ else:
             "LSUIElement": False,  # Show in Dock with our icon
             "NSHighResolutionCapable": True,
         },
-        "packages": ["rumps", "app", "domestique"],
+        "packages": ["rumps", "domestique_app", "domestique"],
         "excludes": [
             "mitmproxy",
             "pytest",

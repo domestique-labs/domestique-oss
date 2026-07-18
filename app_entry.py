@@ -12,5 +12,5 @@ if project_root not in sys.path:
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
-from app.main import launch
+from domestique_app.main import launch
 launch()

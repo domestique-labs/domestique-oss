@@ -8,20 +8,20 @@ explains what belongs where and the dependency direction between them.
 ### `domestique/` — the core firewall (standalone library + CLI)
 The redacting proxy engine and its CLI. Detectors, policy, transport, audit logging,
 prompt extraction/redaction, and the `domestique start` / `domestique demo` entry
-points live here. It depends **only** on third-party libraries — never on `app/`.
+points live here. It depends **only** on third-party libraries — never on `domestique_app/`.
 You can `pip install` and use it with no desktop/browser components present.
 
-### `app/` — the desktop + browser application
+### `domestique_app/` — the desktop + browser application
 The macOS menu-bar app, the browser-interception MITM addon, the dashboard/server
-API, cert management, and system-proxy/PAC integration. `app/` **depends on**
+API, cert management, and system-proxy/PAC integration. `domestique_app/` **depends on**
 `domestique/` (it reuses the core detection/redaction), never the reverse.
 
 ```
-app/  ──depends on──▶  domestique/        (one direction only)
+domestique_app/  ──depends on──▶  domestique/        (one direction only)
 ```
 
-> **Layering rule:** `domestique/` must not import from `app/`. Shared logic (e.g.
-> `domestique/redaction.py`, moved here from `app/services/`) lives in core so the
+> **Layering rule:** `domestique/` must not import from `domestique_app/`. Shared logic (e.g.
+> `domestique/redaction.py`, moved here from `domestique_app/services/`) lives in core so the
 > library stays installable and testable on its own.
 
 ## Benchmarks vs. evaluation
@@ -38,4 +38,4 @@ Rule of thumb: **`bench/` scores the firewall's decisions** (the CI quality gate
 
 ## Tests
 - `tests/` — core (`domestique/`) unit, integration, and eval tests.
-- `app/tests/` — desktop/browser app tests (interceptor, MITM addon, server API).
+- `domestique_app/tests/` — desktop/browser app tests (interceptor, MITM addon, server API).
