@@ -44,6 +44,12 @@ class MockProvider:
         return app
 
 
+@pytest.fixture(autouse=True)
+def _isolate_audit_log(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the wedge audit log at a temp file so tests never touch ~/.domestique."""
+    monkeypatch.setenv("DOMESTIQUE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
+
+
 @pytest.fixture()
 def mock_openai(monkeypatch: pytest.MonkeyPatch) -> Iterator[MockProvider]:
     provider = MockProvider()

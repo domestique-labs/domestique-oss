@@ -47,19 +47,53 @@ class AuditLogger:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """Write a single audit event. Never raises."""
+        event = {
+            "ts": datetime.now(UTC).isoformat(),
+            "action": action.value,
+            "user": user_id,
+            "model": model,
+            "endpoint": endpoint,
+            "findings": len(detections),
+            "categories": list({d.category for d in detections}),
+            "latency_ms": round(latency_ms, 1),
+        }
+        if metadata:
+            event["meta"] = metadata
+        self._write(event)
+
+    def record_event(
+        self,
+        *,
+        action: Action,
+        categories: list[str],
+        endpoint: str,
+        model: str = "",
+        user_id: str = "local",
+        latency_ms: float = 0.0,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Write an audit event from primitives (used by the CLI wedge).
+
+        Records **metadata only** — the action, detection categories, and a
+        count — never any raw prompt text.
+        """
+        event = {
+            "ts": datetime.now(UTC).isoformat(),
+            "action": action.value,
+            "user": user_id,
+            "model": model,
+            "endpoint": endpoint,
+            "findings": len(categories),
+            "categories": sorted(set(categories)),
+            "latency_ms": round(latency_ms, 1),
+        }
+        if metadata:
+            event["meta"] = metadata
+        self._write(event)
+
+    def _write(self, event: dict[str, Any]) -> None:
+        """Serialize one event as a JSONL line. Never raises."""
         try:
-            event = {
-                "ts": datetime.now(UTC).isoformat(),
-                "action": action.value,
-                "user": user_id,
-                "model": model,
-                "endpoint": endpoint,
-                "findings": len(detections),
-                "categories": list({d.category for d in detections}),
-                "latency_ms": round(latency_ms, 1),
-            }
-            if metadata:
-                event["meta"] = metadata
             self._file.write(json.dumps(event, separators=(",", ":")) + "\n")
         except Exception:
             logger.exception("audit_write_error")

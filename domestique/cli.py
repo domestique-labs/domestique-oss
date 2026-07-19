@@ -1,8 +1,10 @@
 """Domestique OSS CLI - the developer wedge entry point.
 
 Commands:
-    domestique start [--host H] [--port P] [--no-setup]   launch the :8000 redacting proxy
+    domestique start [--host H] [--port P] [--no-setup] [--quiet] [--strict]
+                                             launch the :8000 redacting proxy
     domestique demo                          show a before/after redaction, no key needed
+    domestique report [--json] [--days N]    summarize redactions & blocks by type
     domestique setup [--yes]                 first-run onboarding wizard
     domestique browser on|off|status         toggle browser interception (dashboard API)
     domestique --version
@@ -20,11 +22,16 @@ from typing import TYPE_CHECKING
 
 from domestique import __version__, console
 from domestique.branding import LOGO, supports_unicode
+from domestique.detectors.status import detector_status, unavailable_configured
+from domestique.labels import label as _label
 from domestique.models import Action
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from domestique.config import Settings
     from domestique.detectors.registry import Finding
+    from domestique.detectors.status import TierStatus
     from domestique.policy import PolicyEngine
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
@@ -108,9 +115,52 @@ def _maybe_offer_first_run_setup(no_setup: bool) -> None:
         print(_SETUP_LATER_HINT)
 
 
-def _cmd_start(host: str, port: int, *, no_setup: bool = False) -> int:
+def _live_feedback_enabled(*, quiet: bool, isatty: bool) -> bool:
+    """Show the live redaction ticker only on an interactive TTY and not --quiet."""
+    return (not quiet) and isatty
+
+
+def _make_ticker(
+    *, color: bool, emit: Callable[[str], None] | None = None
+) -> Callable[[Action, list[str], str], None]:
+    """Build the per-request live-feedback callback for the wedge."""
+    write = emit or (lambda line: print(line, flush=True))
+    paint = console.Palette(enabled=color)
+    g = console.glyphs()
+
+    def on_decision(action: Action, categories: list[str], host: str) -> None:
+        names = ", ".join(_label(c) for c in categories) or "sensitive data"
+        if action is Action.BLOCK:
+            write(f"  {paint(g['cross'], 'red')} blocked ({names}) {g['arrow']} {host}")
+        else:
+            write(
+                f"  {paint(g['check'], 'green')} redacted {len(categories)} "
+                f"({names}) {g['arrow']} {host}"
+            )
+
+    return on_decision
+
+
+def _render_detector_warnings(missing: list[TierStatus], *, color: bool) -> str:
+    """One warning line per configured-but-unavailable detection tier."""
+    paint = console.Palette(enabled=color)
+    g = console.glyphs()
+    lines = []
+    for tier in missing:
+        lines.append(
+            f"  {paint('⚠', 'red') if _supports_unicode() else '  [!]'} "
+            f"{paint(tier.label + ' configured but unavailable', 'bold')} "
+            f"{g['arrow']} install:  {tier.install_hint}"
+        )
+    return "\n".join(lines)
+
+
+def _cmd_start(
+    host: str, port: int, *, no_setup: bool = False, quiet: bool = False, strict: bool = False
+) -> int:
     import uvicorn
 
+    from domestique.config_loader import settings_from_config
     from domestique.gateway import create_gateway
 
     # Best effort: make the console UTF-8 so the banner glyphs render on Windows.
@@ -119,8 +169,51 @@ def _cmd_start(host: str, port: int, *, no_setup: bool = False) -> int:
 
     _maybe_offer_first_run_setup(no_setup)
 
+    settings = settings_from_config()
+    color = console.supports_color()
+
+    # UX-2: surface configured-but-unavailable detection tiers. --strict verifies
+    # deeply (model load) and refuses to start rather than run half-protected.
+    statuses = detector_status(settings, deep=strict)
+    missing = unavailable_configured(statuses)
+    if missing:
+        if strict:
+            print("⛔ strict mode: some configured detection is unavailable.\n")
+            print(_render_detector_warnings(missing, color=color))
+            print("\n  Install the missing tier(s) above, or drop --strict to run anyway.")
+            return 2
+        print(_render_detector_warnings(missing, color=color))
+        print("  " + _SETUP_LATER_HINT + "\n")
+
+    try:
+        interactive = sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        interactive = False
+    on_decision = (
+        _make_ticker(color=color)
+        if _live_feedback_enabled(quiet=quiet, isatty=interactive)
+        else None
+    )
+
     print(_banner(host, port))
-    uvicorn.run(create_gateway(), host=host, port=port)
+    uvicorn.run(create_gateway(settings, on_decision=on_decision), host=host, port=port)
+    return 0
+
+
+def _cmd_report(*, as_json: bool = False, days: int | None = None) -> int:
+    from domestique.report import (
+        aggregate,
+        default_audit_path,
+        load_events,
+        render_text,
+        to_json,
+    )
+
+    data = aggregate(load_events(default_audit_path(), since_days=days))
+    if as_json:
+        print(to_json(data))
+    else:
+        print(render_text(data, color=console.supports_color(), since_days=days))
     return 0
 
 
@@ -199,22 +292,6 @@ def _cmd_browser(action: str, url: str) -> int:
         return 0
     print(f"error: {payload.get('error', 'unexpected dashboard response')}")
     return 1
-
-
-_CATEGORY_LABELS = {
-    "aws_access_key": "AWS access key",
-    "email_address": "Email address",
-    "us_ssn": "US SSN",
-    "phone_number": "Phone number",
-    "credit_card": "Credit card",
-    "github_token": "GitHub token",
-    "jwt": "JWT token",
-    "private_key": "Private key",
-}
-
-
-def _label(category: str) -> str:
-    return _CATEGORY_LABELS.get(category, category.replace("_", " ").capitalize())
 
 
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
@@ -440,8 +517,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the first-run setup offer",
     )
+    start.add_argument(
+        "--quiet",
+        action="store_true",
+        help="suppress the live redaction ticker (also auto-suppressed when not a TTY)",
+    )
+    start.add_argument(
+        "--strict",
+        action="store_true",
+        help="refuse to start if a configured detection tier is unavailable (fail-closed)",
+    )
 
     sub.add_parser("demo", help="show a before/after redaction (no API key needed)")
+
+    report = sub.add_parser("report", help="summarize redactions & blocks by type")
+    report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    report.add_argument(
+        "--days", type=int, default=None, help="only count events from the last N days"
+    )
 
     setup = sub.add_parser("setup", help="first-run onboarding wizard (hardware-aware)")
     setup.add_argument(
@@ -461,9 +554,17 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.cmd == "start":
-        return _cmd_start(args.host, args.port, no_setup=args.no_setup)
+        return _cmd_start(
+            args.host,
+            args.port,
+            no_setup=args.no_setup,
+            quiet=args.quiet,
+            strict=args.strict,
+        )
     if args.cmd == "demo":
         return run_demo()
+    if args.cmd == "report":
+        return _cmd_report(as_json=args.json, days=args.days)
     if args.cmd == "setup":
         return _cmd_setup(args.yes)
     if args.cmd == "browser":

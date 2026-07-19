@@ -13,6 +13,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 import httpx
 import structlog
@@ -91,19 +92,45 @@ def build_cli_pipeline(settings: Settings | None = None) -> DetectorPipeline:
 
 async def _scan_and_redact(
     pipeline: DetectorPipeline, body: dict[str, Any], kind: str
-) -> tuple[Action, str, dict[str, Any]]:
-    """Return ``(action, reason, possibly-redacted body)``."""
+) -> tuple[Action, str, dict[str, Any], list[str]]:
+    """Return ``(action, reason, possibly-redacted body, driving categories)``.
+
+    The category list feeds the live ticker and the metadata-only audit log; it
+    never contains any prompt text.
+    """
     texts = extract_texts(body, kind)
     redactions: list[tuple[str, str]] = []
+    categories: set[str] = set()
     for field_path, text in texts:
         result = await pipeline.inspect(text)
         if result.action is Action.BLOCK:
-            return Action.BLOCK, result.reason, body
+            blocked = sorted({f.category for f in result.findings})
+            return Action.BLOCK, result.reason, body, blocked
         if result.action is Action.REDACT and result.redacted_text is not None:
             redactions.append((field_path, result.redacted_text))
+            categories.update(f.category for f in result.findings)
     if redactions:
-        return Action.REDACT, "redacted", apply_field_redactions(body, redactions)
-    return Action.ALLOW, "", body
+        redacted_body = apply_field_redactions(body, redactions)
+        return Action.REDACT, "redacted", redacted_body, sorted(categories)
+    return Action.ALLOW, "", body, []
+
+
+def _upstream_host(provider: str) -> str:
+    """Human-readable upstream host (e.g. ``api.anthropic.com``) for feedback."""
+    return urlparse(upstream_base(provider)).netloc or provider
+
+
+def _emit_decision(app: FastAPI, action: Action, categories: list[str], host: str) -> None:
+    """Record the decision to the audit log and fire the live-feedback callback."""
+    audit = getattr(app.state, "audit", None)
+    if audit is not None:
+        audit.record_event(action=action, categories=categories, endpoint=host)
+    callback = getattr(app.state, "on_decision", None)
+    if callback is not None:
+        try:
+            callback(action, categories, host)
+        except Exception:  # never let a display callback break the proxy
+            logger.debug("on_decision_callback_error")
 
 
 def _block_response(provider: str, reason: str) -> JSONResponse:
@@ -194,11 +221,15 @@ async def _proxy(request: Request, path: str) -> Response:
     if not isinstance(parsed, dict):
         return await _passthrough(request, provider, path, raw)
 
-    action, reason, out_body = await _scan_and_redact(pipeline, parsed, kind)
+    action, reason, out_body, categories = await _scan_and_redact(pipeline, parsed, kind)
+    host = _upstream_host(provider)
     if action is Action.BLOCK:
         # Expected policy enforcement, not an anomaly — info, not warning.
         logger.info("request_blocked", outcome="block", path=path, reason=reason)
+        _emit_decision(request.app, Action.BLOCK, categories, host)
         return _block_response(provider, reason)
+    if action is Action.REDACT:
+        _emit_decision(request.app, Action.REDACT, categories, host)
 
     payload = json.dumps(out_body).encode("utf-8")
     url = f"{upstream_base(provider)}{path}"
@@ -211,23 +242,46 @@ async def _proxy(request: Request, path: str) -> Response:
 
 
 def create_gateway(
-    settings: Settings | None = None, *, pipeline: DetectorPipeline | None = None
+    settings: Settings | None = None,
+    *,
+    pipeline: DetectorPipeline | None = None,
+    on_decision: Callable[[Action, list[str], str], None] | None = None,
+    audit_path: str | Path | None = None,
+    enable_audit: bool = True,
 ) -> FastAPI:
-    """Construct the transparent redacting reverse-proxy app."""
+    """Construct the transparent redacting reverse-proxy app.
+
+    ``on_decision`` is invoked (action, categories, host) on each redact/block
+    for live terminal feedback. Redact/block decisions are also appended to a
+    metadata-only audit log (``enable_audit``) for ``domestique report``.
+    """
     resolved = settings or Settings()
     built_pipeline = pipeline or build_cli_pipeline(resolved)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.http = httpx.AsyncClient(timeout=resolved.upstream_timeout_s)
+        app.state.audit = None
+        if enable_audit:
+            try:
+                from domestique.audit import AuditLogger
+                from domestique.report import default_audit_path
+
+                path = audit_path or default_audit_path()
+                app.state.audit = AuditLogger(str(path))
+            except Exception:  # audit must never block the proxy from starting
+                logger.warning("audit_init_failed")
         try:
             yield
         finally:
             await app.state.http.aclose()
+            if app.state.audit is not None:
+                app.state.audit.close()
 
     app = FastAPI(title="Domestique Proxy", version="0.1.0", lifespan=lifespan)
     app.state.settings = resolved
     app.state.pipeline = built_pipeline
+    app.state.on_decision = on_decision
 
     @app.get("/health")
     async def health() -> dict[str, str]:
