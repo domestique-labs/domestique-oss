@@ -12,4 +12,4 @@
 - [ ] Added/updated tests for new behavior
 - [ ] Commits are signed off (`git commit -s`, per the DCO in CONTRIBUTING.md)
 - [ ] Docs updated if behavior/flags changed
-- [ ] No secrets, real PII, or private/commercial material added to this public repo
+- [ ] No secrets, real PII, or private/proprietary material added to this public repo

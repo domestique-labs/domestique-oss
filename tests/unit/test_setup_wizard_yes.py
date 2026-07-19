@@ -48,10 +48,9 @@ class TestWizardYes:
         assert stack["gemma4_e2b"] is True
         assert stack["qwen3_1_7b"] is False
         assert stack["legacy_cpu"] is False
-        # Recommended defaults: regex on, GLiNER on, heavy filter off.
+        # Recommended defaults: regex on, GLiNER on.
         assert stack["regex"] is True
         assert stack["gliner_pii"] is True
-        assert stack["openai_privacy_filter"] is False
         # Browser protection defaults to NO (local CA + system proxy cost).
         assert data["browser_interception"] is False
         # Wizard answers are explicit configuration.

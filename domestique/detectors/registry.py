@@ -196,6 +196,7 @@ class Finding:
     detector: str
     category: str
     confidence: float
+    span: Span | None = None
 
     @property
     def description(self) -> str:
@@ -206,7 +207,7 @@ class Finding:
 class InspectionResult:
     """Result returned by ``DetectorPipeline.inspect``.
 
-    Shape is intentionally compatible with what ``app/services/mitm_addon.py``
+    Shape is intentionally compatible with what ``domestique_app/services/mitm_addon.py``
     consumes today: ``should_block``, ``findings`` (with ``.description``),
     and ``redacted_text``.
     """
@@ -232,6 +233,11 @@ class DetectorPipeline:
     def __init__(self, detectors: list[Detector], policy: PolicyEngine) -> None:
         self._detectors = detectors
         self._policy = policy
+
+    @property
+    def policy(self) -> PolicyEngine:
+        """The policy engine this pipeline evaluates against."""
+        return self._policy
 
     async def inspect(self, text: str) -> InspectionResult:
         """Scan *text*, evaluate policy, and return a structured verdict."""
@@ -262,7 +268,12 @@ class DetectorPipeline:
 
         action, reason = self._policy.explain(detections)
         findings = [
-            Finding(detector=d.detector, category=d.category, confidence=d.confidence)
+            Finding(
+                detector=d.detector,
+                category=d.category,
+                confidence=d.confidence,
+                span=d.span,
+            )
             for d in detections
         ]
 

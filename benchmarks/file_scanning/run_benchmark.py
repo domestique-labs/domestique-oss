@@ -21,7 +21,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from app.services.file_scanner import scan_file, FileType
+from domestique_app.services.file_scanner import scan_file, FileType
 
 
 def run_benchmark(dataset_dir: Path) -> dict:

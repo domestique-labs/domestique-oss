@@ -1,11 +1,11 @@
 """Shared console branding for Domestique surfaces.
 
 Both the developer CLI wedge (``domestique start``) and the desktop app
-launcher (``python -m app``) print the same figlet logo on startup. It lives
+launcher (``python -m domestique_app``) print the same figlet logo on startup. It lives
 here so the two entry points cannot drift apart.
 
 Constraints (deliberate):
-  - stdlib only — this module is imported by ``app/`` (which may depend on
+  - stdlib only — this module is imported by ``domestique_app/`` (which may depend on
     ``domestique/``, never the reverse) and must add zero dependencies.
   - ``LOGO`` is pure ASCII so the logo itself renders on any console; only
     decorative glyphs around it are gated on :func:`supports_unicode`.

@@ -18,9 +18,9 @@ pip install -e ".[dev]"         # core + test/lint tooling
 # optional detection extras:
 pip install -e ".[pii,ner,browser-proxy]"
 ```
-Run the app/tests from the **repo root** (the package is used in-tree):
+Run the domestique_app/tests from the **repo root** (the package is used in-tree):
 ```bash
-python -m app                   # dashboard at http://127.0.0.1:9876/
+python -m domestique_app                   # dashboard at http://127.0.0.1:9876/
 pytest                          # test suite
 ```
 
@@ -28,8 +28,8 @@ pytest                          # test suite
 | Check | Command | Status |
 |---|---|---|
 | Tests | `pytest` | **blocking** — keep it green |
-| Lint | `ruff check domestique app` | informational (being burned down) |
-| Format | `ruff format domestique app` | informational |
+| Lint | `ruff check domestique domestique_app` | informational (being burned down) |
+| Format | `ruff format domestique domestique_app` | informational |
 | Types | `mypy domestique` | informational (strict) |
 
 - Target **Python 3.11+**. Config lives in `pyproject.toml` (`[tool.ruff]`, `[tool.mypy]`).
@@ -40,7 +40,7 @@ pytest                          # test suite
 
 ## Pull requests
 1. Branch from `main`; keep PRs focused.
-2. `pytest` passes; new behavior has tests; run `ruff format domestique app` on touched code.
+2. `pytest` passes; new behavior has tests; run `ruff format domestique domestique_app` on touched code.
 3. Sign off commits (`-s`), fill in the PR template, and link any related issue.
 4. A maintainer reviews. Be patient and responsive to feedback.
 

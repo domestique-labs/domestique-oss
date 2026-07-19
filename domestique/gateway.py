@@ -48,7 +48,7 @@ _UPSTREAM_ENV = {
     "anthropic": "DOMESTIQUE_ANTHROPIC_UPSTREAM",
 }
 
-_WEDGE_POLICY = Path(__file__).resolve().parent / "policy" / "wedge_rules.yaml"
+_CLI_POLICY = Path(__file__).resolve().parent / "policy" / "cli-rules.yaml"
 
 # hop-by-hop headers that must not be forwarded (RFC 7230 6.1) + host/length.
 _STRIP_REQUEST_HEADERS = {
@@ -80,12 +80,12 @@ def upstream_base(provider: str) -> str:
     return override.rstrip("/") if override else _DEFAULT_UPSTREAMS[provider]
 
 
-def build_wedge_pipeline(settings: Settings | None = None) -> DetectorPipeline:
-    """Build the detection pipeline with the redact-first wedge policy."""
+def build_cli_pipeline(settings: Settings | None = None) -> DetectorPipeline:
+    """Build the detection pipeline with the redact-first CLI policy."""
     settings = settings or Settings()
     return DetectorPipeline(
         detectors=build_detectors(settings),
-        policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        policy=PolicyEngine.from_yaml(_CLI_POLICY),
     )
 
 
@@ -215,7 +215,7 @@ def create_gateway(
 ) -> FastAPI:
     """Construct the transparent redacting reverse-proxy app."""
     resolved = settings or Settings()
-    built_pipeline = pipeline or build_wedge_pipeline(resolved)
+    built_pipeline = pipeline or build_cli_pipeline(resolved)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

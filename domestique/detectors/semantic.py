@@ -8,7 +8,7 @@ sensitive content that regex cannot catch:
 - Obfuscated or encoded secrets
 - Internal project codenames and context
 
-The model runs entirely on-device - no data leaves the enterprise network.
+The model runs entirely on-device - no data leaves your network.
 
 Latency: ~5-15 ms per text chunk on CPU (sentence-transformers/all-MiniLM-L6-v2).
 For GPU deployments, < 2 ms.
@@ -32,7 +32,7 @@ class SemanticDetector:
 
     Detection strategies:
     1. **Topic similarity** - compares request text embeddings against a library
-       of sensitive topic embeddings (configurable per enterprise).
+       of sensitive topic embeddings (configurable per deployment).
     2. **Obfuscation detection** - identifies base64-encoded blobs, hex dumps,
        and other encoding schemes that may hide secrets.
     3. **Entropy analysis** - flags high-entropy strings that evade regex patterns.

@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Domestique — Dashboard</title>
+<style>
+  :root {
+    --bg: #0f172a; --surface: #1e293b; --surface2: #334155;
+    --text: #e2e8f0; --text-muted: #94a3b8; --accent: #3b82f6;
+    --green: #10b981; --red: #ef4444; --yellow: #f59e0b; --purple: #8b5cf6;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    min-height: 100vh;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 20px 0; border-bottom: 1px solid var(--surface2); margin-bottom: 32px;
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo h1 { font-size: 1.5rem; font-weight: 700; }
+  .logo h1 span { color: var(--accent); }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 600;
+  }
+  .status-active { background: rgba(16, 185, 129, 0.15); color: var(--green); }
+  .status-inactive { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+  .pulse { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s infinite; }
+  .pulse-green { background: var(--green); }
+  .pulse-red { background: var(--red); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  /* Cards */
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--surface); border-radius: 12px; padding: 24px;
+    border: 1px solid var(--surface2); transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card h2 {
+    font-size: 1rem; color: var(--text-muted); margin-bottom: 16px;
+    text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+  }
+  .card h2 .icon { margin-right: 8px; }
+
+  /* Toggle switches */
+  .detector-list { list-style: none; }
+  .detector-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 0; border-bottom: 1px solid var(--surface2);
+  }
+  .detector-item:last-child { border-bottom: none; }
+  .detector-info { flex: 1; }
+  .detector-name { font-weight: 600; font-size: 0.95rem; }
+  .detector-meta { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+  .toggle {
+    position: relative; width: 44px; height: 24px; cursor: pointer;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider {
+    position: absolute; inset: 0; background: var(--surface2);
+    border-radius: 24px; transition: 0.3s;
+  }
+  .toggle .slider:before {
+    content: ''; position: absolute; width: 18px; height: 18px;
+    left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: 0.3s;
+  }
+  .toggle input:checked + .slider { background: var(--green); }
+  .toggle input:checked + .slider:before { transform: translateX(20px); }
+
+  /* Stats */
+  .stats-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat-box {
+    flex: 1; min-width: 100px; text-align: center;
+    padding: 16px; background: var(--bg); border-radius: 8px;
+  }
+  .stat-value { font-size: 1.6rem; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; margin-top: 4px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 8px; font-weight: 600;
+    font-size: 0.9rem; cursor: pointer; border: none; transition: all 0.2s;
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2563eb; transform: translateY(-1px); }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-outline {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .btn-outline:hover { background: rgba(59, 130, 246, 0.1); }
+  .btn-group { display: flex; gap: 10px; margin-top: 16px; }
+
+  /* Preset selector */
+  .preset-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .preset-card {
+    padding: 14px; border-radius: 8px; border: 2px solid var(--surface2);
+    cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+  .preset-card:hover { border-color: var(--accent); }
+  .preset-card.active { border-color: var(--green); background: rgba(16, 185, 129, 0.05); }
+  .preset-title { font-weight: 700; font-size: 0.9rem; }
+  .preset-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
+  .preset-size { font-size: 0.7rem; color: var(--accent); margin-top: 6px; font-weight: 600; }
+
+  /* Log */
+  .log-area {
+    background: var(--bg); border-radius: 12px; padding: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    border: 1px solid var(--surface2);
+  }
+  .log-entry {
+    padding: 10px 14px; margin: 4px; border-radius: 8px;
+    cursor: pointer; transition: all 0.2s ease;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface);
+  }
+  .log-entry:hover { background: var(--surface2); transform: translateX(2px); }
+  .log-entry:active { transform: scale(0.995); }
+  .log-icon { font-size: 1.1rem; flex-shrink: 0; width: 24px; text-align: center; }
+  .log-main { flex: 1; min-width: 0; }
+  .log-host { font-weight: 600; color: var(--text); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-path { font-size: 0.72rem; color: var(--text-muted); opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .log-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+  .log-time { font-size: 0.68rem; color: var(--text-muted); opacity: 0.6; font-variant-numeric: tabular-nums; }
+  .log-badge {
+    font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 2px 6px; border-radius: 4px;
+  }
+  .log-badge-blocked { background: rgba(239,68,68,0.15); color: var(--red); }
+  .log-badge-allowed { background: rgba(16,185,129,0.15); color: var(--green); }
+  .log-badge-redacted { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .log-badge-pass { background: rgba(148,163,184,0.1); color: var(--text-muted); }
+  .log-badge-approved { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .log-badge-response_alert { background: rgba(139,92,246,0.15); color: var(--purple); }
+  .log-blocked .log-host { color: var(--red); }
+  .log-alert .log-host { color: var(--purple); }
+  .log-details {
+    max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+    margin: 0 4px; border-radius: 8px; background: var(--surface2);
+    font-size: 0.75rem; line-height: 1.6; opacity: 0;
+  }
+  .log-details.open { max-height: 520px; padding: 12px 16px; opacity: 1; margin-top: 2px; margin-bottom: 4px; }
+  .log-detail-row { display: flex; padding: 3px 0; border-bottom: 1px solid rgba(148,163,184,0.1); }
+  .log-detail-row:last-child { border-bottom: none; }
+  .log-detail-label { font-weight: 600; color: var(--text); width: 72px; flex-shrink: 0; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.3px; opacity: 0.8; }
+  .log-detail-value { color: var(--text-muted); flex: 1; word-break: break-all; }
+  .log-content-box {
+    margin-top: 8px; padding: 8px 10px; background: var(--bg); border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.7rem; line-height: 1.4;
+    color: var(--text); border: 1px solid rgba(148,163,184,0.15); max-height: 220px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .log-content-label { margin-top: 10px; color: var(--text-muted); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.3px; }
+  .log-reason-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 0.65rem;
+    font-weight: 600; background: rgba(239,68,68,0.12); color: var(--red); margin-right: 4px;
+  }
+  .log-group-header { border-left: 3px solid var(--accent); }
+  .log-group-chevron { display: inline-block; margin-left: 6px; font-size: 0.65rem; color: var(--text-muted); transition: transform 0.2s ease; }
+  .log-group-header.open .log-group-chevron { transform: rotate(90deg); }
+  .log-group-count {
+    display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 10px;
+    font-size: 0.65rem; font-weight: 700; background: var(--surface2); color: var(--text-muted);
+  }
+  .log-group-children {
+    max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+    margin: 0 4px 0 18px; border-left: 2px solid var(--surface2); padding-left: 6px;
+  }
+  .log-group-children.open { max-height: 4000px; }
+  .log-filter-bar { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+  .log-filter {
+    font-size: 0.72rem !important; padding: 5px 12px !important; border-radius: 20px !important;
+    transition: all 0.2s ease !important;
+  }
+  .log-filter.active {
+    background: var(--accent) !important; color: white !important;
+    border-color: var(--accent) !important; box-shadow: 0 2px 8px rgba(59,130,246,0.3);
+  }
+  .btn-sm { font-size: 0.72rem !important; padding: 5px 12px !important; border-radius: 20px !important; }
+  .log-count { font-size: 0.7rem; color: var(--text-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  /* Benchmark section */
+  .benchmark-results { margin-top: 16px; }
+
+  /* Pending Approvals */
+  .approval-card { border-color: var(--yellow) !important; }
+  .approval-card.has-pending { animation: approval-pulse 2s ease-in-out infinite; }
+  @keyframes approval-pulse { 0%,100% { border-color: var(--yellow); } 50% { border-color: var(--red); } }
+  .approval-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    background: var(--surface2); border-radius: 10px; margin-bottom: 8px;
+    border: 1px solid rgba(245,158,11,0.2);
+  }
+  .approval-info { flex: 1; min-width: 0; }
+  .approval-host { font-weight: 700; font-size: 0.85rem; color: var(--text); }
+  .approval-findings { margin-top: 4px; }
+  .approval-finding-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.65rem;
+    font-weight: 700; background: rgba(239,68,68,0.12); color: var(--red); margin-right: 4px;
+  }
+  .approval-preview {
+    margin-top: 6px; font-family: 'SF Mono', monospace; font-size: 0.7rem;
+    color: var(--text-muted); background: var(--bg); padding: 6px 10px;
+    border-radius: 6px; max-height: 60px; overflow-y: auto; word-break: break-all;
+  }
+  .approval-timer {
+    font-size: 0.75rem; font-weight: 700; color: var(--yellow);
+    min-width: 36px; text-align: center; font-variant-numeric: tabular-nums;
+  }
+  .approval-timer.urgent { color: var(--red); }
+  .approval-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .approval-btn {
+    padding: 6px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700;
+    border: none; cursor: pointer; transition: all 0.15s ease;
+  }
+  .approval-btn:hover { transform: scale(1.05); }
+  .approval-btn-allow { background: var(--green); color: white; }
+  .approval-btn-deny { background: var(--red); color: white; }
+  .approval-empty {
+    text-align: center; padding: 20px; color: var(--text-muted); font-size: 0.82rem;
+  }
+  .approval-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--surface2);
+  }
+  .bench-bar {
+    display: flex; align-items: center; gap: 12px; padding: 8px 0;
+  }
+  .bench-label { width: 140px; font-size: 0.85rem; font-weight: 600; }
+  .bench-track {
+    flex: 1; height: 24px; background: var(--bg); border-radius: 4px; overflow: hidden;
+  }
+  .bench-fill {
+    height: 100%; border-radius: 4px; transition: width 0.8s ease;
+    display: flex; align-items: center; padding-left: 8px;
+    font-size: 0.75rem; font-weight: 700; color: white;
+  }
+  .bench-latency { width: 80px; text-align: right; font-size: 0.8rem; color: var(--text-muted); }
+
+  footer {
+    text-align: center; padding: 32px 0; margin-top: 40px;
+    border-top: 1px solid var(--surface2); color: var(--text-muted); font-size: 0.8rem;
+  }
+
+  /* Tabs */
+  .tab-nav {
+    display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface);
+    border-radius: 10px; padding: 4px; border: 1px solid var(--surface2);
+  }
+  .tab-btn {
+    flex: 1; padding: 10px 16px; border: none; background: transparent;
+    color: var(--text-muted); font-size: 0.85rem; font-weight: 600;
+    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+  }
+  .tab-btn:hover { color: var(--text); background: var(--bg); }
+  .tab-btn.active { color: var(--text); background: var(--accent); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Persistent status bar */
+  .status-bar {
+    display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+    padding: 10px 16px; background: var(--surface); border-radius: 10px;
+    border: 1px solid var(--surface2); margin-bottom: 20px; font-size: 0.78rem;
+  }
+  .status-bar .sb-item { display: flex; align-items: center; gap: 6px; }
+  .status-bar .sb-label { color: var(--text-muted); }
+  .status-bar .sb-value { font-weight: 600; }
+
+  /* Resource monitor bar */
+  .resource-bar {
+    display: flex; gap: 20px; align-items: center;
+    padding: 8px 16px; background: var(--bg); border-radius: 8px;
+    border: 1px solid var(--surface2); margin-bottom: 8px; font-size: 0.72rem;
+  }
+  .resource-bar .rb-item { display: flex; align-items: center; gap: 6px; }
+  .resource-bar .rb-label { color: var(--text-muted); }
+  .resource-bar .rb-value { font-weight: 600; font-family: 'SF Mono', monospace; min-width: 40px; }
+  .rb-bar { width: 60px; height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .rb-fill { height: 100%; border-radius: 3px; transition: width 0.5s, background 0.5s; }
+  .btn-sm { padding: 6px 14px; font-size: 0.78rem; border-radius: 6px; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="logo">
+      <svg width="32" height="32" viewBox="0 0 512 512" style="vertical-align: middle; margin-right: 8px;">
+        <path d="M256 28 C256 28 80 80 80 80 C80 80 80 280 80 280 C80 400 256 484 256 484 C256 484 432 400 432 280 C432 280 432 80 432 80 C432 80 256 28 256 28 Z" fill="none" stroke="#6366f1" stroke-width="18" stroke-linejoin="round"/>
+        <path d="M256 68 C256 68 120 110 120 110 C120 110 120 270 120 270 C120 370 256 440 256 440 C256 440 392 370 392 270 C392 270 392 110 392 110 C392 110 256 68 256 68 Z" fill="none" stroke="#6366f1" stroke-width="10" stroke-linejoin="round" opacity="0.4"/>
+        <circle cx="256" cy="256" r="14" fill="#6366f1"/><circle cx="256" cy="176" r="11" fill="#8b5cf6"/><circle cx="325" cy="216" r="11" fill="#8b5cf6"/><circle cx="325" cy="296" r="11" fill="#8b5cf6"/><circle cx="256" cy="336" r="11" fill="#8b5cf6"/><circle cx="187" cy="296" r="11" fill="#8b5cf6"/><circle cx="187" cy="216" r="11" fill="#8b5cf6"/>
+        <line x1="256" y1="256" x2="256" y2="176" stroke="#6366f1" stroke-width="3" opacity="0.7"/><line x1="256" y1="256" x2="325" y2="216" stroke="#6366f1" stroke-width="3" opacity="0.7"/><line x1="256" y1="256" x2="325" y2="296" stroke="#6366f1" stroke-width="3" opacity="0.7"/><line x1="256" y1="256" x2="256" y2="336" stroke="#6366f1" stroke-width="3" opacity="0.7"/><line x1="256" y1="256" x2="187" y2="296" stroke="#6366f1" stroke-width="3" opacity="0.7"/><line x1="256" y1="256" x2="187" y2="216" stroke="#6366f1" stroke-width="3" opacity="0.7"/>
+        <line x1="256" y1="176" x2="325" y2="216" stroke="#8b5cf6" stroke-width="2.5" opacity="0.5"/><line x1="325" y1="216" x2="325" y2="296" stroke="#8b5cf6" stroke-width="2.5" opacity="0.5"/><line x1="325" y1="296" x2="256" y2="336" stroke="#8b5cf6" stroke-width="2.5" opacity="0.5"/><line x1="256" y1="336" x2="187" y2="296" stroke="#8b5cf6" stroke-width="2.5" opacity="0.5"/><line x1="187" y1="296" x2="187" y2="216" stroke="#8b5cf6" stroke-width="2.5" opacity="0.5"/><line x1="187" y1="216" x2="256" y2="176" stroke="#8b5cf6" stroke-width="2.5" opacity="0.5"/>
+      </svg>
+      <h1>LLM<span>Guard</span></h1>
+    </div>
+    <div class="status-badge status-inactive" id="statusBadge">
+      <div class="pulse pulse-red" id="statusPulse"></div>
+      <span id="statusText">Inactive</span>
+    </div>
+  </header>
+
+  <!-- Setup Gate -->
+  <div id="setupGate" style="display:none">
+    <div class="card" style="max-width:500px;margin:60px auto;text-align:center;padding:48px">
+      <div style="font-size:3rem;margin-bottom:16px">🔐</div>
+      <h2 style="color:var(--text);font-size:1.2rem;margin-bottom:12px;text-transform:none;letter-spacing:0" id="setupTitle">Certificate Setup</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:20px" id="setupMsg">
+        Domestique needs a local CA certificate to inspect LLM traffic. Click below to install it automatically (no password required).
+      </p>
+      <button class="btn btn-primary" id="certInstallBtn" style="font-size:1rem;padding:14px 32px">
+        🔑 Install Certificate
+      </button>
+      <p style="color:var(--text-muted);font-size:0.72rem;margin-top:16px" id="certProgress"></p>
+    </div>
+  </div>
+
+  <!-- Main App (hidden until cert is trusted) -->
+  <div id="mainApp">
+
+  <!-- Resource Monitor (always visible) -->
+  <div class="resource-bar">
+    <div class="rb-item">
+      <span class="rb-label" id="rbCpuCount"></span>
+    </div>
+    <div class="rb-item">
+      <span class="rb-label">CPU:</span>
+      <span class="rb-value" id="rbCpu">--%</span>
+      <div class="rb-bar"><div class="rb-fill" id="rbCpuBar" style="width:0%;background:var(--green)"></div></div>
+    </div>
+    <div class="rb-item">
+      <span class="rb-label">RAM:</span>
+      <span class="rb-value" id="rbMem">-- MB</span>
+      <div class="rb-bar"><div class="rb-fill" id="rbMemBar" style="width:0%;background:var(--accent)"></div></div>
+    </div>
+    <div class="rb-item">
+      <span class="rb-label" id="rbGpuLabel">VRAM:</span>
+      <span class="rb-value" id="rbGpu">-- MB</span>
+      <div class="rb-bar"><div class="rb-fill" id="rbGpuBar" style="width:0%;background:var(--purple,#a855f7)"></div></div>
+    </div>
+    <div class="rb-item" id="rbModelInfo" style="margin-left:auto;color:var(--text-muted)">
+    </div>
+  </div>
+
+  <!-- Persistent Status Bar -->
+  <div class="status-bar">
+    <div class="sb-item">
+      <span class="sb-label">Protection:</span>
+      <span class="sb-value" id="sbProtection" style="color:var(--red)">Inactive</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">Fail Mode:</span>
+      <span class="sb-value" id="sbFailMode">Closed</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">Preset:</span>
+      <span class="sb-value" id="sbPreset" style="color:var(--accent)">Quality</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">Inspected:</span>
+      <span class="sb-value" id="sbInspected" style="color:var(--accent)">0</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-label">Blocked:</span>
+      <span class="sb-value" id="sbBlocked" style="color:var(--red)">0</span>
+    </div>
+    <div class="sb-item" style="margin-left:auto">
+      <button class="btn btn-sm" style="background:var(--green);color:white" onclick="toggleProxy()">
+        <span id="sbToggleText">Enable</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('overview')">📊 Overview</button>
+    <button class="tab-btn" onclick="switchTab('detection')">⚙️ Detection</button>
+    <button class="tab-btn" onclick="switchTab('policy')">📜 Policy</button>
+    <button class="tab-btn" onclick="switchTab('validation')">🔬 Validation</button>
+  </div>
+
+  <!-- ═══════ TAB: Overview ═══════ -->
+  <div class="tab-pane active" id="tab-overview">
+
+    <!-- Approvals (left) + Stats (right) -->
+    <div class="grid" style="margin-bottom:20px">
+
+    <div class="card approval-card" id="approvalCard">
+      <h2><span class="icon">⚠️</span> Pending Approvals <span id="approvalCount" style="font-size:0.75rem;color:var(--yellow);font-weight:400"></span></h2>
+      <div class="approval-toggle-row">
+        <div>
+          <div style="font-size:0.82rem;color:var(--text)">Approval Mode</div>
+          <div style="font-size:0.72rem;color:var(--text-muted)">Review flagged requests before blocking</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="approvalModeToggle" onchange="toggleApprovalMode(this.checked)">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="approvalList">
+        <div class="approval-empty">No pending requests</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="icon">📊</span> Session Stats</h2>
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-value" id="totalRequests">0</div>
+          <div class="stat-label">Inspected</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="blockedCount" style="color:var(--red,#ef4444)">0</div>
+          <div class="stat-label">Blocked</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="redactedCount" style="color:var(--orange,#f59e0b)">0</div>
+          <div class="stat-label">Redacted</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-value" id="allowedCount" style="color:var(--green,#10b981)">0</div>
+          <div class="stat-label">Allowed</div>
+        </div>
+        <div class="stat-box" title="Sensitive data detected in an LLM's reply (response-side DLP). Detected and logged after the reply already streamed to the browser — not blocked.">
+          <div class="stat-value" id="responseAlertsCount" style="color:var(--purple,#8b5cf6)">0</div>
+          <div class="stat-label">Response Leaks</div>
+        </div>
+        <div class="stat-box" title="Response bodies that could not be decoded (e.g. an unsupported Content-Encoding), so they were NOT scanned for a leak. A non-zero value means a possible silent DLP gap worth investigating.">
+          <div class="stat-value" id="responseScanErrorsCount" style="color:var(--yellow,#f59e0b)">0</div>
+          <div class="stat-label">Scan Errors</div>
+        </div>
+      </div>
+    </div>
+
+    </div><!-- /grid -->
+
+    <!-- Request Log — full width below -->
+    <div class="card">
+      <h2><span class="icon">📋</span> Request Log</h2>
+      <div class="log-filter-bar">
+        <button class="btn btn-outline btn-sm log-filter active" data-filter="all" onclick="filterLog('all')">All</button>
+        <button class="btn btn-outline btn-sm log-filter" data-filter="blocked" onclick="filterLog('blocked')">Blocked</button>
+        <button class="btn btn-outline btn-sm log-filter" data-filter="redacted" onclick="filterLog('redacted')">Redacted</button>
+        <button class="btn btn-outline btn-sm log-filter" data-filter="allowed" onclick="filterLog('allowed')">Allowed</button>
+        <button class="btn btn-outline btn-sm log-filter" data-filter="response_alert" onclick="filterLog('response_alert')">Response Leaks</button>
+        <button class="btn btn-outline btn-sm log-filter" data-filter="pass" onclick="filterLog('pass')">Passed</button>
+        <span class="log-count" id="logCount"></span>
+        <button class="btn btn-outline btn-sm" onclick="refreshLog()" title="Refresh">↻</button>
+      </div>
+      <div class="log-area" id="logArea" style="max-height:480px;overflow-y:auto;scroll-behavior:smooth">
+        <div style="color:var(--text-muted);padding:32px;text-align:center">Loading...</div>
+      </div>
+    </div>
+
+  </div><!-- /tab-overview -->
+
+  <!-- ═══════ TAB: Detection ═══════ -->
+  <div class="tab-pane" id="tab-detection">
+
+    <!-- Hardware Preset — full width horizontal bar -->
+    <div class="card" style="margin-bottom:20px">
+      <h2><span class="icon">💻</span> Hardware Preset</h2>
+      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px">
+        <div class="preset-card" data-preset="minimal" onclick="selectPreset(this)">
+          <div class="preset-title">Minimal</div>
+          <div class="preset-desc">Regex only</div>
+          <div class="preset-size">0 GPU · <1ms</div>
+        </div>
+        <div class="preset-card active" data-preset="balanced" onclick="selectPreset(this)">
+          <div class="preset-title">Balanced ⭐</div>
+          <div class="preset-desc">Regex + Qwen3 1.7B</div>
+          <div class="preset-size">1.8GB GPU · ~164ms · F1 92%</div>
+        </div>
+        <div class="preset-card" data-preset="quality" onclick="selectPreset(this)">
+          <div class="preset-title">Quality</div>
+          <div class="preset-desc">Regex + GLiNER + Qwen3</div>
+          <div class="preset-size">1.8GB GPU · ~209ms · 91% recall</div>
+        </div>
+        <div class="preset-card" data-preset="legacy-cpu" onclick="selectPreset(this)">
+          <div class="preset-title">Legacy CPU</div>
+          <div class="preset-desc">Regex + Llama 3.2 1B</div>
+          <div class="preset-size">CPU only · no GPU required</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detection Stack + Regex Patterns side by side -->
+    <div class="grid">
+
+    <!-- Detection Stack -->
+    <div class="card">
+      <h2><span class="icon">⚙️</span> Detection Stack</h2>
+      <ul class="detector-list">
+        <li class="detector-item">
+          <div class="detector-info">
+            <div class="detector-name">Regex Scanner</div>
+            <div class="detector-meta">Tier 1 · 0.03ms · Secrets, API keys, PII patterns</div>
+          </div>
+          <label class="toggle"><input type="checkbox" checked data-detector="regex"><span class="slider"></span></label>
+        </li>
+        <li class="detector-item">
+          <div class="detector-info">
+            <div class="detector-name">GLiNER2-PII</div>
+            <div class="detector-meta">Tier 2 · ~20ms · 300M params · Names, emails, SSN, phones</div>
+          </div>
+          <label class="toggle"><input type="checkbox" checked data-detector="gliner_pii"><span class="slider"></span></label>
+        </li>
+        <li class="detector-item">
+          <div class="detector-info">
+            <div class="detector-name">Qwen3 1.7B</div>
+            <div class="detector-meta">Tier 3 · ~163ms · 1.8GB VRAM · Best efficiency ⭐</div>
+          </div>
+          <label class="toggle"><input type="checkbox" data-detector="qwen3_1_7b"><span class="slider"></span></label>
+        </li>
+        <li class="detector-item">
+          <div class="detector-info">
+            <div class="detector-name">Gemma 4 E2B</div>
+            <div class="detector-meta">Tier 3 · ~155ms MLX / ~281ms GGUF · 7.3GB VRAM · Best accuracy (32GB+ RAM)</div>
+          </div>
+          <label class="toggle"><input type="checkbox" data-detector="gemma4_e2b"><span class="slider"></span></label>
+        </li>
+      </ul>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--surface2)">
+        <button class="btn btn-primary btn-sm" onclick="applyDetectionStack()">⟳ Apply & Restart Proxy</button>
+        <span id="stackApplyStatus" style="font-size:0.72rem;color:var(--green);opacity:0;transition:opacity 0.3s"></span>
+      </div>
+    </div>
+
+    <!-- Regex Patterns -->
+    <div class="card">
+      <h2><span class="icon">🔤</span> Regex Patterns</h2>
+      <div style="margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:0.82rem;font-weight:600;color:var(--text)">Built-in Patterns (16)</span>
+          <button class="btn btn-sm" onclick="document.getElementById('builtinPatterns').style.display=document.getElementById('builtinPatterns').style.display==='none'?'block':'none'"
+            style="background:var(--surface2);color:var(--text-muted);border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.72rem">
+            Show/Hide
+          </button>
+        </div>
+        <div id="builtinPatterns" style="display:none;max-height:300px;overflow-y:auto;background:var(--bg);border-radius:8px;padding:8px;border:1px solid var(--surface2)">
+          <div style="display:grid;grid-template-columns:auto 1fr 2fr 0.5fr 1fr;gap:6px;padding:4px 0;border-bottom:1px solid var(--surface2);font-size:0.68rem;color:var(--text-muted);font-weight:600">
+            <span>On</span><span>Name</span><span>Regex</span><span>Conf</span><span>Type</span>
+          </div>
+          <div id="builtinPatternsList"></div>
+        </div>
+      </div>
+      <div style="font-size:0.82rem;font-weight:600;color:var(--text);margin-bottom:8px">Custom Patterns</div>
+      <div id="customPatternsList" style="margin-bottom:12px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+        <input id="patName" type="text" placeholder="Name" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.78rem">
+        <input id="patCat" type="text" placeholder="Category" value="CREDENTIALS" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.78rem">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px;margin-bottom:8px">
+        <input id="patRegex" type="text" placeholder="Regex pattern" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-family:'SF Mono',monospace;font-size:0.78rem">
+        <input id="patConf" type="number" step="0.05" min="0" max="1" value="0.9" placeholder="Conf" style="width:70px;background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.78rem">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addCustomPattern()">+ Add Pattern</button>
+      <span id="patternSaveStatus" style="font-size:0.72rem;color:var(--green);opacity:0;margin-left:8px"></span>
+    </div>
+
+    </div><!-- /grid -->
+
+    <!-- GLiNER Settings -->
+    <div class="card" style="margin-top:20px">
+      <h2><span class="icon">🧠</span> GLiNER PII Settings</h2>
+      <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:12px">
+        Configure which PII entities GLiNER detects and the minimum confidence threshold.
+        Uncheck labels to reduce false positives for your environment.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:16px">
+        <div>
+          <div style="font-size:0.82rem;font-weight:600;margin-bottom:8px;color:var(--text)">Entity Labels</div>
+          <div id="glinerLabels" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </div>
+        <div style="min-width:200px">
+          <label style="font-size:0.82rem;font-weight:600;display:flex;justify-content:space-between;margin-bottom:6px;color:var(--text)">
+            <span>Confidence Threshold</span>
+            <span id="glinerThresholdValue" style="color:var(--accent)">0.5</span>
+          </label>
+          <input id="glinerThresholdSlider" type="range" min="0.01" max="0.99" step="0.01" value="0.5"
+            style="width:100%;accent-color:var(--accent)"
+            oninput="document.getElementById('glinerThresholdValue').textContent=this.value">
+          <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-muted)">
+            <span>Sensitive</span><span>Strict</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+        <button class="btn btn-primary btn-sm" onclick="saveGlinerConfig()">Save & Restart Proxy</button>
+        <span id="glinerSaveStatus" style="font-size:0.72rem;color:var(--green);opacity:0;transition:opacity 0.3s"></span>
+      </div>
+    </div>
+
+    <!-- Classifier Prompt - full width -->
+    <div class="card" style="margin-top:20px">
+      <h2><span class="icon">📝</span> Classifier Prompt</h2>
+      <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:4px">
+        System prompt sent to the Tier 3 LLM classifier (Gemma4/Qwen3).
+        Output format: <code>{"category": "...", "confidence": 0.0-1.0, "reason": "..."}</code>
+      </p>
+      <div id="promptBadge" style="display:inline-block;font-size:0.68rem;padding:2px 8px;border-radius:4px;margin-bottom:8px;background:rgba(59,130,246,0.15);color:var(--accent)">Using built-in default</div>
+      <textarea id="classifierPrompt"
+        style="width:100%;min-height:200px;background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:8px;padding:12px;font-family:'SF Mono','Fira Code',monospace;font-size:0.75rem;line-height:1.5;resize:vertical"
+        oninput="onPromptEdit()"></textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <button class="btn btn-primary btn-sm" onclick="saveAndApplyPrompt()">Save & Restart Proxy</button>
+        <button class="btn btn-outline btn-sm" onclick="resetClassifierPrompt()">Reset to Default</button>
+        <span id="promptSaveStatus" style="font-size:0.72rem;color:var(--green);opacity:0;transition:opacity 0.3s"></span>
+      </div>
+    </div>
+
+  </div><!-- /tab-detection -->
+
+  <!-- ═══════ TAB: Policy ═══════ -->
+  <div class="tab-pane" id="tab-policy">
+  <div class="grid">
+    <div class="card">
+      <h2><span class="icon">🌐</span> Browser Protection</h2>
+      <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:16px">
+        Intercepts HTTPS traffic to LLM services and scans for sensitive data in real-time.
+        Starts automatically on first launch. Status below reflects whether it's
+        actually running right now, not a fixed claim.
+      </p>
+      <div class="detector-list">
+        <li class="detector-item">
+          <div class="detector-info">
+            <div class="detector-name">Protection Status</div>
+            <div class="detector-meta" id="browserStatus">Starting...</div>
+          </div>
+          <span id="protectionIndicator" style="font-size:1.2rem">🔄</span>
+        </li>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:var(--bg);border-radius:8px;font-size:0.8rem;color:var(--text-muted)">
+        <strong style="color:var(--text)">Protected services:</strong><br>
+        ChatGPT · Gemini · Claude · Copilot · Mistral · Perplexity · Groq · Cohere · Together AI · Replicate · HuggingFace · xAI/Grok
+      </div>
+    </div>
+
+    <!-- Regex Patterns -->
+    <div class="card">
+      <h2><span class="icon">🌍</span> Domain Management</h2>
+      <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:12px">
+        Control which LLM domains are intercepted and which are bypassed.
+      </p>
+      <div style="margin-bottom:12px">
+        <label style="font-size:0.8rem;color:var(--text);font-weight:600;display:block;margin-bottom:6px">Monitored Domains</label>
+        <textarea id="monitoredDomains" rows="4"
+          style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:8px;padding:10px;font-family:'SF Mono',monospace;font-size:0.75rem;resize:vertical"
+          placeholder="One domain per line"></textarea>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:0.8rem;color:var(--text);font-weight:600;display:block;margin-bottom:6px">Allowed (Bypass) Domains</label>
+        <textarea id="allowedDomains" rows="2"
+          style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:8px;padding:10px;font-family:'SF Mono',monospace;font-size:0.75rem;resize:vertical"
+          placeholder="Domains to exclude from interception (one per line)"></textarea>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveDomains()">Save Domains</button>
+      <span id="domainSaveStatus" style="font-size:0.72rem;color:var(--green);opacity:0;margin-left:8px"></span>
+
+      <div style="margin-top:16px;padding:14px;background:var(--bg);border:1px solid var(--surface2);border-radius:8px">
+        <div style="font-size:0.78rem;font-weight:600;color:var(--text);margin-bottom:8px">Inspection Scope</div>
+        <p style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">
+          Only <strong>POST requests</strong> to conversation/completion endpoints are scanned.
+          Page loads, telemetry, static assets, and internal service calls are automatically skipped.
+        </p>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px"><strong>Inspected URL patterns (30+ endpoints):</strong></div>
+        <code style="font-size:0.68rem;color:var(--green);display:block;padding:6px 8px;background:var(--surface);border-radius:4px;margin-bottom:8px;line-height:1.6;white-space:pre-wrap">/conversation  /v1/chat/completions  /v1/messages  /v1/responses
+/chat/completions  /v1/complete  /completion  /generate  /predictions
+/batchexecute  /StreamGenerate  :generateContent  :streamGenerateContent
+/c/api/chat  /c/api/messages  /v2/chat  /aiserver.v1.  /models/</code>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px"><strong>Covered providers:</strong></div>
+        <code style="font-size:0.68rem;color:var(--accent);display:block;padding:6px 8px;background:var(--surface);border-radius:4px;margin-bottom:8px;line-height:1.4;white-space:pre-wrap">ChatGPT  Claude  Gemini  Copilot  Mistral  Perplexity  Grok  Groq
+DeepSeek  Cohere  Together  Fireworks  Replicate  HuggingFace  Cursor</code>
+        <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:4px"><strong>Skipped URL patterns:</strong></div>
+        <code style="font-size:0.68rem;color:var(--text-muted);display:block;padding:6px 8px;background:var(--surface);border-radius:4px;line-height:1.6;white-space:pre-wrap">/sentinel/  /autocompletions  /connectors/  /telemetry
+/cdn-cgi/  /ces/  /cdn/  /_next/  /assets/  /static/  /init</code>
+      </div>
+    </div>
+
+    <!-- Policy Rules & Sensitivity -->
+    <div class="card">
+      <h2><span class="icon">📜</span> Policy Rules</h2>
+      <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:12px">
+        Define actions per detection category. Each rule has a <strong>minimum confidence</strong> threshold — detections below it are ignored.
+        Actions: <strong>block</strong> (hard stop), <strong>approve</strong> (user review), <strong>log</strong> (allow + audit).
+      </p>
+      <p style="color:var(--text-muted);font-size:0.72rem;margin-bottom:12px">
+        Confidence comes from each detector: regex (pattern-specific), GLiNER/Presidio (model score), LLM (JSON output).
+      </p>
+      <div id="policyRulesList" style="margin-bottom:12px"></div>
+      <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:6px;margin-bottom:8px">
+        <input id="ruleCategory" type="text" placeholder="Category (e.g. CREDENTIALS)" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.78rem">
+        <select id="ruleAction" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.78rem">
+          <option value="block">Block</option>
+          <option value="approve">Approve</option>
+          <option value="log">Log</option>
+        </select>
+        <input id="ruleConfidence" type="number" step="0.05" min="0" max="1" value="0.7" placeholder="Min confidence" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.78rem">
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="addPolicyRule()">+ Add Rule</button>
+      <span id="ruleSaveStatus" style="font-size:0.72rem;color:var(--green);opacity:0;margin-left:8px"></span>
+
+      <hr style="border:none;border-top:1px solid var(--surface2);margin:16px 0">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <label style="font-size:0.8rem;color:var(--text);display:flex;justify-content:space-between;margin-bottom:6px">
+            <span>Default Confidence Threshold</span>
+            <span id="thresholdValue" style="color:var(--accent);font-weight:600">0.7</span>
+          </label>
+          <input id="confidenceSlider" type="range" min="0" max="1" step="0.05" value="0.7"
+            style="width:100%;accent-color:var(--accent)"
+            oninput="document.getElementById('thresholdValue').textContent=this.value">
+          <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-muted)">
+            <span>🔒 Aggressive</span><span>⚖️ Balanced</span><span>🟢 Permissive</span>
+          </div>
+        </div>
+        <div>
+          <label style="font-size:0.8rem;color:var(--text);display:block;margin-bottom:6px">Fail Mode</label>
+          <select id="failModeSelect" style="background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.82rem;width:100%">
+            <option value="closed">Closed (block on error)</option>
+            <option value="open">Open (allow on error)</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveSensitivity()" style="margin-top:12px">Save Settings</button>
+      <span id="sensitivitySaveStatus" style="font-size:0.72rem;color:var(--green);opacity:0;margin-left:8px"></span>
+    </div>
+
+    <!-- Scan Tester -->
+  </div>
+  </div>
+
+  <!-- ═══════ TAB: Validation ═══════ -->
+  <div class="tab-pane" id="tab-validation">
+  <div class="grid">
+    <div class="card" style="grid-column: 1 / -1">
+      <h2><span class="icon">🔬</span> Scan Tester</h2>
+      <p style="color:var(--text-muted);font-size:0.8rem;margin-bottom:12px">
+        Test the detection pipeline directly. See which tier catches what and at what latency.
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <textarea id="scanInput" rows="4"
+            style="width:100%;background:var(--bg);color:var(--text);border:1px solid var(--surface2);border-radius:8px;padding:10px;font-size:0.82rem;resize:vertical;margin-bottom:8px"
+            placeholder="Enter text to scan (e.g. 'My AWS key is AKIAIOSFODNN7EXAMPLE')"></textarea>
+          <button class="btn btn-primary btn-sm" onclick="runScan()">Scan</button>
+        </div>
+        <div id="scanResults" style="max-height:200px;overflow-y:auto"></div>
+      </div>
+    </div>
+
+    <!-- Benchmarks -->
+    <div class="card" style="grid-column: 1 / -1">
+      <h2><span class="icon">🏆</span> Benchmarks</h2>
+
+      <!-- Active config summary -->
+      <div id="benchConfigSummary" style="background:var(--bg);border-radius:8px;padding:12px 16px;margin-bottom:16px;border:1px solid var(--surface2);font-size:0.78rem">
+        Loading active configuration...
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <!-- Dataset panel -->
+        <div style="background:var(--bg);border-radius:8px;padding:16px;border:1px dashed var(--surface2)">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text)">📁 Datasets</div>
+          <div id="datasetCheckboxes" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          </div>
+          <details style="margin-top:8px">
+            <summary style="font-size:0.72rem;color:var(--text-muted);cursor:pointer">Load custom dataset</summary>
+            <div style="margin-top:8px">
+              <div style="display:flex;gap:6px;margin-bottom:8px">
+                <input id="datasetPath" type="text"
+                  style="flex:1;background:var(--surface);color:var(--text);border:1px solid var(--surface2);border-radius:6px;padding:8px;font-size:0.72rem;font-family:'SF Mono',monospace"
+                  placeholder="/path/to/dataset.json">
+                <button class="btn btn-primary btn-sm" onclick="loadDatasetFromPath()">Load</button>
+              </div>
+              <input type="file" id="benchmarkFile" accept=".jsonl,.json"
+                style="font-size:0.75rem;color:var(--text-muted)"
+                onchange="loadFileDataset(event)">
+            </div>
+          </details>
+          <div id="datasetInfo" style="margin-top:8px;font-size:0.72rem;color:var(--text-muted)"></div>
+        </div>
+        <!-- Run panel -->
+        <div style="background:var(--bg);border-radius:8px;padding:16px;border:1px solid var(--surface2)">
+          <div style="font-size:0.85rem;font-weight:600;margin-bottom:8px;color:var(--text)">&#9654;&#65039; Run Benchmark</div>
+          <button class="btn btn-primary btn-sm" onclick="runWorkshopBenchmark()" id="benchmarkRunBtn">
+            &#128640; Run Benchmark
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="viewReport()" style="margin-left:8px">
+            📄 View Full Report
+          </button>
+          <div id="benchmarkProgress" style="margin-top:10px;font-size:0.78rem;color:var(--text-muted);display:none">
+            Running... this may take a minute.
+          </div>
+        </div>
+      </div>
+      <!-- Results -->
+      <div id="benchmarkResults" style="display:none">
+        <div style="font-size:0.9rem;font-weight:600;margin-bottom:12px;color:var(--text)">📊 Results</div>
+        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px" id="benchmarkMetrics"></div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:0.8rem;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Per-Category Breakdown</div>
+          <div id="benchmarkCategories" style="font-size:0.75rem"></div>
+        </div>
+        <div>
+          <div style="font-size:0.8rem;font-weight:600;margin-bottom:8px;color:var(--text-muted)">Errors</div>
+          <div id="benchmarkConfusion" style="font-size:0.75rem;max-height:400px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+
+
+  </div>
+  </div>
+
+  </div><!-- /mainApp -->
+
+  <footer>
+    Domestique v1.0 — Data Loss Prevention for AI<br>
+    Regex · GLiNER · Presidio · Gemma 3 · Qwen3
+  </footer>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// CERT SETUP GATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(async function checkCertOnLoad() {
+  try {
+    const res = await fetch('/api/status');
+    const status = await res.json();
+    if (!status.cert_trusted) {
+      document.getElementById('setupGate').style.display = 'block';
+      document.getElementById('mainApp').style.display = 'none';
+
+      const btn = document.getElementById('certInstallBtn');
+      const progress = document.getElementById('certProgress');
+
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Installing...';
+        progress.textContent = '';
+        try {
+          const r = await fetch('/api/cert/install', {method: 'POST'});
+          const j = await r.json();
+          if (j.ok) {
+            progress.textContent = 'Certificate trusted successfully!';
+            progress.style.color = 'var(--green)';
+            setTimeout(() => {
+              document.getElementById('setupGate').style.display = 'none';
+              document.getElementById('mainApp').style.display = 'block';
+            }, 800);
+            return;
+          }
+          // Not trusted yet -- start polling
+          progress.textContent = 'Certificate installed. Verifying trust...';
+          btn.textContent = 'Retry';
+          btn.disabled = false;
+        } catch(e) {
+          progress.textContent = 'Error: ' + e.message;
+          btn.textContent = 'Retry';
+          btn.disabled = false;
+        }
+      });
+
+      // Background poll in case cert gets trusted by other means
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch('/api/status');
+          const s = await r.json();
+          if (s.cert_trusted) {
+            clearInterval(poll);
+            document.getElementById('setupGate').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'block';
+          }
+        } catch(e) {}
+      }, 2000);
+    }
+  } catch(e) {}
+})();
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  document.querySelector(`.tab-btn[onclick*="${tabId}"]`).classList.add('active');
+  // Refresh tab-specific data
+  if (tabId === 'validation') loadBenchConfigSummary();
+  if (tabId === 'overview') refreshLog();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CONFIG_KEY = 'domestique_config';
+let config = JSON.parse(localStorage.getItem(CONFIG_KEY)) || {
+  proxy_enabled: false,
+  detection_stack: {
+    regex: true, gliner_pii: false,
+    qwen3_1_7b: true, gemma4_e2b: false, legacy_cpu: false,
+  },
+  llm_preset: 'balanced',
+};
+
+// Preset definitions
+const PRESETS = {
+  minimal:      { regex: true, gliner_pii: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: false },
+  balanced:     { regex: true, gliner_pii: false, qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
+  quality:      { regex: true, gliner_pii: true,  qwen3_1_7b: true,  gemma4_e2b: false, legacy_cpu: false },
+  'legacy-cpu': { regex: true, gliner_pii: false, qwen3_1_7b: false, gemma4_e2b: false, legacy_cpu: true },
+};
+
+function selectPreset(el) {
+  document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  config.llm_preset = el.dataset.preset;
+
+  // Update toggles to match preset
+  const stack = PRESETS[el.dataset.preset];
+  Object.entries(stack).forEach(([key, val]) => {
+    const toggle = document.querySelector(`[data-detector="${key}"]`);
+    if (toggle) toggle.checked = val;
+    config.detection_stack[key] = val;
+  });
+
+  // Save config and restart proxy to apply changes
+  applyDetectionStack();
+}
+
+function saveConfig() {
+  // Read all toggles
+  document.querySelectorAll('[data-detector]').forEach(toggle => {
+    config.detection_stack[toggle.dataset.detector] = toggle.checked;
+  });
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+  saveConfigToBackend();
+}
+
+function showNotification(msg) {
+  // Simple toast
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position:fixed;top:20px;right:20px;background:var(--green);color:white;
+    padding:12px 20px;border-radius:8px;font-weight:600;z-index:9999;
+    animation:fadeIn 0.3s ease;
+  `;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2000);
+}
+
+const API = '';
+
+async function runOldBenchmark() {
+  // Runs the comprehensive bench/comprehensive_eval.py script
+  try {
+    const res = await fetch(`${API}/api/benchmark`, { method: 'POST' });
+    const data = await res.json();
+    if (data.ok) showNotification('Full benchmark started in background');
+    else showNotification('⚠️ ' + (data.error || 'already running'));
+  } catch (e) { showNotification('⚠️ Cannot connect to backend'); }
+}
+
+function viewReport() {
+  window.open('/api/benchmark-report', '_blank');
+}
+
+async function saveConfigToBackend() {
+  try {
+    await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+  } catch (e) { /* backend not running, local-only save */ }
+}
+
+async function loadConfigFromBackend() {
+  try {
+    const res = await fetch(`${API}/api/config`);
+    if (res.ok) {
+      const backendConfig = await res.json();
+      if (backendConfig.detection_stack) {
+        config = backendConfig;
+        // Sync toggles with backend state
+        Object.entries(config.detection_stack).forEach(([key, val]) => {
+          const toggle = document.querySelector(`[data-detector="${key}"]`);
+          if (toggle) toggle.checked = val;
+        });
+        // Sync approval mode toggle
+        const approvalToggle = document.getElementById('approvalModeToggle');
+        if (approvalToggle) approvalToggle.checked = !!backendConfig.approval_mode;
+        // Sync classifier prompt
+        const promptEl = document.getElementById('classifierPrompt');
+        if (promptEl) {
+          const customPrompt = backendConfig.classifier_prompt || '';
+          if (customPrompt) {
+            promptEl.value = customPrompt;
+            updatePromptBadge(true);
+          } else {
+            promptEl.value = _defaultPrompt;
+            updatePromptBadge(false);
+          }
+          promptEl.style.color = 'var(--text)';
+        }
+        // Sync preset highlight with current detection stack
+        const currentStack = config.detection_stack || {};
+        document.querySelectorAll('.preset-card').forEach(card => {
+          const preset = PRESETS[card.dataset.preset];
+          if (preset) {
+            const matches = Object.entries(preset).every(([k, v]) => currentStack[k] === v);
+            card.classList.toggle('active', matches);
+          }
+        });
+      }
+    }
+  } catch (e) { /* backend not running */ }
+}
+
+async function toggleProxy() {
+  const badge = document.getElementById('statusBadge');
+  const text = document.getElementById('statusText');
+  const pulse = document.getElementById('statusPulse');
+  const isActive = text.textContent === 'Active';
+
+  try {
+    // Use firewall proxy (always available) as the primary toggle target.
+    // Also stop browser proxy when deactivating.
+    if (isActive) {
+      await fetch(`${API}/api/firewall/stop`, { method: 'POST' });
+      try { await fetch(`${API}/api/browser-proxy/stop`, { method: 'POST' }); } catch(e) {}
+    } else {
+      const res = await fetch(`${API}/api/firewall/start`, { method: 'POST' });
+      const data = await res.json();
+      if (data.error) {
+        showNotification('⚠️ ' + data.error, 'error');
+        return;
+      }
+    }
+    if (isActive) {
+      badge.className = 'status-badge status-inactive';
+      pulse.className = 'pulse pulse-red';
+      text.textContent = 'Inactive';
+      showNotification('Protection disabled');
+    } else {
+      badge.className = 'status-badge status-active';
+      pulse.className = 'pulse pulse-green';
+      text.textContent = 'Active';
+      showNotification('Protection enabled ✓');
+    }
+  } catch (e) {
+    showNotification('⚠️ Cannot connect to backend', 'error');
+  }
+}
+
+// Browser protection auto-starts on first launch (portable) or app start
+// (macOS); there is still no manual UI toggle here, but the status poll
+// above reflects real running/trust state rather than asserting "always-on".
+
+// Toggle event listeners — only save config, don't restart proxy yet
+document.querySelectorAll('[data-detector]').forEach(toggle => {
+  toggle.addEventListener('change', () => {
+    saveConfig();
+    // Update preset highlight
+    const currentStack = config.detection_stack;
+    document.querySelectorAll('.preset-card').forEach(card => {
+      const preset = PRESETS[card.dataset.preset];
+      const matches = Object.entries(preset).every(([k, v]) => currentStack[k] === v);
+      card.classList.toggle('active', matches);
+    });
+    // Show reminder that apply is needed
+    const status = document.getElementById('stackApplyStatus');
+    status.textContent = '⚠️ Click Apply to restart proxy with new stack';
+    status.style.color = 'var(--yellow)';
+    status.style.opacity = '1';
+  });
+});
+
+async function applyDetectionStack() {
+  const status = document.getElementById('stackApplyStatus');
+  status.textContent = '⏳ Restarting proxy...';
+  status.style.color = 'var(--text-muted)';
+  status.style.opacity = '1';
+  try {
+    await saveConfig();
+    const res = await fetch(`${API}/api/proxy/restart`, { method: 'POST' });
+    const data = await res.json();
+    if (data.restarted && data.restarted.length > 0) {
+      status.textContent = '✅ Proxy restarted';
+      status.style.color = 'var(--green)';
+    } else if (data.failed && data.failed.length > 0) {
+      status.textContent = '❌ Restart failed: ' + data.failed[0].error;
+      status.style.color = 'var(--red)';
+    } else {
+      status.textContent = '✅ Settings saved';
+      status.style.color = 'var(--green)';
+    }
+  } catch(e) {
+    status.textContent = '❌ ' + e;
+    status.style.color = 'var(--red)';
+  }
+  setTimeout(() => { status.style.opacity = '0'; }, 4000);
+}
+
+// Initialize toggles from config
+Object.entries(config.detection_stack).forEach(([key, val]) => {
+  const toggle = document.querySelector(`[data-detector="${key}"]`);
+  if (toggle) toggle.checked = val;
+});
+
+// Make status badge clickable to toggle proxy
+document.getElementById('statusBadge').style.cursor = 'pointer';
+document.getElementById('statusBadge').addEventListener('click', toggleProxy);
+
+// Load config from backend on page load (default prompt first)
+(async () => {
+  await loadDefaultPrompt();
+  await loadConfigFromBackend();
+})();
+
+// Poll resources every 2s
+async function refreshResources() {
+  try {
+    const res = await fetch(`${API}/api/resources`);
+    if (!res.ok) return;
+    const r = await res.json();
+    const cpuEl = document.getElementById('rbCpu');
+    const cpuBar = document.getElementById('rbCpuBar');
+    const memEl = document.getElementById('rbMem');
+    const memBar = document.getElementById('rbMemBar');
+    const gpuEl = document.getElementById('rbGpu');
+    const gpuBar = document.getElementById('rbGpuBar');
+    const gpuLabel = document.getElementById('rbGpuLabel');
+    const cpuCount = document.getElementById('rbCpuCount');
+    const modelInfo = document.getElementById('rbModelInfo');
+
+    const cpuPct = Math.min(r.cpu_percent, 100);
+    cpuEl.textContent = cpuPct.toFixed(1) + '%';
+    cpuBar.style.width = Math.max(cpuPct, 1) + '%';
+    cpuBar.style.background = cpuPct > 80 ? 'var(--red)' : cpuPct > 30 ? 'var(--yellow)' : 'var(--green)';
+
+    // Aggregate memory: Domestique + Ollama processes
+    const ollama = r.ollama || {};
+    const ollamaMem = ollama.mem_mb || 0;
+    const totalMem = r.mem_rss_mb + ollamaMem;
+    memEl.textContent = totalMem >= 1024 ? (totalMem/1024).toFixed(1) + ' GB' : totalMem.toFixed(0) + ' MB';
+    const memPct = Math.min(totalMem / 4096 * 100, 100);
+    memBar.style.width = Math.max(memPct, 1) + '%';
+    memBar.style.background = totalMem > 3000 ? 'var(--red)' : totalMem > 1500 ? 'var(--yellow)' : 'var(--accent)';
+
+    // GPU/VRAM: show model VRAM if on GPU, or model RAM footprint if CPU-only
+    const models = ollama.models || [];
+    const vramMb = r.gpu_vram_mb || 0;
+    const modelLoaded = models.length > 0;
+
+    if (modelLoaded && vramMb > 0) {
+      // Model on GPU
+      gpuLabel.textContent = 'VRAM:';
+      gpuEl.textContent = vramMb >= 1024 ? (vramMb/1024).toFixed(1) + ' GB' : vramMb.toFixed(0) + ' MB';
+      const gpuPct = Math.min(vramMb / 8192 * 100, 100);
+      gpuBar.style.width = Math.max(gpuPct, 1) + '%';
+      gpuBar.style.background = vramMb > 6000 ? 'var(--red)' : vramMb > 3000 ? 'var(--yellow)' : 'var(--purple,#a855f7)';
+    } else if (modelLoaded) {
+      // Model on CPU (VRAM=0 but model loaded)
+      const modelSizeMb = models.reduce((s, m) => s + (m.size_mb || 0), 0);
+      gpuLabel.textContent = 'Model:';
+      gpuEl.textContent = modelSizeMb >= 1024 ? (modelSizeMb/1024).toFixed(1) + ' GB' : modelSizeMb.toFixed(0) + ' MB';
+      const gpuPct = Math.min(modelSizeMb / 4096 * 100, 100);
+      gpuBar.style.width = Math.max(gpuPct, 1) + '%';
+      gpuBar.style.background = 'var(--accent)';
+    } else {
+      gpuLabel.textContent = 'VRAM:';
+      gpuEl.textContent = 'N/A';
+      gpuBar.style.width = '0%';
+    }
+
+    // Model info badge: name + format (GGUF/MLX) + quantization
+    if (modelLoaded) {
+      const m = models[0];
+      const name = m.name || '';
+      const quant = m.quantization || '';
+      const isMLX = name.includes('mlx');
+      const format = isMLX ? 'MLX' : 'GGUF';
+      const badge = quant ? `${name} · ${format} ${quant}` : `${name} · ${format}`;
+      modelInfo.textContent = '🧠 ' + badge;
+    } else if (ollama.running) {
+      modelInfo.textContent = '🧠 No model loaded';
+    } else {
+      modelInfo.textContent = '🧠 Ollama offline';
+    }
+
+    cpuCount.textContent = r.cpu_count + ' cores';
+  } catch(e) {}
+}
+refreshResources();
+setInterval(refreshResources, 2000);
+
+// Poll status every 2s -- syncs dashboard with backend state
+setInterval(async () => {
+  try {
+    const res = await fetch(`${API}/api/status`);
+    if (res.ok) {
+      const status = await res.json();
+      const badge = document.getElementById('statusBadge');
+      const text = document.getElementById('statusText');
+      const pulse = document.getElementById('statusPulse');
+
+      const isActive = status.proxy_running || status.browser_proxy_running;
+      badge.className = isActive ? 'status-badge status-active' : 'status-badge status-inactive';
+      pulse.className = isActive ? 'pulse pulse-green' : 'pulse pulse-red';
+      text.textContent = isActive ? 'Active' : 'Inactive';
+
+      // Update persistent status bar
+      const sbProt = document.getElementById('sbProtection');
+      if (status.startup_phase === 'warming') {
+        sbProt.textContent = status.startup_detail || 'Loading models...';
+        sbProt.style.color = 'var(--yellow)';
+      } else if (isActive) {
+        sbProt.textContent = 'Active';
+        sbProt.style.color = 'var(--green)';
+      } else {
+        sbProt.textContent = 'Stopped';
+        sbProt.style.color = 'var(--red)';
+      }
+      const sbToggle = document.getElementById('sbToggleText');
+      sbToggle.textContent = isActive ? 'Disable' : 'Enable';
+      sbToggle.parentElement.style.background = isActive ? 'var(--red)' : 'var(--green)';
+
+      // Update browser protection card if it exists. This reflects the
+      // real :8080 interceptor + cert-trust state (status.browser_proxy_running,
+      // status.cert_trusted) rather than the combined SDK+browser `isActive`
+      // flag above, so the card can't claim "always-on" while the browser
+      // interceptor is actually stopped or its CA is untrusted (audit C6).
+      const bStatus = document.getElementById('browserStatus');
+      const indicator = document.getElementById('protectionIndicator');
+      const browserActive = !!status.browser_proxy_running;
+      const browserTrusted = !!status.cert_trusted;
+      if (bStatus) {
+        if (browserActive && browserTrusted) {
+          bStatus.textContent = 'Active — intercepting LLM traffic';
+          bStatus.style.color = 'var(--green)';
+        } else if (browserActive && !browserTrusted) {
+          bStatus.textContent = 'Running, but CA not trusted — browsers will show cert warnings';
+          bStatus.style.color = 'var(--yellow)';
+        } else {
+          bStatus.textContent = 'Disabled';
+          bStatus.style.color = 'var(--red)';
+        }
+      }
+      if (indicator) {
+        indicator.textContent = browserActive ? (browserTrusted ? '🟢' : '🟡') : '🔴';
+      }
+    }
+    // Fetch browser proxy stats
+    const bpRes = await fetch(`${API}/api/browser-proxy`);
+    if (bpRes.ok) {
+      const bp = await bpRes.json();
+      if (bp.stats) {
+        document.getElementById('totalRequests').textContent = bp.stats.inspected || 0;
+        document.getElementById('blockedCount').textContent = bp.stats.blocked || 0;
+        document.getElementById('redactedCount').textContent = bp.stats.redacted || 0;
+        document.getElementById('allowedCount').textContent = bp.stats.allowed || 0;
+        document.getElementById('responseAlertsCount').textContent = bp.stats.response_alerts || 0;
+        document.getElementById('responseScanErrorsCount').textContent = bp.stats.response_scan_errors || 0;
+        // Status bar
+        document.getElementById('sbInspected').textContent = bp.stats.inspected || 0;
+        document.getElementById('sbBlocked').textContent = bp.stats.blocked || 0;
+      }
+    }
+    // Status bar extras
+    const cfgRes = await fetch(`${API}/api/config`);
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      document.getElementById('sbFailMode').textContent = (cfg.fail_mode || 'closed').charAt(0).toUpperCase() + (cfg.fail_mode || 'closed').slice(1);
+      // Determine active preset
+      const stack = cfg.detection_stack || {};
+      let presetName = 'Custom';
+      const PRESET_LABELS = { minimal: 'Minimal', balanced: 'Balanced', quality: 'Quality', 'legacy-cpu': 'Legacy CPU' };
+      for (const [name, preset] of Object.entries(PRESETS)) {
+        if (Object.entries(preset).every(([k,v]) => stack[k] === v)) { presetName = PRESET_LABELS[name] || name; break; }
+      }
+      document.getElementById('sbPreset').textContent = presetName;
+    }
+  } catch (e) { /* backend not available */ }
+}, 2000);
+
+// ─── Request Log ────────────────────────────────────────────────────────
+let currentLogFilter = 'all';
+let logData = [];
+
+// ─── Pending Approvals ──────────────────────────────────────────────────
+let approvalCsrfToken = '';
+let approvalTimers = {};
+
+async function initApprovalToken() {
+  try {
+    const res = await fetch(`${API}/api/approval-token`);
+    if (res.ok) {
+      const data = await res.json();
+      approvalCsrfToken = data.token;
+    }
+  } catch (e) { /* will retry */ }
+}
+
+async function toggleApprovalMode(enabled) {
+  try {
+    const res = await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approval_mode: enabled }),
+    });
+  } catch (e) { console.error('Failed to toggle approval mode', e); }
+}
+
+async function saveAndApplyPrompt() {
+  const promptEl = document.getElementById('classifierPrompt');
+  const statusEl = document.getElementById('promptSaveStatus');
+  try {
+    await fetch(`${API}/api/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ classifier_prompt: promptEl.value }),
+    });
+    statusEl.textContent = '⏳ Restarting proxy...';
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.style.opacity = '1';
+    const res = await fetch(`${API}/api/proxy/restart`, { method: 'POST' });
+    const data = await res.json();
+    if (data.restarted && data.restarted.length > 0) {
+      statusEl.textContent = '✅ Saved & proxy restarted';
+    } else {
+      statusEl.textContent = '✅ Settings saved';
+    }
+    statusEl.style.color = 'var(--green)';
+    updatePromptBadge(promptEl.value !== _defaultPrompt);
+    setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
+  } catch (e) {
+    statusEl.textContent = '❌ ' + e;
+    statusEl.style.color = 'var(--red)';
+    statusEl.style.opacity = '1';
+  }
+}
+
+let _defaultPrompt = '';
+
+function onPromptEdit() {
+  updatePromptBadge(document.getElementById('classifierPrompt').value !== _defaultPrompt);
+}
+
+function updatePromptBadge(isCustom) {
+  const badge = document.getElementById('promptBadge');
+  if (isCustom) {
+    badge.textContent = 'Custom prompt (unsaved)';
+    badge.style.background = 'rgba(245,158,11,0.15)';
+    badge.style.color = 'var(--yellow)';
+  } else {
+    badge.textContent = 'Using built-in default';
+    badge.style.background = 'rgba(59,130,246,0.15)';
+    badge.style.color = 'var(--accent)';
+  }
+}
+
+async function resetClassifierPrompt() {
+  const promptEl = document.getElementById('classifierPrompt');
+  // Clear custom prompt in config
+  await fetch(`${API}/api/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ classifier_prompt: '' }),
+  });
+  // Load default into textarea
+  promptEl.value = _defaultPrompt;
+  promptEl.style.color = 'var(--text)';
+  updatePromptBadge(false);
+  const statusEl = document.getElementById('promptSaveStatus');
+  statusEl.textContent = '✅ Reset to default';
+  statusEl.style.color = 'var(--green)';
+  statusEl.style.opacity = '1';
+  setTimeout(() => { statusEl.style.opacity = '0'; }, 2000);
+}
+
+// Load default prompt on startup
+async function loadDefaultPrompt() {
+  try {
+    const res = await fetch(`${API}/api/classifier-prompt/default`);
+    if (res.ok) {
+      const data = await res.json();
+      _defaultPrompt = data.prompt || '';
+    }
+  } catch(e) {}
+}
+
+async function refreshApprovals() {
+  try {
+    const res = await fetch(`${API}/api/approvals`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const list = document.getElementById('approvalList');
+    const countEl = document.getElementById('approvalCount');
+    const card = document.getElementById('approvalCard');
+
+    if (data.pending_count > 0) {
+      card.classList.add('has-pending');
+      countEl.textContent = `(${data.pending_count} pending)`;
+      list.innerHTML = data.pending.map(renderApprovalItem).join('');
+      // Start countdown timers
+      data.pending.forEach(a => startApprovalTimer(a.id, a.remaining_seconds));
+    } else {
+      card.classList.remove('has-pending');
+      countEl.textContent = '';
+      list.innerHTML = '<div class="approval-empty">No pending requests</div>';
+    }
+  } catch (e) { /* backend not available */ }
+}
+
+function renderApprovalItem(approval) {
+  const findings = approval.findings.map(f =>
+    `<span class="approval-finding-tag">${f}</span>`
+  ).join('');
+  const preview = (approval.content_preview || '')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;').substring(0, 300);
+  const remaining = Math.max(0, Math.round(approval.remaining_seconds));
+
+  return `
+    <div class="approval-item" id="approval-${approval.id}">
+      <div class="approval-info">
+        <div class="approval-host">${approval.host}</div>
+        <div class="approval-findings">${findings}</div>
+        ${preview ? `<div class="approval-preview">${preview}</div>` : ''}
+      </div>
+      <div class="approval-timer ${remaining < 10 ? 'urgent' : ''}" id="timer-${approval.id}">
+        ${remaining}s
+      </div>
+      <div class="approval-actions">
+        <button class="approval-btn approval-btn-allow" onclick="approveRequest('${approval.id}')">Allow</button>
+        <button class="approval-btn approval-btn-deny" onclick="denyRequest('${approval.id}')">Block</button>
+      </div>
+    </div>`;
+}
+
+function startApprovalTimer(id, remaining) {
+  if (approvalTimers[id]) return;
+  approvalTimers[id] = setInterval(() => {
+    remaining = Math.max(0, remaining - 1);
+    const el = document.getElementById(`timer-${id}`);
+    if (el) {
+      el.textContent = `${remaining}s`;
+      if (remaining < 10) el.classList.add('urgent');
+      if (remaining <= 0) {
+        clearInterval(approvalTimers[id]);
+        delete approvalTimers[id];
+        refreshApprovals();
+      }
+    } else {
+      clearInterval(approvalTimers[id]);
+      delete approvalTimers[id];
+    }
+  }, 1000);
+}
+
+async function approveRequest(id) {
+  try {
+    await fetch(`${API}/api/approvals/${id}/approve`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': approvalCsrfToken },
+    });
+    if (approvalTimers[id]) { clearInterval(approvalTimers[id]); delete approvalTimers[id]; }
+    refreshApprovals();
+  } catch (e) { console.error('Failed to approve', e); }
+}
+
+async function denyRequest(id) {
+  try {
+    await fetch(`${API}/api/approvals/${id}/deny`, {
+      method: 'POST',
+      headers: { 'X-CSRF-Token': approvalCsrfToken },
+    });
+    if (approvalTimers[id]) { clearInterval(approvalTimers[id]); delete approvalTimers[id]; }
+    refreshApprovals();
+  } catch (e) { console.error('Failed to deny', e); }
+}
+
+// Initialize CSRF token and start polling
+initApprovalToken();
+refreshApprovals();
+setInterval(refreshApprovals, 1000);
+
+function filterLog(filter) {
+  currentLogFilter = filter;
+  document.querySelectorAll('.log-filter').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.log-filter[data-filter="${filter}"]`).classList.add('active');
+  refreshLog();
+}
+
+async function refreshLog() {
+  const logArea = document.getElementById('logArea');
+  const countEl = document.getElementById('logCount');
+  try {
+    const filterParam = currentLogFilter !== 'all' ? `&filter=${currentLogFilter}` : '';
+    const res = await fetch(`${API}/api/request-log?limit=100${filterParam}`);
+    if (!res.ok) { logArea.innerHTML = emptyState('Failed to load log'); return; }
+    const data = await res.json();
+    countEl.textContent = `${data.total} entries`;
+    if (!data.entries || data.entries.length === 0) {
+      logArea.innerHTML = emptyState('No requests yet — send a message in ChatGPT, Claude, or Gemini');
+      return;
+    }
+    // Only re-render if data changed (prevents scroll jump)
+    const newHash = JSON.stringify(data.entries.map(e => e.ts + e.action));
+    if (newHash !== logArea.dataset.hash) {
+      logArea.dataset.hash = newHash;
+      logData = data.entries;
+      const groups = groupLogEntries(data.entries);
+      logArea.innerHTML = groups.map((g, gi) => renderLogGroup(g, gi)).join('');
+    }
+  } catch (err) {
+    logArea.innerHTML = emptyState('Cannot reach API server');
+  }
+}
+
+// One user action in the browser (sending a chat message) fans out into
+// several proxied requests - the message itself plus background
+// autocomplete/title-generation calls. Rather than showing each as its own
+// row, consecutive log entries to the same host within a short window are
+// grouped into a single expandable row. This is purely presentational -
+// it does not change what gets logged server-side.
+//
+// 25s (not the original 10s): a real ChatGPT reply can take well over
+// 10s to finish streaming for a long answer, and the title-generation /
+// follow-up calls for that same turn land shortly *after* the reply
+// finishes -- with a 10s window those trailing calls fell outside it and
+// splintered one interaction into several groups. The comparison below
+// is pairwise (gap since the *previous* entry added to the group, not
+// since the group's first entry), so a longer window still doesn't merge
+// genuinely separate, far-apart interactions -- it just tolerates a
+// slower reply/trailing-call gap within one interaction.
+const LOG_GROUP_WINDOW_MS = 25000;
+
+function groupLogEntries(entries) {
+  // `entries` is most-recent-first (see _handle_request_log in api.py).
+  const groups = [];
+  for (const entry of entries) {
+    const host = entry.host || '—';
+    const current = groups[groups.length - 1];
+    const prevEntry = current ? current.entries[current.entries.length - 1] : null;
+    if (current && current.host === host && withinGroupWindow(prevEntry, entry)) {
+      current.entries.push(entry);
+    } else {
+      groups.push({ host, entries: [entry] });
+    }
+  }
+  return groups;
+}
+
+function withinGroupWindow(a, b) {
+  if (!a || !b) return false;
+  const ta = Date.parse(a.ts || '');
+  const tb = Date.parse(b.ts || '');
+  if (Number.isNaN(ta) || Number.isNaN(tb)) return false;
+  return Math.abs(ta - tb) <= LOG_GROUP_WINDOW_MS;
+}
+
+function emptyState(msg) {
+  return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;color:var(--text-muted)">
+    <div style="font-size:2rem;margin-bottom:12px;opacity:0.4">🔍</div>
+    <div style="font-size:0.82rem">${msg}</div>
+  </div>`;
+}
+
+function escapeHtml(value) {
+  return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function renderLogEntry(entry, idx) {
+  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅', response_alert: '🔎', response_undecodable: '⚠️' };
+  const badgeCls = { blocked: 'log-badge-blocked', redacted: 'log-badge-redacted', allowed: 'log-badge-allowed', pass: 'log-badge-pass', approved: 'log-badge-approved', response_alert: 'log-badge-response_alert', response_undecodable: 'log-badge-redacted' };
+  // Friendlier badge text than the raw action key.
+  const badgeLabels = { response_alert: 'leak', response_undecodable: 'unscanned' };
+  const entryCls = entry.action === 'blocked' ? ' log-blocked' : (entry.action === 'response_alert' ? ' log-alert' : '');
+  const icon = icons[entry.action] || '•';
+  const badge = badgeCls[entry.action] || 'log-badge-pass';
+  const badgeLabel = badgeLabels[entry.action] || entry.action;
+  const time = entry.ts ? entry.ts.split('T')[1] || '' : '';
+  const host = entry.host || '—';
+  const path = (entry.path || '').substring(0, 60);
+  const reasons = entry.reasons ? entry.reasons.map(r => `<span class="log-reason-tag">${r}</span>`).join('') : '';
+
+  let detailsContent = '';
+  detailsContent += detailRow('Time', entry.ts || '—');
+  detailsContent += detailRow('Host', entry.host || '—');
+  detailsContent += detailRow('Path', entry.path || '—');
+  detailsContent += detailRow('Method', entry.method || '—');
+  detailsContent += detailRow('Action', `<strong>${entry.action}</strong>`);
+  if (entry.reasons) detailsContent += detailRow('Reason', entry.reasons.join(', '));
+  if (entry.reason) detailsContent += detailRow('Reason', entry.reason);
+  if (entry.body_size) detailsContent += detailRow('Size', `${entry.body_size} bytes`);
+
+  let contentBox = '';
+  if (entry.prompt) {
+    contentBox += `<div class="log-content-label">Sent prompt</div><div class="log-content-box">${escapeHtml(entry.prompt)}</div>`;
+  }
+  if (entry.redacted_prompt) {
+    contentBox += `<div class="log-content-label">Forwarded prompt</div><div class="log-content-box">${escapeHtml(entry.redacted_prompt)}</div>`;
+  }
+  if (!contentBox && entry.content_preview) {
+    contentBox = `<div class="log-content-label">Preview</div><div class="log-content-box">${escapeHtml(entry.content_preview).substring(0, 300)}</div>`;
+  }
+
+  return `
+    <div class="log-entry${entryCls}" onclick="toggleLogDetail('${idx}')">
+      <div class="log-icon">${icon}</div>
+      <div class="log-main">
+        <div class="log-host">${host} ${reasons}</div>
+        <div class="log-path">${entry.method || ''} ${path}</div>
+      </div>
+      <div class="log-meta">
+        <span class="log-badge ${badge}">${badgeLabel}</span>
+        <span class="log-time">${time}</span>
+      </div>
+    </div>
+    <div class="log-details" id="log-detail-${idx}">
+      ${detailsContent}
+      ${contentBox}
+    </div>`;
+}
+
+function detailRow(label, value) {
+  return `<div class="log-detail-row"><span class="log-detail-label">${label}</span><span class="log-detail-value">${value}</span></div>`;
+}
+
+function toggleLogDetail(idx) {
+  const el = document.getElementById(`log-detail-${idx}`);
+  if (el) {
+    const isOpen = el.classList.contains('open');
+    // Close all others
+    document.querySelectorAll('.log-details.open').forEach(d => d.classList.remove('open'));
+    if (!isOpen) el.classList.add('open');
+  }
+}
+
+// Renders one grouped-entry row. Groups of size 1 render exactly like a
+// normal (ungrouped) log entry - no behavior change for the common case.
+function renderLogGroup(group, gi) {
+  if (group.entries.length === 1) {
+    return renderLogEntry(group.entries[0], `${gi}-0`);
+  }
+
+  const counts = {};
+  group.entries.forEach(e => { counts[e.action] = (counts[e.action] || 0) + 1; });
+  const icons = { blocked: '🚫', redacted: '✏️', allowed: '✓', pass: '→', approved: '✅', response_alert: '🔎' };
+  const anyBlocked = !!counts.blocked;
+  const icon = anyBlocked ? icons.blocked : (counts.redacted ? icons.redacted : (counts.response_alert ? icons.response_alert : (icons[group.entries[0].action] || '•')));
+  const summary = Object.entries(counts)
+    .map(([action, n]) => `${n} ${action}`)
+    .join(', ');
+  const time = group.entries[0].ts ? group.entries[0].ts.split('T')[1] || '' : '';
+  const groupCls = anyBlocked ? ' log-blocked' : '';
+  const badge = anyBlocked ? 'log-badge-blocked' : (counts.redacted ? 'log-badge-redacted' : 'log-badge-pass');
+  const groupId = `log-group-${gi}`;
+  const children = group.entries.map((e, ei) => renderLogEntry(e, `${gi}-${ei}`)).join('');
+
+  return `
+    <div class="log-entry log-group-header${groupCls}" id="log-group-header-${gi}" onclick="toggleLogGroup(${gi})">
+      <div class="log-icon">${icon}</div>
+      <div class="log-main">
+        <div class="log-host">${group.host}<span class="log-group-count">${group.entries.length} requests</span><span class="log-group-chevron">▶</span></div>
+        <div class="log-path">${summary}</div>
+      </div>
+      <div class="log-meta">
+        <span class="log-badge ${badge}">grouped</span>
+        <span class="log-time">${time}</span>
+      </div>
+    </div>
+    <div class="log-group-children" id="${groupId}">
+      ${children}
+    </div>`;
+}
+
+function toggleLogGroup(gi) {
+  const el = document.getElementById(`log-group-${gi}`);
+  const header = document.getElementById(`log-group-header-${gi}`);
+  if (el) {
+    el.classList.toggle('open');
+    if (header) header.classList.toggle('open');
+  }
+}
+
+// Initial load + auto-refresh every 3s
+refreshLog();
+setInterval(refreshLog, 3000);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CUSTOM PATTERNS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let customPatterns = [];
+
+let _disabledPatterns = [];
+
+async function loadBuiltinPatterns() {
+  try {
+    const res = await fetch('/api/builtin-patterns');
+    const data = await res.json();
+    const el = document.getElementById('builtinPatternsList');
+    const patterns = data.patterns || [];
+
+    // Load disabled list from config
+    try {
+      const cfgRes = await fetch('/api/config');
+      const cfg = await cfgRes.json();
+      _disabledPatterns = cfg.disabled_builtin_patterns || [];
+    } catch(e) {}
+
+    el.innerHTML = '';
+    patterns.forEach(p => {
+      const cat = /ssn|credit|email|phone/.test(p.name) ? 'PII' : 'CREDENTIALS';
+      const isEnabled = !_disabledPatterns.includes(p.name);
+      const row = document.createElement('div');
+      row.style.cssText = 'display:grid;grid-template-columns:auto 1fr 2fr 0.5fr 1fr;gap:6px;align-items:center;padding:5px 0;border-bottom:1px solid var(--bg);font-size:0.7rem';
+      if (!isEnabled) row.style.opacity = '0.4';
+
+      const toggle = document.createElement('input');
+      toggle.type = 'checkbox';
+      toggle.checked = isEnabled;
+      toggle.style.cssText = 'cursor:pointer;accent-color:var(--green)';
+      toggle.onchange = () => toggleBuiltinPattern(p.name, toggle.checked, row);
+
+      const nameEl = document.createElement('span');
+      nameEl.style.color = 'var(--text)';
+      nameEl.textContent = p.name;
+      const regexEl = document.createElement('code');
+      regexEl.style.cssText = 'color:var(--accent);font-family:SF Mono,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.65rem';
+      regexEl.textContent = p.regex.length > 50 ? p.regex.slice(0,50) + '…' : p.regex;
+      regexEl.title = p.regex;
+      const confEl = document.createElement('span');
+      confEl.style.color = 'var(--yellow)';
+      confEl.textContent = p.confidence;
+      const catEl = document.createElement('span');
+      catEl.style.color = 'var(--purple)';
+      catEl.textContent = cat;
+      row.append(toggle, nameEl, regexEl, confEl, catEl);
+      el.appendChild(row);
+    });
+  } catch(e) { console.warn('Failed to load built-in patterns:', e); }
+}
+
+async function toggleBuiltinPattern(name, enabled, row) {
+  if (enabled) {
+    _disabledPatterns = _disabledPatterns.filter(n => n !== name);
+    row.style.opacity = '1';
+  } else {
+    if (!_disabledPatterns.includes(name)) _disabledPatterns.push(name);
+    row.style.opacity = '0.4';
+  }
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ disabled_builtin_patterns: _disabledPatterns }),
+  });
+  // Show reminder to restart proxy
+  const status = document.getElementById('stackApplyStatus');
+  if (status) {
+    status.textContent = '⚠️ Restart proxy to apply pattern changes';
+    status.style.color = 'var(--yellow)';
+    status.style.opacity = '1';
+  }
+}
+
+async function loadCustomPatterns() {
+  try {
+    const res = await fetch('/api/custom-patterns');
+    const data = await res.json();
+    customPatterns = data.patterns || [];
+    renderPatterns();
+  } catch(e) { console.warn('Failed to load patterns:', e); }
+}
+
+function renderPatterns() {
+  const el = document.getElementById('customPatternsList');
+  if (!customPatterns.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem;padding:8px">No custom patterns defined</div>';
+    return;
+  }
+  el.innerHTML = customPatterns.map((p, i) => `
+    <div style="display:grid;grid-template-columns:1fr 2fr 0.5fr 1fr auto;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:0.75rem">
+      <span style="color:var(--text)">${p.name}</span>
+      <code style="color:var(--accent);font-family:'SF Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.regex}</code>
+      <span style="color:var(--yellow)">${p.confidence}</span>
+      <span style="color:var(--purple)">${p.category}</span>
+      <button onclick="removePattern(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem" title="Remove">×</button>
+    </div>
+  `).join('');
+}
+
+async function addCustomPattern() {
+  const name = document.getElementById('patName').value.trim();
+  const regex = document.getElementById('patRegex').value.trim();
+  const confidence = parseFloat(document.getElementById('patConf').value);
+  const category = document.getElementById('patCat').value.trim().toUpperCase();
+  if (!name || !regex || !category) { alert('Name, regex, and category are required'); return; }
+  customPatterns.push({ name, regex, confidence: confidence || 0.9, category });
+  await savePatterns();
+  document.getElementById('patName').value = '';
+  document.getElementById('patRegex').value = '';
+}
+
+async function removePattern(index) {
+  customPatterns.splice(index, 1);
+  await savePatterns();
+}
+
+async function savePatterns() {
+  try {
+    const res = await fetch('/api/custom-patterns', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ patterns: customPatterns }),
+    });
+    const data = await res.json();
+    if (data.ok) flashStatus('patternSaveStatus', 'Saved!');
+    else alert(data.error);
+    renderPatterns();
+  } catch(e) { alert('Save failed: ' + e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DOMAIN MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function loadDomains() {
+  try {
+    const res = await fetch('/api/domains');
+    const data = await res.json();
+    document.getElementById('monitoredDomains').value = (data.monitored || []).join('\n');
+    document.getElementById('allowedDomains').value = (data.allowed || []).join('\n');
+  } catch(e) { console.warn('Failed to load domains:', e); }
+}
+
+async function saveDomains() {
+  const monitored = document.getElementById('monitoredDomains').value.split('\n').filter(d => d.trim());
+  const allowed = document.getElementById('allowedDomains').value.split('\n').filter(d => d.trim());
+  try {
+    const res = await fetch('/api/domains', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ monitored, allowed }),
+    });
+    const data = await res.json();
+    if (data.ok) flashStatus('domainSaveStatus', 'Saved!');
+    else alert(data.error);
+  } catch(e) { alert('Save failed: ' + e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POLICY RULES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let policyRules = [];
+
+async function loadPolicyRules() {
+  try {
+    const res = await fetch('/api/policy-rules');
+    const data = await res.json();
+    policyRules = data.rules || [];
+    renderPolicyRules();
+  } catch(e) { console.warn('Failed to load rules:', e); }
+}
+
+function renderPolicyRules() {
+  const el = document.getElementById('policyRulesList');
+  if (!policyRules.length) {
+    el.innerHTML = '<div style="color:var(--text-muted);font-size:0.78rem;padding:8px">No policy rules defined</div>';
+    return;
+  }
+  const actionColors = { block: 'var(--red)', approve: 'var(--yellow)', log: 'var(--green)' };
+  el.innerHTML = policyRules.map((r, i) => `
+    <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr auto;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:0.78rem">
+      <span style="color:var(--text)">${r.category}</span>
+      <span style="color:${actionColors[r.action] || 'var(--text)'};font-weight:600;text-transform:uppercase">${r.action}</span>
+      <span style="color:var(--text-muted)">≥ ${r.min_confidence || 0.5}</span>
+      <button onclick="removePolicyRule(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:1rem" title="Remove">×</button>
+    </div>
+  `).join('');
+}
+
+async function addPolicyRule() {
+  const category = document.getElementById('ruleCategory').value.trim().toUpperCase();
+  const action = document.getElementById('ruleAction').value;
+  const min_confidence = parseFloat(document.getElementById('ruleConfidence').value) || 0.7;
+  if (!category) { alert('Category is required'); return; }
+  policyRules.push({ category, action, min_confidence });
+  await savePolicyRules();
+  document.getElementById('ruleCategory').value = '';
+}
+
+async function removePolicyRule(index) {
+  policyRules.splice(index, 1);
+  await savePolicyRules();
+}
+
+async function savePolicyRules() {
+  try {
+    const res = await fetch('/api/policy-rules', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ rules: policyRules }),
+    });
+    const data = await res.json();
+    if (data.ok) flashStatus('ruleSaveStatus', 'Saved!');
+    else alert(data.error);
+    renderPolicyRules();
+  } catch(e) { alert('Save failed: ' + e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SENSITIVITY TUNING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function loadSensitivity() {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    const slider = document.getElementById('confidenceSlider');
+    const valEl = document.getElementById('thresholdValue');
+    slider.value = data.confidence_threshold || 0.7;
+    valEl.textContent = slider.value;
+    document.getElementById('failModeSelect').value = data.fail_mode || 'closed';
+  } catch(e) { console.warn('Failed to load sensitivity:', e); }
+}
+
+async function saveSensitivity() {
+  const threshold = parseFloat(document.getElementById('confidenceSlider').value);
+  const failMode = document.getElementById('failModeSelect').value;
+  try {
+    const res = await fetch('/api/config', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ confidence_threshold: threshold, fail_mode: failMode }),
+    });
+    const data = await res.json();
+    if (data.ok) flashStatus('sensitivitySaveStatus', 'Saved!');
+    else alert(data.error);
+  } catch(e) { alert('Save failed: ' + e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCAN TESTER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function runScan() {
+  const text = document.getElementById('scanInput').value.trim();
+  if (!text) { alert('Enter text to scan'); return; }
+  const resultsEl = document.getElementById('scanResults');
+  resultsEl.innerHTML = '<div style="color:var(--text-muted);font-size:0.8rem">Scanning...</div>';
+  try {
+    const res = await fetch('/api/scan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    if (data.error) { resultsEl.innerHTML = `<div style="color:var(--red)">${data.error}</div>`; return; }
+    
+    const detections = data.detections || [];
+    if (!detections.length) {
+      resultsEl.innerHTML = `<div style="color:var(--green);font-size:0.82rem;padding:8px">✅ No sensitive content detected (${data.total_latency_ms}ms)</div>`;
+      return;
+    }
+    resultsEl.innerHTML = `
+      <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">
+        ${detections.length} detection(s) · Total: ${data.total_latency_ms}ms
+      </div>
+      ${detections.map(d => {
+        const color = d.detector.includes('regex') || d.detector.includes('secret') ? 'var(--accent)' :
+                      d.detector.includes('gliner') || d.detector.includes('pii') ? 'var(--purple)' :
+                      d.detector.includes('llm') ? 'var(--yellow)' : 'var(--green)';
+        return `
+        <div style="padding:6px 10px;margin-bottom:4px;background:var(--bg);border-radius:6px;border-left:3px solid ${color};font-size:0.78rem">
+          <span style="color:var(--text);font-weight:600;margin-right:8px">${d.detector}</span>
+          <span style="color:var(--yellow)">${d.category}</span>
+          <span style="color:var(--text-muted);float:right">${d.confidence ? (d.confidence * 100).toFixed(0) + '%' : ''} · ${d.latency_ms || '?'}ms</span>
+          ${d.error ? `<div style="color:var(--red);font-size:0.72rem">${d.error}</div>` : ''}
+        </div>`;
+      }).join('')}
+    `;
+  } catch(e) { resultsEl.innerHTML = `<div style="color:var(--red)">Scan failed: ${e}</div>`; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WORKSHOP BENCHMARK
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function loadDatasetFromPath() {
+  const pathInput = document.getElementById('datasetPath');
+  const path = pathInput.value.trim();
+  if (!path) { alert('Enter a file path'); return; }
+
+  try {
+    const res = await fetch('/api/workshop/dataset/load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      flashStatus('uploadStatus', `✅ Loaded ${data.sample_count} samples from file`);
+      loadDatasetInfo();
+    } else {
+      alert('Load failed: ' + data.error);
+    }
+  } catch(e) { alert('Load error: ' + e); }
+}
+
+async function uploadDataset() {
+  const textarea = document.getElementById('benchmarkUpload');
+  const raw = textarea.value.trim();
+  if (!raw) { alert('Paste JSONL content first'); return; }
+
+  let payload;
+  // Detect if it's JSONL (multiple lines) or JSON array
+  if (raw.startsWith('[')) {
+    payload = { samples: JSON.parse(raw) };
+  } else if (raw.startsWith('{') && raw.includes('\n')) {
+    payload = { lines: raw };
+  } else {
+    try { payload = JSON.parse(raw); } catch(e) { payload = { lines: raw }; }
+  }
+
+  try {
+    const res = await fetch('/api/workshop/dataset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      flashStatus('uploadStatus', `✅ ${data.sample_count} samples uploaded`);
+      loadDatasetInfo();
+    } else {
+      alert('Upload failed: ' + data.error);
+    }
+  } catch(e) { alert('Upload error: ' + e); }
+}
+
+function loadFileDataset(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    document.getElementById('benchmarkUpload').value = e.target.result;
+    uploadDataset();
+  };
+  reader.readAsText(file);
+}
+
+async function loadDatasetInfo() {
+  try {
+    const res = await fetch('/api/workshop/dataset');
+    const data = await res.json();
+    if (data.ok) {
+      const el = document.getElementById('datasetInfo');
+      const cats = data.metadata?.categories || data.metadata?.sample_counts;
+      el.innerHTML = `<strong>Active dataset:</strong> ${data.sample_count} samples` +
+        (cats ? ` · Categories: ${typeof cats === 'object' ? Object.keys(cats).join(', ') : cats}` : '');
+    }
+  } catch(e) {}
+}
+
+async function runWorkshopBenchmark() {
+  const btn = document.getElementById('benchmarkRunBtn');
+  const progress = document.getElementById('benchmarkProgress');
+  const resultsEl = document.getElementById('benchmarkResults');
+  
+  // Collect selected dataset paths
+  const checkboxes = document.querySelectorAll('#datasetCheckboxes input[type="checkbox"]:checked');
+  const selectedPaths = Array.from(checkboxes).map(cb => cb.value);
+  if (selectedPaths.length === 0) {
+    alert('Please select at least one dataset');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '... Starting...';
+  progress.style.display = 'block';
+  progress.innerHTML = 'Initializing detectors...';
+  resultsEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/workshop/benchmark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataset_paths: selectedPaths }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert('Benchmark failed: ' + data.error);
+      btn.disabled = false;
+      btn.textContent = '🚀 Run Benchmark';
+      progress.style.display = 'none';
+      return;
+    }
+
+    // Poll for progress
+    const checkProgress = async () => {
+      try {
+        const pRes = await fetch('/api/workshop/benchmark');
+        const pData = await pRes.json();
+        if (pData.running) {
+          const pct = pData.total_samples > 0 ? Math.round(pData.processed / pData.total_samples * 100) : 0;
+          progress.innerHTML = `
+            <div style="margin-bottom:6px">
+              <strong>${pData.dataset_source}</strong>
+              — ${pData.processed} / ${pData.total_samples} samples (${pct}%)
+            </div>
+            <div style="background:var(--surface2);border-radius:4px;height:8px;overflow:hidden;margin-bottom:6px">
+              <div style="background:var(--accent);height:100%;width:${pct}%;transition:width 0.3s"></div>
+            </div>
+            <div style="font-size:0.7rem;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+              Current: ${pData.current_sample || '...'}
+            </div>
+          `;
+          btn.textContent = '⏳ ' + pData.processed + '/' + pData.total_samples;
+          return false; // not done
+        } else {
+          btn.disabled = false;
+          btn.textContent = '🚀 Run Benchmark';
+          progress.style.display = 'none';
+          if (pData.report) renderBenchmarkResults(pData.report);
+          return true; // done
+        }
+      } catch(e) { return false; }
+    };
+
+    // Check immediately, then poll every 500ms
+    await new Promise(r => setTimeout(r, 300));
+    if (!(await checkProgress())) {
+      const poll = setInterval(async () => {
+        if (await checkProgress()) clearInterval(poll);
+      }, 500);
+    }
+  } catch(e) {
+    alert('Benchmark error: ' + e);
+    btn.disabled = false;
+    btn.textContent = '🚀 Run Benchmark';
+    progress.style.display = 'none';
+  }
+}
+
+function renderBenchmarkResults(report) {
+  const el = document.getElementById('benchmarkResults');
+  el.style.display = 'block';
+  const m = report.metrics;
+
+  // Top-level metrics
+  document.getElementById('benchmarkMetrics').innerHTML = [
+    { label: 'Accuracy', value: m.accuracy + '%', color: m.accuracy > 80 ? 'var(--green)' : m.accuracy > 60 ? 'var(--yellow)' : 'var(--red)' },
+    { label: 'Precision', value: m.precision + '%', color: m.precision > 80 ? 'var(--green)' : 'var(--yellow)' },
+    { label: 'Recall', value: m.recall + '%', color: m.recall > 80 ? 'var(--green)' : 'var(--yellow)' },
+    { label: 'F1 Score', value: m.f1 + '%', color: m.f1 > 80 ? 'var(--green)' : 'var(--yellow)' },
+    { label: 'Avg Latency', value: m.avg_latency_ms + 'ms', color: m.avg_latency_ms < 100 ? 'var(--green)' : 'var(--yellow)' },
+    { label: 'Samples', value: m.total, color: 'var(--text)' },
+  ].map(x => `
+    <div style="background:var(--bg);border-radius:8px;padding:12px;text-align:center">
+      <div style="font-size:1.2rem;font-weight:700;color:${x.color}">${x.value}</div>
+      <div style="font-size:0.68rem;color:var(--text-muted);margin-top:4px">${x.label}</div>
+    </div>
+  `).join('');
+
+  // Confusion matrix summary
+  document.getElementById('benchmarkMetrics').innerHTML += `
+    <div style="grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:8px;padding:8px;background:var(--bg);border-radius:8px">
+      <div style="text-align:center"><span style="font-size:0.9rem;color:var(--green)">TP: ${m.tp}</span><br><span style="font-size:0.65rem;color:var(--text-muted)">True Positive</span></div>
+      <div style="text-align:center"><span style="font-size:0.9rem;color:var(--red)">FP: ${m.fp}</span><br><span style="font-size:0.65rem;color:var(--text-muted)">False Positive</span></div>
+      <div style="text-align:center"><span style="font-size:0.9rem;color:var(--red)">FN: ${m.fn}</span><br><span style="font-size:0.65rem;color:var(--text-muted)">False Negative</span></div>
+      <div style="text-align:center"><span style="font-size:0.9rem;color:var(--green)">TN: ${m.tn}</span><br><span style="font-size:0.65rem;color:var(--text-muted)">True Negative</span></div>
+    </div>
+  `;
+
+  // Per-category breakdown — only show categories with support > 0
+  const catEl = document.getElementById('benchmarkCategories');
+  const relevantCats = Object.entries(m.per_category).filter(([_, v]) => v.support > 0);
+  catEl.innerHTML = `
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="border-bottom:1px solid var(--surface2)">
+        <th style="text-align:left;padding:6px;color:var(--text-muted)">Category</th>
+        <th style="text-align:right;padding:6px;color:var(--text-muted)">Precision</th>
+        <th style="text-align:right;padding:6px;color:var(--text-muted)">Recall</th>
+        <th style="text-align:right;padding:6px;color:var(--text-muted)">F1</th>
+        <th style="text-align:right;padding:6px;color:var(--text-muted)">Samples</th>
+      </tr>
+      ${relevantCats.map(([cat, v]) => `
+        <tr style="border-bottom:1px solid var(--bg)">
+          <td style="padding:6px;color:var(--text);font-weight:600">${cat}</td>
+          <td style="padding:6px;text-align:right;color:${v.precision > 80 ? 'var(--green)' : v.precision > 50 ? 'var(--yellow)' : 'var(--red)'}">${v.precision}%</td>
+          <td style="padding:6px;text-align:right;color:${v.recall > 80 ? 'var(--green)' : v.recall > 50 ? 'var(--yellow)' : 'var(--red)'}">${v.recall}%</td>
+          <td style="padding:6px;text-align:right;color:${v.f1 > 80 ? 'var(--green)' : v.f1 > 50 ? 'var(--yellow)' : 'var(--red)'}; font-weight:700">${v.f1}%</td>
+          <td style="padding:6px;text-align:right;color:var(--text-muted)">${v.support}</td>
+        </tr>
+      `).join('')}
+    </table>
+  `;
+
+  // Errors — expanded, grouped by type (FP vs FN)
+  const wrong = report.results.filter(r => !r.correct);
+  const confEl = document.getElementById('benchmarkConfusion');
+  if (!wrong.length) {
+    confEl.innerHTML = '<div style="color:var(--green);padding:12px">🎉 Perfect score — no errors!</div>';
+  } else {
+    const falseNeg = wrong.filter(r => r.expected !== 'NONE' && r.predicted === 'NONE');
+    const falsePos = wrong.filter(r => r.expected === 'NONE' && r.predicted !== 'NONE');
+    const wrongCat = wrong.filter(r => r.expected !== 'NONE' && r.predicted !== 'NONE' && r.predicted !== r.expected);
+
+    let html = `<div style="color:var(--text-muted);margin-bottom:8px">${wrong.length} errors total: ${falseNeg.length} missed, ${falsePos.length} false alarms, ${wrongCat.length} wrong category</div>`;
+
+    if (falseNeg.length) {
+      html += `<div style="font-weight:600;color:var(--red);margin:10px 0 6px;font-size:0.78rem">❌ Missed (False Negatives) — ${falseNeg.length}</div>`;
+      html += falseNeg.map(r => renderErrorRow(r, 'var(--red)')).join('');
+    }
+    if (falsePos.length) {
+      html += `<div style="font-weight:600;color:var(--yellow);margin:10px 0 6px;font-size:0.78rem">⚠️ False Alarms (False Positives) — ${falsePos.length}</div>`;
+      html += falsePos.map(r => renderErrorRow(r, 'var(--yellow)')).join('');
+    }
+    if (wrongCat.length) {
+      html += `<div style="font-weight:600;color:var(--purple);margin:10px 0 6px;font-size:0.78rem">🔀 Wrong Category — ${wrongCat.length}</div>`;
+      html += wrongCat.map(r => renderErrorRow(r, 'var(--purple)')).join('');
+    }
+    confEl.innerHTML = html;
+  }
+}
+
+function renderErrorRow(r, color) {
+  return `
+    <div style="padding:8px 10px;margin-bottom:4px;background:var(--bg);border-radius:6px;border-left:3px solid ${color}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <span style="color:var(--text-muted);font-weight:600">#${r.id}</span>
+        <span style="font-size:0.72rem">
+          <span style="color:var(--text-muted)">Expected:</span> <span style="color:var(--green);font-weight:600">${r.expected}</span>
+          <span style="color:var(--text-muted);margin:0 4px">→</span>
+          <span style="color:var(--text-muted)">Got:</span> <span style="color:${color};font-weight:600">${r.predicted}</span>
+          ${r.predicted_raw && r.predicted_raw !== r.predicted ? `<span style="color:var(--text-muted);font-size:0.65rem"> (${r.predicted_raw})</span>` : ''}
+        </span>
+      </div>
+      <div style="color:var(--text);font-size:0.72rem;line-height:1.4;word-break:break-word">${r.text_preview}</div>
+    </div>
+  `;
+}
+
+// Load dataset info on page load
+loadDatasetCheckboxes();
+loadBenchConfigSummary();
+
+async function loadDatasetCheckboxes() {
+  try {
+    const res = await fetch('/api/workshop/datasets');
+    const data = await res.json();
+    const container = document.getElementById('datasetCheckboxes');
+    if (!data.datasets || !data.datasets.length) {
+      container.innerHTML = '<span style="color:var(--text-muted);font-size:0.72rem">No datasets found</span>';
+      return;
+    }
+    container.innerHTML = data.datasets.map((ds, i) => {
+      const dist = Object.entries(ds.distribution || {}).map(([k,v]) => `${k}:${v}`).join(', ');
+      return `<label style="display:flex;align-items:flex-start;gap:6px;font-size:0.75rem;color:var(--text);cursor:pointer">
+        <input type="checkbox" value="${ds.path}" ${i === 0 ? 'checked' : ''} style="margin-top:2px">
+        <span><strong>${ds.name}</strong> (${ds.samples} samples)<br>
+        <span style="color:var(--text-muted);font-size:0.68rem">${dist}</span></span>
+      </label>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('datasetCheckboxes').innerHTML = '<span style="color:var(--red);font-size:0.72rem">Failed to load datasets</span>';
+  }
+}
+
+async function loadBenchConfigSummary() {
+  try {
+    const res = await fetch('/api/config');
+    const cfg = await res.json();
+    const stack = cfg.detection_stack || {};
+    const disabled = cfg.disabled_builtin_patterns || [];
+    const el = document.getElementById('benchConfigSummary');
+
+    const detectors = [];
+    if (stack.regex) detectors.push({name: 'Regex Scanner', on: true, note: disabled.length ? `${disabled.length} patterns disabled` : '16 patterns'});
+    else detectors.push({name: 'Regex Scanner', on: false});
+    if (stack.gliner_pii) detectors.push({name: 'GLiNER PII', on: true, note: '~20ms'});
+    else detectors.push({name: 'GLiNER PII', on: false});
+    if (stack.gemma4_e2b) detectors.push({name: 'Gemma 4 E2B', on: true, note: '~155ms'});
+    else detectors.push({name: 'Gemma 4 E2B', on: false});
+    if (stack.qwen3_1_7b) detectors.push({name: 'Qwen3 1.7B', on: true, note: '~130ms'});
+    else detectors.push({name: 'Qwen3 1.7B', on: false});
+
+    const enabled = detectors.filter(d => d.on);
+    const disabledDets = detectors.filter(d => !d.on);
+
+    let html = '<div style="display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap">';
+    html += '<div><span style="color:var(--text-muted)">Active detectors:</span> ';
+    html += enabled.map(d =>
+      `<span style="display:inline-block;background:rgba(16,185,129,0.15);color:var(--green);padding:2px 8px;border-radius:4px;margin:2px;font-weight:600">${d.name}${d.note ? ` <span style="font-weight:400;opacity:0.7">(${d.note})</span>` : ''}</span>`
+    ).join('');
+    if (!enabled.length) html += '<span style="color:var(--red)">None!</span>';
+    html += '</div>';
+
+    if (disabledDets.length) {
+      html += '<div><span style="color:var(--text-muted)">Disabled:</span> ';
+      html += disabledDets.map(d =>
+        `<span style="display:inline-block;background:rgba(239,68,68,0.1);color:var(--text-muted);padding:2px 8px;border-radius:4px;margin:2px;text-decoration:line-through">${d.name}</span>`
+      ).join('');
+      html += '</div>';
+    }
+
+    html += '<div style="margin-left:auto"><span style="color:var(--text-muted)">Fail mode:</span> <span style="font-weight:600">' + (cfg.fail_mode || 'closed') + '</span>';
+    html += ' · <span style="color:var(--text-muted)">Threshold:</span> <span style="font-weight:600">' + (cfg.confidence_threshold || 0.7) + '</span></div>';
+    html += '</div>';
+
+    el.innerHTML = html;
+  } catch(e) { console.warn('Failed to load bench config:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS & INIT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function flashStatus(id, msg) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = msg;
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+// Load all customization data on page load
+loadCustomPatterns();
+loadBuiltinPatterns();
+loadGlinerConfig();
+loadDomains();
+loadPolicyRules();
+loadSensitivity();
+
+async function loadGlinerConfig() {
+  try {
+    const res = await fetch('/api/gliner-config');
+    const data = await res.json();
+    const labelsEl = document.getElementById('glinerLabels');
+    const allLabels = ["person","email","phone_number","address","date_of_birth",
+                       "social_security_number","credit_card","password","ip_address"];
+    const activeLabels = data.labels || allLabels;
+
+    labelsEl.innerHTML = allLabels.map(label => {
+      const checked = activeLabels.includes(label);
+      return `<label style="display:flex;align-items:center;gap:4px;padding:4px 10px;background:${checked?'rgba(16,185,129,0.15)':'var(--bg)'};border:1px solid ${checked?'var(--green)':'var(--surface2)'};border-radius:6px;cursor:pointer;font-size:0.75rem;color:${checked?'var(--green)':'var(--text-muted)'}">
+        <input type="checkbox" ${checked?'checked':''} value="${label}" style="accent-color:var(--green)"> ${label}
+      </label>`;
+    }).join('');
+
+    const slider = document.getElementById('glinerThresholdSlider');
+    const valEl = document.getElementById('glinerThresholdValue');
+    slider.value = data.threshold || 0.5;
+    valEl.textContent = slider.value;
+  } catch(e) { console.warn('GLiNER config load failed:', e); }
+}
+
+async function saveGlinerConfig() {
+  const labels = Array.from(document.querySelectorAll('#glinerLabels input:checked')).map(el => el.value);
+  const threshold = parseFloat(document.getElementById('glinerThresholdSlider').value);
+  const statusEl = document.getElementById('glinerSaveStatus');
+
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ gliner_labels: labels, gliner_threshold: threshold }),
+    });
+    statusEl.textContent = '⏳ Restarting proxy...';
+    statusEl.style.color = 'var(--text-muted)';
+    statusEl.style.opacity = '1';
+    const res = await fetch(`${API}/api/proxy/restart`, { method: 'POST' });
+    const data = await res.json();
+    if (data.restarted && data.restarted.length > 0) {
+      statusEl.textContent = '✅ Saved & proxy restarted';
+    } else {
+      statusEl.textContent = '✅ Settings saved';
+    }
+    statusEl.style.color = 'var(--green)';
+    setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
+  } catch(e) {
+    statusEl.textContent = '❌ ' + e;
+    statusEl.style.color = 'var(--red)';
+    statusEl.style.opacity = '1';
+  }
+}
+</script>
+</body>
+</html>

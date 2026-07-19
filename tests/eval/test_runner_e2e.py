@@ -11,7 +11,7 @@ def test_classify_action_rules():
 def test_observe_corpus_end_to_end():
     rows = [
         CorpusRow("blk", "AWS key AKIAIOSFODNN7EXAMPLE here", "block", ("aws_key",)),
-        # NOTE: the shipped default policy (domestique/policy/rules.yaml,
+        # NOTE: the shipped default policy (domestique/policy/browser-rules.yaml,
         # rule `block-government-ids`) BLOCKS us_ssn findings from the
         # secret_scanner regex (confidence 0.92 >= min_confidence 0.7);
         # it does not redact them. Observed reality, confirmed by running

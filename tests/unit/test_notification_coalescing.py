@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from app.services.notifications import NotificationCoalescer
+from domestique_app.services.notifications import NotificationCoalescer
 
 
 class _FakeTimer:
@@ -121,7 +121,7 @@ class TestNotificationCoalescing:
     def test_notify_block_helper_never_raises(self):
         """notify_block() (the entry point mitm_addon.py calls) must never
         raise, even if scheduling/coalescing itself blows up."""
-        from app.services import notifications as notifications_module
+        from domestique_app.services import notifications as notifications_module
 
         original_get_default = notifications_module.get_default_coalescer
 

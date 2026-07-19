@@ -4,7 +4,7 @@ import asyncio
 
 from fastapi.testclient import TestClient
 
-from domestique.gateway import ROUTES, build_wedge_pipeline, create_gateway, upstream_base
+from domestique.gateway import ROUTES, build_cli_pipeline, create_gateway, upstream_base
 from domestique.models import Action
 
 
@@ -27,8 +27,8 @@ def test_upstream_base_env_override(monkeypatch):
     assert upstream_base("openai") == "http://127.0.0.1:9999"
 
 
-def test_build_wedge_pipeline_uses_redact_policy():
-    pipe = build_wedge_pipeline()
+def test_build_cli_pipeline_uses_redact_policy():
+    pipe = build_cli_pipeline()
     result = asyncio.run(pipe.inspect("key AKIAIOSFODNN7EXAMPLE here"))
     assert result.action is Action.REDACT
 
