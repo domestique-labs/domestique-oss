@@ -107,9 +107,7 @@ class ProxyService:
                 "domestique.app:create_app",
                 "--factory",
                 "--host",
-                # Binds all interfaces (preserves existing runtime behavior). Flagged
-                # for review: narrow to 127.0.0.1 if only local traffic is intended.
-                "0.0.0.0",  # noqa: S104
+                config.proxy_host,
                 "--port",
                 str(config.proxy_port),
             ],

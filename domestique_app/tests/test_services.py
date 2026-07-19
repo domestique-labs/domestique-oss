@@ -57,6 +57,42 @@ class TestProxyService:
         assert "9000" in call_args[0][0]
 
     @patch("subprocess.Popen")
+    def test_start_binds_loopback_by_default(self, mock_popen):
+        """The single-user desktop app must not expose the inspection proxy to
+        the whole LAN by default; it binds 127.0.0.1 unless explicitly opted in."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+
+        svc = ProxyService()
+        config = AppConfig(proxy_port=9000)  # default proxy_host
+
+        with patch("builtins.open", mock_open()):
+            svc.start(config)
+
+        argv = mock_popen.call_args[0][0]
+        host = argv[argv.index("--host") + 1]
+        assert host == "127.0.0.1"
+        assert "0.0.0.0" not in argv  # noqa: S104
+
+    @patch("subprocess.Popen")
+    def test_start_honors_explicit_bind_all_opt_in(self, mock_popen):
+        """Setting proxy_host explicitly can still opt into bind-all."""
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+
+        svc = ProxyService()
+        config = AppConfig(proxy_port=9000, proxy_host="0.0.0.0")  # noqa: S104
+
+        with patch("builtins.open", mock_open()):
+            svc.start(config)
+
+        argv = mock_popen.call_args[0][0]
+        host = argv[argv.index("--host") + 1]
+        assert host == "0.0.0.0"  # noqa: S104
+
+    @patch("subprocess.Popen")
     def test_start_raises_if_already_running(self, mock_popen):
         mock_proc = MagicMock()
         mock_proc.poll.return_value = None
