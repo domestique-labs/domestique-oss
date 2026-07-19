@@ -3,7 +3,7 @@
 Measures TIME-TO-FIRST-BYTE (TTFB) and total delivery time for a
 STREAMING LLM response (ChatGPT-style token-by-token SSE) as it passes
 through ``DomestiqueAddon`` -- the mitmproxy addon in
-``app/services/mitm_addon.py`` that inspects browser-intercepted traffic.
+``domestique_app/services/mitm_addon.py`` that inspects browser-intercepted traffic.
 
 Why this exists
 ----------------
@@ -70,7 +70,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from mitmproxy import http as mitm_http
 from mitmproxy.test import tflow, tutils
 
-from app.services.mitm_addon import DomestiqueAddon
+from domestique_app.services.mitm_addon import DomestiqueAddon
 
 
 # --- Deterministic stub detection pipeline -----------------------------
@@ -141,7 +141,7 @@ def _build_flow():
 
 
 def _build_addon(scan_delay_s: float) -> DomestiqueAddon:
-    from app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
+    from domestique_app.services.pipeline_config import config_hash, config_mtime_ns, load_config_dict
 
     addon = DomestiqueAddon()
     addon._detector = _BenchPipeline(scan_delay_s=scan_delay_s)
@@ -239,7 +239,7 @@ async def run_benchmark(*, num_chunks: int, chunk_delay_s: float, scan_delay_s: 
         error=lambda *a, **k: None, debug=lambda *a, **k: None,
     ))
     results = []
-    with patch("app.services.mitm_addon.ctx", fake_ctx):
+    with patch("domestique_app.services.mitm_addon.ctx", fake_ctx):
         addon = _build_addon(scan_delay_s)
         for _ in range(runs):
             results.append(

@@ -168,7 +168,7 @@ domestique/
     cli-rules.yaml     # CLI proxy redact-first policy
   config.py           # Settings model (env-driven)
 
-app/                  # Browser mode + native desktop app + dashboard
+domestique_app/                  # Browser mode + native desktop app + dashboard
 ```
 
 ## License

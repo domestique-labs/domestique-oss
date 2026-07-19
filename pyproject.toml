@@ -82,18 +82,18 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-# app* ships the dashboard/browser-protection desktop app in the wheel so
-# `domestique browser on` has something to talk to after a plain pip install.
-# domestique/ still never imports app/ (docs/architecture.md) — packaging them
-# together does not couple them at runtime.
-include = ["domestique*", "app*"]
-exclude = ["app.tests*"]
+# domestique_app* ships the dashboard/browser-protection desktop app in the
+# wheel so `domestique browser on` has something to talk to after a plain pip
+# install. domestique/ still never imports domestique_app/ (docs/architecture.md)
+# — packaging them together does not couple them at runtime.
+include = ["domestique*", "domestique_app*"]
+exclude = ["domestique_app.tests*"]
 
 [tool.setuptools.package-data]
 "domestique.policy" = ["*.yaml"]
-# Dashboard page + icons; without these `python -m app` from a wheel install
+# Dashboard page + icons; without these `python -m domestique_app` from a wheel install
 # would 404 the dashboard and show no tray/menu-bar icon.
-app = ["assets/*.html", "assets/*.png", "assets/*.icns", "assets/images/*"]
+domestique_app = ["assets/*.html", "assets/*.png", "assets/*.icns", "assets/images/*"]
 
 [tool.ruff]
 line-length = 99
@@ -108,7 +108,7 @@ ignore = ["ANN401", "S101"]
 # annotations on every test method adds noise without type-safety value. (Core
 # `ruff check domestique` doesn't lint tests at all; this keeps `ruff check app`
 # consistent with that.)
-"app/tests/**" = ["ANN"]
+"domestique_app/tests/**" = ["ANN"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -140,11 +140,11 @@ module = [
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# app/ is a separate package, out of scope for this task (which covers domestique/ only).
+# domestique_app/ is a separate package, out of scope for this task (which covers domestique/ only).
 # It surfaces here only because mypy follows domestique's imports of it (domestique/callback.py,
-# domestique/sdk.py). Suppress errors originating in app/ itself without disabling type
+# domestique/sdk.py). Suppress errors originating in domestique_app/ itself without disabling type
 # checking of the domestique code that uses it.
-module = ["app.*"]
+module = ["domestique_app.*"]
 follow_imports = "silent"
 
 [[tool.mypy.overrides]]

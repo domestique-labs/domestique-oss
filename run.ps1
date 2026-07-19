@@ -14,7 +14,7 @@ if (-not (Test-Path $Python)) {
     $Python = "python"
 }
 
-$Args = @("-m", "app", "--mode", $Mode, "--api-port", "$ApiPort")
+$Args = @("-m", "domestique_app", "--mode", $Mode, "--api-port", "$ApiPort")
 if ($NoBrowser) {
     $Args += "--no-browser"
 }

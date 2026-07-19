@@ -16,7 +16,7 @@
 #>
 
 $ErrorActionPreference = "Stop"
-# This script lives in infra\certs\; the project root (where the `app` package
+# This script lives in infra\certs\; the project root (where the `domestique_app` package
 # and .venv live) is two levels up.
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
@@ -24,8 +24,8 @@ Set-Location $Root
 # Force UTF-8 so console output from the app code doesn't crash on cp1252.
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
-# The `app` package lives in the project root and is not pip-installed, so put
-# the root on the import path (this is what `python -m app` relies on via cwd).
+# The `domestique_app` package lives in the project root and is not pip-installed, so put
+# the root on the import path (this is what `python -m domestique_app` relies on via cwd).
 $env:PYTHONPATH = $Root
 
 # Prefer the project venv; fall back to whatever python is on PATH.
@@ -42,8 +42,8 @@ Write-Host "Generating and trusting the Domestique CA ..." -ForegroundColor Cyan
 Write-Host "If a Windows security dialog appears, click Yes." -ForegroundColor Yellow
 
 $pyCode = @'
-from app.services.interceptor import generate_ca
-from app.services.cert_manager import install_and_trust, is_cert_trusted, CA_CERT
+from domestique_app.services.interceptor import generate_ca
+from domestique_app.services.cert_manager import install_and_trust, is_cert_trusted, CA_CERT
 
 generate_ca()
 print("CA file:", CA_CERT)

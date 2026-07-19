@@ -138,21 +138,21 @@ def _browser_unreachable_hint() -> None:
     """Explain how to get the dashboard app, without ever importing it."""
     import importlib.util
 
-    if importlib.util.find_spec("app") is None:
+    if importlib.util.find_spec("domestique_app") is None:
         print("Browser protection needs the dashboard app, which is not installed.")
         print('Install it with:  pipx inject domestique "domestique[browser-proxy]"')
         print('  (or in a plain venv: pip install "domestique[browser-proxy]")')
     else:
         # `--mode portable` works on a core install everywhere; bare
-        # `python -m app` needs the [macos-native] extra on macOS.
+        # `python -m domestique_app` needs the [macos-native] extra on macOS.
         print("dashboard app isn't running (or didn't respond) - start it with:")
-        print("  python -m app --mode portable")
+        print("  python -m domestique_app --mode portable")
 
 
 def _cmd_browser(action: str, url: str) -> int:
     """Toggle/inspect browser interception via the local dashboard HTTP API.
 
-    Talks HTTP only (architecture rule: domestique/ never imports app/).
+    Talks HTTP only (architecture rule: domestique/ never imports domestique_app/).
     Uses the browser-proxy endpoints exclusively, so the API-proxy state
     (proxy_enabled) is never touched.
     """

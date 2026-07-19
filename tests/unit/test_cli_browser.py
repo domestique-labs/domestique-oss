@@ -1,7 +1,7 @@
 """Tests for `domestique browser on|off|status`.
 
 Runs against a stub HTTP server standing in for the dashboard API -- the
-real app/ package is never imported (architecture rule) and no real
+real domestique_app/ package is never imported (architecture rule) and no real
 services are started. Verifies the subcommand only ever touches the
 browser-proxy endpoints (never the API-proxy /api/firewall/* state).
 """
@@ -119,4 +119,4 @@ class TestBrowserUnreachable:
     def test_start_hint_when_app_installed_but_down(self, monkeypatch, capsys):
         monkeypatch.setattr("importlib.util.find_spec", lambda name: object())
         assert main(["browser", "on", "--url", self.UNREACHABLE]) == 1
-        assert "python -m app" in capsys.readouterr().out
+        assert "python -m domestique_app" in capsys.readouterr().out

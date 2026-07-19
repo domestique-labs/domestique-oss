@@ -14,7 +14,7 @@ Please give us reasonable time to fix before any public disclosure (coordinated 
 
 ## Scope
 - The `domestique/` core engine, the API proxy (`domestique/app.py`), the browser MITM addon
-  (`app/services/mitm_addon.py`), the dashboard API (`app/server/api.py`), and the CA/cert handling.
+  (`domestique_app/services/mitm_addon.py`), the dashboard API (`domestique_app/server/api.py`), and the CA/cert handling.
 - Particularly interested in: detection bypasses (data that should be caught but isn't),
   fail-open conditions, CA/TLS interception weaknesses, and dashboard/API auth issues.
 

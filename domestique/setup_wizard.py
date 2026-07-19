@@ -1163,9 +1163,9 @@ def run_wizard(*, yes: bool = False, demo: bool = True) -> int:
         _run_finale_demo(interactive=not yes and _stdin_is_tty())
 
     section("setup complete")
-    _print("  next: domestique start          launch the redacting proxy")
+    _print("  next: domestique start        launch the redacting proxy")
     if choices.browser or choices.desktop_ui:
-        _print("        python -m app             start the dashboard + browser protection")
+        _print("        python -m domestique_app    start the dashboard + browser protection")
     return 0
 
 
