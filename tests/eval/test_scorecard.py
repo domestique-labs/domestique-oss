@@ -1,7 +1,7 @@
 import json
 
-from bench.eval.metrics import Metrics
-from bench.eval.scorecard import (
+from benchmarks.eval.metrics import Metrics
+from benchmarks.eval.scorecard import (
     to_json,
     to_markdown_compare,
     to_markdown_single,

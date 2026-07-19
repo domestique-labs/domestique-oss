@@ -5,10 +5,10 @@ import json
 import sys
 from pathlib import Path
 
-from bench.eval.corpus import corpus_checksum, load_corpus
-from bench.eval.metrics import Metrics, compute_metrics
-from bench.eval.runner import observe_corpus
-from bench.eval.scorecard import to_json, to_markdown_compare, to_markdown_single
+from benchmarks.eval.corpus import corpus_checksum, load_corpus
+from benchmarks.eval.metrics import Metrics, compute_metrics
+from benchmarks.eval.runner import observe_corpus
+from benchmarks.eval.scorecard import to_json, to_markdown_compare, to_markdown_single
 
 _REGRESSION_EPS = 0.001
 
@@ -115,11 +115,11 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
-    parser = argparse.ArgumentParser(prog="bench.eval")
+    parser = argparse.ArgumentParser(prog="benchmarks.eval")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="run the deterministic eval on this checkout")
-    run.add_argument("--corpus", type=Path, default=Path("bench/eval/data/corpus.jsonl"))
+    run.add_argument("--corpus", type=Path, default=Path("benchmarks/eval/data/corpus.jsonl"))
     run.add_argument("--out", type=Path, required=True)
     run.add_argument("--baseline", type=Path, default=None)
     run.add_argument("--commit", type=str, default="local")

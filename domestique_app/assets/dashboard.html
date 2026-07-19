@@ -974,7 +974,7 @@ function showNotification(msg) {
 const API = '';
 
 async function runOldBenchmark() {
-  // Runs the comprehensive bench/comprehensive_eval.py script
+  // Runs the comprehensive benchmarks/datasets/comprehensive_eval.py script
   try {
     const res = await fetch(`${API}/api/benchmark`, { method: 'POST' });
     const data = await res.json();

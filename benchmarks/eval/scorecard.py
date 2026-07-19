@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from bench.eval.metrics import Metrics
+from benchmarks.eval.metrics import Metrics
 
 # For each metric: True if a LOWER value is better.
 _LOWER_BETTER = {

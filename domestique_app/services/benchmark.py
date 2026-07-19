@@ -20,10 +20,10 @@ if TYPE_CHECKING:
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-if not (PROJECT_ROOT / "bench").exists():
+if not (PROJECT_ROOT / "benchmarks").exists():
     _search = PROJECT_ROOT
     while _search != _search.parent:
-        if (_search / "bench").exists():
+        if (_search / "benchmarks").exists():
             PROJECT_ROOT = _search
             break
         _search = _search.parent
@@ -104,9 +104,9 @@ class BenchmarkService:
 
     def _run(self) -> None:
         """Execute the benchmark script (runs in background thread)."""
-        script = PROJECT_ROOT / "bench" / "comprehensive_eval.py"
+        script = PROJECT_ROOT / "benchmarks" / "datasets" / "comprehensive_eval.py"
         if not script.exists():
-            self._state.progress = "Error: bench/comprehensive_eval.py not found"
+            self._state.progress = "Error: benchmarks/datasets/comprehensive_eval.py not found"
             self._state.running = False
             return
 

@@ -4,16 +4,16 @@ Runs all detector tiers against both custom and public datasets, reporting
 precision, recall, F1, and latency per detector and per difficulty level.
 
 Datasets evaluated:
-- Custom secrets/PII/business (bench/dataset.py) — 65 hand-crafted cases
+- Custom secrets/PII/business (benchmarks/datasets/dataset.py) — 65 hand-crafted cases
 - ai4privacy/pii-masking-300k (HuggingFace) — real PII detection benchmark
 - ai4privacy/pii-masking-400k (HuggingFace) — multilingual PII benchmark
-- Expanded secrets corpus (bench/public_datasets.py) — Basak et al. patterns
+- Expanded secrets corpus (benchmarks/datasets/public_datasets.py) — Basak et al. patterns
 - Business-sensitive corpus — enterprise DLP scenarios
 
 Usage:
-    python -m bench.evaluate              # custom dataset only (fast)
-    python -m bench.evaluate --public     # include public HuggingFace datasets
-    python -m bench.evaluate --full       # all datasets, all tiers
+    python -m benchmarks.datasets.evaluate              # custom dataset only (fast)
+    python -m benchmarks.datasets.evaluate --public     # include public HuggingFace datasets
+    python -m benchmarks.datasets.evaluate --full       # all datasets, all tiers
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ from pathlib import Path
 from typing import Callable, Awaitable
 
 # Ensure project root importable
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from bench.dataset import ALL_CASES, BenchCase
+from benchmarks.datasets.dataset import ALL_CASES, BenchCase
 from domestique.detectors.secrets import SecretDetector
 from domestique.detectors.semantic import SemanticDetector
 from domestique.models import Detection
@@ -224,7 +224,7 @@ async def main() -> None:
 
     if include_public:
         print("  Loading public datasets from HuggingFace...")
-        from bench.public_datasets import load_all_public_datasets
+        from benchmarks.datasets.public_datasets import load_all_public_datasets
         public = load_all_public_datasets(
             pii_300k_samples=args.pii_samples,
             pii_400k_samples=args.pii_samples // 2,

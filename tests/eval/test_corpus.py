@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from bench.eval.corpus import CorpusRow, corpus_checksum, load_corpus
+from benchmarks.eval.corpus import CorpusRow, corpus_checksum, load_corpus
 
-DATA = Path(__file__).parent.parent.parent / "bench" / "eval" / "data" / "corpus.jsonl"
+DATA = Path(__file__).parent.parent.parent / "benchmarks" / "eval" / "data" / "corpus.jsonl"
 
 
 def test_load_corpus_parses_rows():

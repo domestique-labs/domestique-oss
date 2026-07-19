@@ -35,7 +35,7 @@ import os
 import httpx
 import pytest
 
-from bench.eval.mock_upstream import serve
+from benchmarks.eval.mock_upstream import serve
 from domestique.gateway import create_gateway
 
 # The planted secret is a canonical AWS access key id -> category aws_access_key
