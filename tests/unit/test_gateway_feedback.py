@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+from structlog.testing import capture_logs
 
 from domestique.detectors.registry import Finding, InspectionResult
 from domestique.gateway import _scan_and_redact, build_cli_pipeline, create_gateway
@@ -97,6 +98,25 @@ def test_block_notifies_and_logs(mock_openai) -> None:
     assert "private_key" in calls[-1][1]
     data = aggregate(load_events(default_audit_path()))
     assert data.by_category.get("private_key", {}).get("block", 0) >= 1
+
+
+def test_block_emits_no_raw_structlog_line(mock_openai) -> None:
+    # The clean ticker (on_decision) + audit log are the block's only signals;
+    # the old always-on `request_blocked` structlog line was noisy and made
+    # --quiet look broken. It must be gone.
+    result = InspectionResult(
+        action=Action.BLOCK,
+        reason="private key",
+        findings=[Finding(detector="secret_scanner", category="private_key", confidence=1.0)],
+    )
+    app = create_gateway(pipeline=_StubPipeline(result))
+    with capture_logs() as cap, serve(app) as gw:
+        httpx.post(
+            f"{gw}/v1/chat/completions",
+            headers={"Authorization": "Bearer sk"},
+            json={"model": "m", "messages": [{"role": "user", "content": "x"}]},
+        )
+    assert "request_blocked" not in [e.get("event") for e in cap]
 
 
 def test_clean_prompt_does_not_notify_or_log(mock_openai) -> None:

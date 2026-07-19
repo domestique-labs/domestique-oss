@@ -224,8 +224,9 @@ async def _proxy(request: Request, path: str) -> Response:
     action, reason, out_body, categories = await _scan_and_redact(pipeline, parsed, kind)
     host = _upstream_host(provider)
     if action is Action.BLOCK:
-        # Expected policy enforcement, not an anomaly — info, not warning.
-        logger.info("request_blocked", outcome="block", path=path, reason=reason)
+        # The clean ticker (_emit_decision) + metadata audit log are the block's
+        # user-facing signals; no separate raw structlog line (it read as noise
+        # and made --quiet look broken).
         _emit_decision(request.app, Action.BLOCK, categories, host)
         return _block_response(provider, reason)
     if action is Action.REDACT:

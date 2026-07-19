@@ -167,6 +167,7 @@ def _cmd_start(
     with contextlib.suppress(AttributeError, ValueError):
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
+    _quiet_process_logs()  # keep the banner + ticker clean (info logs → stderr, WARNING+)
     _maybe_offer_first_run_setup(no_setup)
 
     settings = settings_from_config()
@@ -421,19 +422,17 @@ def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
     return "\n".join(out)
 
 
-def _quiet_logs_for_demo() -> None:
-    """Silence info-level process logs so the demo output stays clean.
+def _quiet_process_logs() -> None:
+    """Silence info-level process logs (to stderr) so CLI output stays clean.
 
     Domestique never calls ``structlog.configure()`` elsewhere, so structlog's
     unconfigured default — a ``ConsoleRenderer`` that always emits ANSI color
     to stdout, tty or not — is what fires when the policy/pipeline loaders
     log (e.g. ``policy_loaded``). Left alone, that padded dev-format line
     ("[info     ] policy_loaded            path=...") interleaves into the
-    rendered demo on every run. This is called only by ``run_demo``, so
-    raising the threshold to WARNING affects the demo command and nothing
-    else: the config header already reports the policy + rule count, so the
-    info line is pure noise here, while real warnings (e.g. ``gliner_not_cached``)
-    still surface.
+    rendered demo and the ``start`` banner/ticker on every run. Raising the
+    threshold to WARNING and routing to stderr keeps the config header / ticker
+    (stdout) clean while real warnings (e.g. ``gliner_not_cached``) still surface.
 
     The factory below resolves ``sys.stderr`` at each call instead of once
     here (``structlog.PrintLoggerFactory(file=sys.stderr)`` would capture it
@@ -468,7 +467,7 @@ def run_demo(*, interactive: bool | None = None) -> int:
     from domestique.config_loader import settings_from_config
     from domestique.gateway import build_cli_pipeline
 
-    _quiet_logs_for_demo()
+    _quiet_process_logs()
     color = console.supports_color()
     settings = settings_from_config()
     pipeline = build_cli_pipeline(settings)
