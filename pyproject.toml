@@ -6,8 +6,23 @@ build-backend = "setuptools.build_meta"
 name = "domestique"
 version = "0.1.0"
 description = "Transparent firewall for LLM API traffic"
+readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
+keywords = ["llm", "firewall", "proxy", "pii", "redaction", "privacy", "security", "openai", "anthropic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Internet :: Proxy Servers",
+]
 
 dependencies = [
     "fastapi>=0.115,<1",
@@ -21,6 +36,11 @@ dependencies = [
     "python-dotenv>=1,<2",
     "prometheus-client>=0.21,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/domestique-labs/domestique-oss"
+Repository = "https://github.com/domestique-labs/domestique-oss"
+Issues = "https://github.com/domestique-labs/domestique-oss/issues"
 
 [project.scripts]
 domestique = "domestique.cli:main"
