@@ -48,7 +48,14 @@ jobs:
         run: |
           git checkout --quiet --detach "${{ github.event.pull_request.base.sha }}"
           pip install -e ".[dev]"
-          python -m benchmarks.eval run \
+          # Transition fallback: bases that predate the bench/ -> benchmarks/
+          # rename only have bench.eval. Dormant once the rename is on main.
+          if python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('benchmarks.eval') else 1)"; then
+            EVAL_MODULE=benchmarks.eval
+          else
+            EVAL_MODULE=bench.eval
+          fi
+          python -m "$EVAL_MODULE" run \
             --corpus "$RUNNER_TEMP/corpus.jsonl" \
             --out "$RUNNER_TEMP/main-results.json" \
             --commit "${{ github.event.pull_request.base.sha }}"
