@@ -49,8 +49,11 @@ jobs:
           git checkout --quiet --detach "${{ github.event.pull_request.base.sha }}"
           pip install -e ".[dev]"
           # Transition fallback: bases that predate the bench/ -> benchmarks/
-          # rename only have bench.eval. Dormant once the rename is on main.
-          if python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('benchmarks.eval') else 1)"; then
+          # rename only have bench.eval. Probe the file, not the import system:
+          # the PR-side run leaves benchmarks/eval/__pycache__ behind (untracked,
+          # survives the checkout), which makes benchmarks.eval importable as an
+          # empty namespace package. Dormant once the rename is on main.
+          if [ -f benchmarks/eval/__main__.py ]; then
             EVAL_MODULE=benchmarks.eval
           else
             EVAL_MODULE=bench.eval
