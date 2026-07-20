@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from domestique.config import Settings
+from domestique.detectors._offload import offload
 from domestique.detectors.local_llm import LocalLLMClassifier
 from domestique.detectors.pii import PIIDetector
 from domestique.detectors.secrets import SecretDetector
@@ -83,10 +85,20 @@ def build_detectors(settings: Settings) -> list[Detector]:
                     self._threshold = threshold
                     self._unavailable = False
                     self._warned = False
+                    self._init_lock = threading.Lock()
 
                 def _ensure_model(self) -> None:
                     if self._model is not None or self._unavailable:
                         return
+                    with self._init_lock:
+                        # Re-check under the lock: ``scan`` runs on worker
+                        # threads, so concurrent first-calls would otherwise
+                        # each load their own copy of the model.
+                        if self._model is not None or self._unavailable:
+                            return
+                        self._load_model_locked()
+
+                def _load_model_locked(self) -> None:
                     try:
                         from gliner import GLiNER
 
@@ -126,6 +138,12 @@ def build_detectors(settings: Settings) -> list[Detector]:
                 async def scan(self, text: str) -> list[Detection]:
                     if len(text) < 10:
                         return []
+                    # Model load and inference are both blocking; PyTorch
+                    # releases the GIL during inference, so worker threads
+                    # give real overlap here rather than just loop relief.
+                    return await offload(lambda: self._scan_sync(text))
+
+                def _scan_sync(self, text: str) -> list[Detection]:
                     self._ensure_model()
                     if self._unavailable:
                         # Distinct, actionable category -- see _ensure_model.
