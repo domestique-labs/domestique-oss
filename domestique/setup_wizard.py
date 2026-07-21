@@ -54,6 +54,7 @@ class FeatureInfo(TypedDict):
     default: bool
     spacy_model: NotRequired[str]
     hf_model: NotRequired[str]
+    st_model: NotRequired[str]
 
 
 FEATURE_EXTRAS: dict[str, FeatureInfo] = {
@@ -70,6 +71,18 @@ FEATURE_EXTRAS: dict[str, FeatureInfo] = {
         "extra_download_mb": 300,
         "hf_model": "knowledgator/gliner-pii-base-v1.0",
         "default": True,
+    },
+    # Default-off: the embedding model only earns its keep once the operator
+    # configures ``sensitive_topics`` (its topic-similarity strategy is a no-op
+    # otherwise), so we don't pull the ~90 MB model onto every install. Offered
+    # here so enabling semantic detection later doesn't trigger a live model
+    # fetch on the request hot path -- see SemanticDetector._load_model_locked.
+    "semantic": {
+        "label": "Semantic topic similarity (Tier 2c)",
+        "extra": "semantic",
+        "extra_download_mb": 90,
+        "st_model": "all-MiniLM-L6-v2",
+        "default": False,
     },
     "browser-proxy": {
         "label": "Browser MITM interception (mitmproxy)",
@@ -460,6 +473,17 @@ def cache_huggingface_model(repo_id: str) -> None:
         "import os; os.environ.pop('HF_HUB_OFFLINE', None);"
         "from gliner import GLiNER;"
         f"GLiNER.from_pretrained({repo_id!r});"
+        "print('cached')"
+    )
+    run([sys.executable, "-c", code], env={"HF_HUB_OFFLINE": "0"})
+
+
+def cache_sentence_transformer_model(model: str) -> None:
+    _print(f"\n▶ caching sentence-transformer model: {model}")
+    code = (
+        "import os; os.environ.pop('HF_HUB_OFFLINE', None);"
+        "from sentence_transformers import SentenceTransformer;"
+        f"SentenceTransformer({model!r});"
         "print('cached')"
     )
     run([sys.executable, "-c", code], env={"HF_HUB_OFFLINE": "0"})
@@ -915,6 +939,9 @@ def _run_installer() -> int:
 
     if "ner" in extras:
         cache_huggingface_model(FEATURE_EXTRAS["ner"].get("hf_model", ""))
+
+    if "semantic" in extras:
+        cache_sentence_transformer_model(FEATURE_EXTRAS["semantic"].get("st_model", ""))
 
     if preset and ollama_present:
         already = detect_existing_ollama_models()

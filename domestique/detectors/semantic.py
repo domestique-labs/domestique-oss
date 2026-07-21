@@ -17,6 +17,7 @@ For GPU deployments, < 2 ms.
 from __future__ import annotations
 
 import base64
+import os
 import re
 import threading
 from typing import Any
@@ -250,6 +251,14 @@ class SemanticDetector:
             return self._load_model_locked()
 
     def _load_model_locked(self) -> Any:
+        # Force offline before loading, mirroring GLiNER (Tier 2b): a cold model
+        # cache must fail fast here rather than trigger a ~90 MB HuggingFace
+        # fetch on the request hot path. ``domestique setup`` pre-caches the
+        # model when the ``semantic`` extra is selected; without that, this
+        # tier stays disabled instead of stalling every scan on a live download.
+        # ``setdefault`` respects an operator who has explicitly opted into
+        # online fetches.
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
         try:
             from sentence_transformers import SentenceTransformer
 
@@ -267,11 +276,24 @@ class SemanticDetector:
             )
             return self._model
 
-        except ImportError:
+        except (ImportError, OSError) as exc:
+            # ImportError: the ``semantic`` extra (sentence-transformers) was
+            # never installed. OSError (huggingface_hub raises
+            # LocalEntryNotFoundError, an OSError subclass): the package is
+            # present but the model was never cached, and HF_HUB_OFFLINE=1
+            # above forbids fetching it now.
             self._available = False
             logger.warning(
                 "semantic_detector_unavailable",
-                reason="Install sentence-transformers: pip install sentence-transformers",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                hint=(
+                    "Semantic topic detection is enabled but the embedding "
+                    "model is not available: install the 'semantic' extra "
+                    "(pip install -e '.[semantic]') and warm the model cache "
+                    "(run `domestique setup` and select Tier 2c), or disable "
+                    "semantic detection in the dashboard."
+                ),
             )
             return None
 
