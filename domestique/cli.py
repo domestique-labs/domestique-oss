@@ -48,19 +48,23 @@ _LOGO = LOGO
 _supports_unicode = supports_unicode
 
 
-def _banner(host: str, port: int) -> str:
+def _banner(host: str, port: int, *, policy: str | None = None) -> str:
     url = f"http://{host}:{port}"
     if _supports_unicode():
         rule, active, check, arrow = "─" * 60, "►", "✔", "→"
     else:
         rule, active, check, arrow = "-" * 60, ">", "+", "->"
+    # Surface the loaded policy location cleanly here rather than leaking the
+    # raw `policy_loaded` structlog line into the banner.
+    policy_line = f"  [{check}] Policy {arrow} {policy}\n" if policy else ""
     return (
         _LOGO
         + "  [OSS PROXY]\n"
         + rule
         + "\n"
-        + f"  [{active}] DomestiqueCore active on {url}\n"
+        + f"  [{active}] Domestique Proxy active on {url}\n"
         + f"  [{check}] Intercepting outbound prompts {arrow} redacting secrets & PII\n"
+        + policy_line
         + rule
         + "\n"
         + "  Point your agent at it (keep your own API key):\n"
@@ -68,6 +72,21 @@ def _banner(host: str, port: int) -> str:
         + f"    export ANTHROPIC_BASE_URL={url}\n"
         + "  Redact by default.  Press Ctrl-C to stop.\n"
     )
+
+
+def _policy_summary(policy: PolicyEngine) -> str:
+    """One-line policy description for the banner: ``location (N rules, mode)``."""
+    from domestique.gateway import _CLI_POLICY
+    from domestique.policy import _display_path
+
+    actions = policy.actions
+    if Action.REDACT in actions:
+        mode = "redact-first"
+    elif Action.BLOCK in actions:
+        mode = "block-only"
+    else:
+        mode = "allow-all"
+    return f"{_display_path(_CLI_POLICY)} ({policy.rule_count} rules, {mode})"
 
 
 _SETUP_LATER_HINT = (
@@ -161,7 +180,7 @@ def _cmd_start(
     import uvicorn
 
     from domestique.config_loader import settings_from_config
-    from domestique.gateway import create_gateway
+    from domestique.gateway import build_cli_pipeline, create_gateway
 
     # Best effort: make the console UTF-8 so the banner glyphs render on Windows.
     with contextlib.suppress(AttributeError, ValueError):
@@ -196,8 +215,12 @@ def _cmd_start(
         else None
     )
 
-    print(_banner(host, port))
-    uvicorn.run(create_gateway(settings, on_decision=on_decision), host=host, port=port)
+    # Build the pipeline here (same work create_gateway would do internally, just
+    # moved up) so the banner can show the actual loaded policy location.
+    pipeline = build_cli_pipeline(settings)
+    print(_banner(host, port, policy=_policy_summary(pipeline.policy)))
+    gateway = create_gateway(settings, pipeline=pipeline, on_decision=on_decision)
+    uvicorn.run(gateway, host=host, port=port)
     return 0
 
 

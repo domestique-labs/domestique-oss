@@ -37,9 +37,14 @@ def test_start_is_wired(monkeypatch, capsys):
 
     # the start banner is printed before the server launches
     out = capsys.readouterr().out
-    assert "DomestiqueCore active on http://127.0.0.1:8111" in out
+    assert "Domestique Proxy active on http://127.0.0.1:8111" in out
+    assert "DomestiqueCore" not in out  # renamed
     assert "[OSS PROXY]" in out
     assert "export OPENAI_BASE_URL=http://127.0.0.1:8111/v1" in out
+    # the policy location is shown cleanly in the banner (replaces the raw
+    # `policy_loaded` structlog line the user asked to have surfaced here).
+    assert "Policy" in out
+    assert "cli-rules.yaml" in out
 
 
 def test_banner_has_ascii_fallback(monkeypatch):
@@ -47,6 +52,10 @@ def test_banner_has_ascii_fallback(monkeypatch):
 
     # when the console can't encode the fancy glyphs, fall back to plain ASCII
     monkeypatch.setattr(cli, "_supports_unicode", lambda: False)
-    banner = cli._banner("127.0.0.1", 8000)
+    banner = cli._banner(
+        "127.0.0.1", 8000, policy="policy/cli-rules.yaml (14 rules, redact-first)"
+    )
     assert banner.encode("ascii")  # must be pure ASCII, no exception
     assert "[>]" in banner and "[+]" in banner
+    assert "Domestique Proxy active on" in banner
+    assert "Policy" in banner and "cli-rules.yaml" in banner
