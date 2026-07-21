@@ -425,7 +425,7 @@ def _truncate(value: str, width: int = 22) -> str:
     return value[: keep // 2] + "…" + value[-(keep - keep // 2) :]
 
 
-def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
+def _render_ledger(before: str, after: str, findings: list[Finding], *, color: bool) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
 
@@ -458,6 +458,17 @@ def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
             f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
             f"{paint(token, 'green')}  {paint(conf, 'dim')}"
         )
+
+    # Show the full text actually sent to the model below the per-finding rows.
+    # The rows read like N surgical swaps; the AFTER block reveals what really
+    # leaves the machine (e.g. an LLM-classified span can collapse the whole
+    # prompt into one token). Skipped above when nothing was detected.
+    if after != before:
+        out += [
+            "",
+            f"  AFTER {g['arrow']} sent to the model",
+            "    " + _highlight_tokens(after, paint),
+        ]
     return "\n".join(out)
 
 
@@ -538,7 +549,7 @@ def run_demo(*, interactive: bool | None = None) -> int:
             if not text:
                 break
             res = asyncio.run(pipeline.inspect(text))
-            print(_render_ledger(text, res.findings, color=color))
+            print(_render_ledger(text, res.redacted_text or text, res.findings, color=color))
     return 0
 
 

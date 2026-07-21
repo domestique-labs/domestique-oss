@@ -55,16 +55,38 @@ class TestLedger:
 
     def test_pairs_leaked_value_to_token(self) -> None:
         text = "my aws key AKIAIOSFODNN7EXAMPLE and phone 555-123-4567"
-        out = _render_ledger(text, self._findings(text), color=False)
+        res = asyncio.run(build_cli_pipeline().inspect(text))
+        out = _render_ledger(text, res.redacted_text or text, res.findings, color=False)
         assert "redacted 2 secret" in out
         assert "AKIAIOSFODNN7EXAMPLE" in out
         assert "[AWS_ACCESS_KEY_REDACTED]" in out
         assert "555-123-4567" in out
         assert "[PHONE_NUMBER_REDACTED]" in out
 
+    def test_shows_full_redacted_after_below_rows(self) -> None:
+        text = "my aws key AKIAIOSFODNN7EXAMPLE and email a@b.com"
+        res = asyncio.run(build_cli_pipeline().inspect(text))
+        after = res.redacted_text or text
+        out = _render_ledger(text, after, res.findings, color=False)
+        # per-finding rows still present
+        assert "redacted" in out
+        assert "AKIAIOSFODNN7EXAMPLE" in out
+        # the full sent-to-model text is shown, not just per-finding tokens
+        assert "AFTER" in out
+        assert after in out
+        # and it appears BELOW the per-finding rows
+        assert out.index("AKIAIOSFODNN7EXAMPLE") < out.index("AFTER")
+
+    def test_no_after_block_when_nothing_detected(self) -> None:
+        text = "just a normal sentence about the weather"
+        findings = self._findings(text)
+        out = _render_ledger(text, text, findings, color=False)
+        assert "nothing sensitive detected" in out
+        assert "AFTER" not in out  # nothing redacted -> no redundant AFTER echo
+
     def test_clean_input_says_nothing_detected(self) -> None:
         text = "just a normal sentence about the weather"
-        out = _render_ledger(text, self._findings(text), color=False)
+        out = _render_ledger(text, text, self._findings(text), color=False)
         assert "nothing sensitive detected" in out
 
     def test_truncate_shortens_long_values_with_ellipsis(self) -> None:
