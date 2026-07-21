@@ -58,6 +58,11 @@ class PolicyEngine:
         """The distinct actions across all loaded rules."""
         return {rule.action for rule in self._rules}
 
+    @property
+    def rule_count(self) -> int:
+        """How many rules are loaded (shown in the start banner for trust)."""
+        return len(self._rules)
+
     @classmethod
     def from_yaml_default(cls) -> PolicyEngine:
         """Load the packaged redact-first wedge policy."""

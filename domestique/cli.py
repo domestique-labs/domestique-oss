@@ -1,8 +1,10 @@
 """Domestique OSS CLI - the developer wedge entry point.
 
 Commands:
-    domestique start [--host H] [--port P] [--no-setup]   launch the :8000 redacting proxy
+    domestique start [--host H] [--port P] [--no-setup] [--quiet] [--strict] [--access-log]
+                                             launch the :8000 redacting proxy
     domestique demo                          show a before/after redaction, no key needed
+    domestique report [--json] [--days N]    summarize redactions & blocks by type
     domestique setup [--yes]                 first-run onboarding wizard
     domestique browser on|off|status         toggle browser interception (dashboard API)
     domestique --version
@@ -20,11 +22,16 @@ from typing import TYPE_CHECKING
 
 from domestique import __version__, console
 from domestique.branding import LOGO, supports_unicode
+from domestique.detectors.status import detector_status, unavailable_configured
+from domestique.labels import label as _label
 from domestique.models import Action
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from domestique.config import Settings
     from domestique.detectors.registry import Finding
+    from domestique.detectors.status import TierStatus
     from domestique.policy import PolicyEngine
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
@@ -41,19 +48,23 @@ _LOGO = LOGO
 _supports_unicode = supports_unicode
 
 
-def _banner(host: str, port: int) -> str:
+def _banner(host: str, port: int, *, policy: str | None = None) -> str:
     url = f"http://{host}:{port}"
     if _supports_unicode():
         rule, active, check, arrow = "─" * 60, "►", "✔", "→"
     else:
         rule, active, check, arrow = "-" * 60, ">", "+", "->"
+    # Surface the loaded policy location cleanly here rather than leaking the
+    # raw `policy_loaded` structlog line into the banner.
+    policy_line = f"  [{check}] Policy {arrow} {policy}\n" if policy else ""
     return (
         _LOGO
         + "  [OSS PROXY]\n"
         + rule
         + "\n"
-        + f"  [{active}] DomestiqueCore active on {url}\n"
+        + f"  [{active}] Domestique Proxy active on {url}\n"
         + f"  [{check}] Intercepting outbound prompts {arrow} redacting secrets & PII\n"
+        + policy_line
         + rule
         + "\n"
         + "  Point your agent at it (keep your own API key):\n"
@@ -61,6 +72,21 @@ def _banner(host: str, port: int) -> str:
         + f"    export ANTHROPIC_BASE_URL={url}\n"
         + "  Redact by default.  Press Ctrl-C to stop.\n"
     )
+
+
+def _policy_summary(policy: PolicyEngine) -> str:
+    """One-line policy description for the banner: ``location (N rules, mode)``."""
+    from domestique.gateway import _CLI_POLICY
+    from domestique.policy import _display_path
+
+    actions = policy.actions
+    if Action.REDACT in actions:
+        mode = "redact-first"
+    elif Action.BLOCK in actions:
+        mode = "block-only"
+    else:
+        mode = "allow-all"
+    return f"{_display_path(_CLI_POLICY)} ({policy.rule_count} rules, {mode})"
 
 
 _SETUP_LATER_HINT = (
@@ -108,19 +134,126 @@ def _maybe_offer_first_run_setup(no_setup: bool) -> None:
         print(_SETUP_LATER_HINT)
 
 
-def _cmd_start(host: str, port: int, *, no_setup: bool = False) -> int:
+def _live_feedback_enabled(*, quiet: bool, isatty: bool) -> bool:
+    """Show the live redaction ticker only on an interactive TTY and not --quiet."""
+    return (not quiet) and isatty
+
+
+def _make_ticker(
+    *, color: bool, emit: Callable[[str], None] | None = None
+) -> Callable[[Action, list[str], str], None]:
+    """Build the per-request live-feedback callback for the wedge."""
+    write = emit or (lambda line: print(line, flush=True))
+    paint = console.Palette(enabled=color)
+    g = console.glyphs()
+
+    def on_decision(action: Action, categories: list[str], host: str) -> None:
+        names = ", ".join(_label(c) for c in categories) or "sensitive data"
+        if action is Action.BLOCK:
+            write(f"  {paint(g['cross'], 'red')} blocked ({names}) {g['arrow']} {host}")
+        else:
+            write(
+                f"  {paint(g['check'], 'green')} redacted {len(categories)} "
+                f"({names}) {g['arrow']} {host}"
+            )
+
+    return on_decision
+
+
+def _render_detector_warnings(missing: list[TierStatus], *, color: bool) -> str:
+    """One warning line per configured-but-unavailable detection tier."""
+    paint = console.Palette(enabled=color)
+    g = console.glyphs()
+    lines = []
+    for tier in missing:
+        lines.append(
+            f"  {paint('⚠', 'red') if _supports_unicode() else '  [!]'} "
+            f"{paint(tier.label + ' configured but unavailable', 'bold')} "
+            f"{g['arrow']} install:  {tier.install_hint}"
+        )
+    return "\n".join(lines)
+
+
+def _cmd_start(
+    host: str,
+    port: int,
+    *,
+    no_setup: bool = False,
+    quiet: bool = False,
+    strict: bool = False,
+    access_log: bool = False,
+) -> int:
     import uvicorn
 
-    from domestique.gateway import create_gateway
+    from domestique.config_loader import settings_from_config
+    from domestique.gateway import build_cli_pipeline, create_gateway
 
     # Best effort: make the console UTF-8 so the banner glyphs render on Windows.
     with contextlib.suppress(AttributeError, ValueError):
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 
+    _quiet_process_logs()  # keep the banner + ticker clean (info logs → stderr, WARNING+)
     _maybe_offer_first_run_setup(no_setup)
 
-    print(_banner(host, port))
-    uvicorn.run(create_gateway(), host=host, port=port)
+    settings = settings_from_config()
+    color = console.supports_color()
+
+    # UX-2: surface configured-but-unavailable detection tiers. --strict verifies
+    # deeply (model load) and refuses to start rather than run half-protected.
+    statuses = detector_status(settings, deep=strict)
+    missing = unavailable_configured(statuses)
+    if missing:
+        if strict:
+            print("⛔ strict mode: some configured detection is unavailable.\n")
+            print(_render_detector_warnings(missing, color=color))
+            print("\n  Install the missing tier(s) above, or drop --strict to run anyway.")
+            return 2
+        print(_render_detector_warnings(missing, color=color))
+        print("  " + _SETUP_LATER_HINT + "\n")
+
+    try:
+        interactive = sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        interactive = False
+    on_decision = (
+        _make_ticker(color=color)
+        if _live_feedback_enabled(quiet=quiet, isatty=interactive)
+        else None
+    )
+
+    # Build the pipeline here (same work create_gateway would do internally, just
+    # moved up) so the banner can show the actual loaded policy location.
+    pipeline = build_cli_pipeline(settings)
+    print(_banner(host, port, policy=_policy_summary(pipeline.policy)))
+    gateway = create_gateway(settings, pipeline=pipeline, on_decision=on_decision)
+    # One voice: silence uvicorn's per-request access log + INFO startup chatter
+    # so it never speaks over the ticker. The ticker (redact/block only) is the
+    # single per-request signal; a clean request stays silent. --access-log
+    # restores uvicorn's raw HTTP logs for debugging.
+    uvicorn.run(
+        gateway,
+        host=host,
+        port=port,
+        access_log=access_log,
+        log_level="info" if access_log else "warning",
+    )
+    return 0
+
+
+def _cmd_report(*, as_json: bool = False, days: int | None = None) -> int:
+    from domestique.report import (
+        aggregate,
+        default_audit_path,
+        load_events,
+        render_text,
+        to_json,
+    )
+
+    data = aggregate(load_events(default_audit_path(), since_days=days))
+    if as_json:
+        print(to_json(data))
+    else:
+        print(render_text(data, color=console.supports_color(), since_days=days))
     return 0
 
 
@@ -199,22 +332,6 @@ def _cmd_browser(action: str, url: str) -> int:
         return 0
     print(f"error: {payload.get('error', 'unexpected dashboard response')}")
     return 1
-
-
-_CATEGORY_LABELS = {
-    "aws_access_key": "AWS access key",
-    "email_address": "Email address",
-    "us_ssn": "US SSN",
-    "phone_number": "Phone number",
-    "credit_card": "Credit card",
-    "github_token": "GitHub token",
-    "jwt": "JWT token",
-    "private_key": "Private key",
-}
-
-
-def _label(category: str) -> str:
-    return _CATEGORY_LABELS.get(category, category.replace("_", " ").capitalize())
 
 
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
@@ -344,19 +461,17 @@ def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
     return "\n".join(out)
 
 
-def _quiet_logs_for_demo() -> None:
-    """Silence info-level process logs so the demo output stays clean.
+def _quiet_process_logs() -> None:
+    """Silence info-level process logs (to stderr) so CLI output stays clean.
 
     Domestique never calls ``structlog.configure()`` elsewhere, so structlog's
     unconfigured default — a ``ConsoleRenderer`` that always emits ANSI color
     to stdout, tty or not — is what fires when the policy/pipeline loaders
     log (e.g. ``policy_loaded``). Left alone, that padded dev-format line
     ("[info     ] policy_loaded            path=...") interleaves into the
-    rendered demo on every run. This is called only by ``run_demo``, so
-    raising the threshold to WARNING affects the demo command and nothing
-    else: the config header already reports the policy + rule count, so the
-    info line is pure noise here, while real warnings (e.g. ``gliner_not_cached``)
-    still surface.
+    rendered demo and the ``start`` banner/ticker on every run. Raising the
+    threshold to WARNING and routing to stderr keeps the config header / ticker
+    (stdout) clean while real warnings (e.g. ``gliner_not_cached``) still surface.
 
     The factory below resolves ``sys.stderr`` at each call instead of once
     here (``structlog.PrintLoggerFactory(file=sys.stderr)`` would capture it
@@ -391,7 +506,7 @@ def run_demo(*, interactive: bool | None = None) -> int:
     from domestique.config_loader import settings_from_config
     from domestique.gateway import build_cli_pipeline
 
-    _quiet_logs_for_demo()
+    _quiet_process_logs()
     color = console.supports_color()
     settings = settings_from_config()
     pipeline = build_cli_pipeline(settings)
@@ -440,8 +555,29 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the first-run setup offer",
     )
+    start.add_argument(
+        "--quiet",
+        action="store_true",
+        help="suppress the live redaction ticker (also auto-suppressed when not a TTY)",
+    )
+    start.add_argument(
+        "--strict",
+        action="store_true",
+        help="refuse to start if a configured detection tier is unavailable (fail-closed)",
+    )
+    start.add_argument(
+        "--access-log",
+        action="store_true",
+        help="restore uvicorn's raw HTTP access log (off by default; the ticker is the voice)",
+    )
 
     sub.add_parser("demo", help="show a before/after redaction (no API key needed)")
+
+    report = sub.add_parser("report", help="summarize redactions & blocks by type")
+    report.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    report.add_argument(
+        "--days", type=int, default=None, help="only count events from the last N days"
+    )
 
     setup = sub.add_parser("setup", help="first-run onboarding wizard (hardware-aware)")
     setup.add_argument(
@@ -461,9 +597,18 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.cmd == "start":
-        return _cmd_start(args.host, args.port, no_setup=args.no_setup)
+        return _cmd_start(
+            args.host,
+            args.port,
+            no_setup=args.no_setup,
+            quiet=args.quiet,
+            strict=args.strict,
+            access_log=args.access_log,
+        )
     if args.cmd == "demo":
         return run_demo()
+    if args.cmd == "report":
+        return _cmd_report(as_json=args.json, days=args.days)
     if args.cmd == "setup":
         return _cmd_setup(args.yes)
     if args.cmd == "browser":

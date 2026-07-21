@@ -9,7 +9,9 @@
 <p align="center">
   Point your agent or app at Domestique and it redacts secrets and PII out of your prompts
   <em>before</em> they reach OpenAI, Anthropic, or any LLM.<br>
-  No CA to install, no system proxy, no admin — just point a tool at a local endpoint. Cross-platform.
+  For CLI/API tools the setup is just one env var — no CA, no system proxy, no admin.
+  (Web chat UIs like ChatGPT/Claude are covered by the optional
+  <a href="#browser-mode-optional">browser mode</a>, a heavier path.) Cross-platform.
 </p>
 
 <!-- Badges are added in the README-badges change (#23); when merged they slot in here, centered. -->
@@ -73,6 +75,8 @@ the outbound prompt is touched.
 - **No CA, no system proxy, no admin** — pointing a tool at the wedge is just a base-URL env var.
 - **Your key stays yours** — it rides through in the request header to the provider.
 - **Redact by default** — your workflow keeps working; the loudest secrets block.
+- **You can see what it caught** — each redaction/block prints a live line, and
+  `domestique report` totals them by type (metadata only, never your prompt text).
 - **Cross-platform** — macOS, Linux, Windows.
 
 Supported front doors today: OpenAI-compatible (`/v1/chat/completions`, `/v1/completions`,
@@ -90,6 +94,64 @@ nuanced content, install the optional detectors:
 | GLiNER PII | `[ner]` | ~300 MB | Zero-shot NER for names, addresses, DOBs |
 | Presidio PII | `[pii]` | ~500 MB | spaCy-based PII with en_core_web_lg model |
 | LLM classifier | Ollama + model | 1-4 GB | Nuanced classification via a local LLM |
+
+If a tier is **enabled but its dependency isn't installed**, `domestique start` prints a
+loud warning and keeps running with whatever protection *is* available (fail-loud-but-open).
+Prefer to never run half-protected? Add `--strict` and it will refuse to start until the
+gap is fixed (fail-closed).
+
+---
+
+## Reference — commands, flags & env vars
+
+### Commands
+
+| Command | What it does |
+|---|---|
+| `domestique start` | Launch the redacting proxy on `http://127.0.0.1:8000`. |
+| `domestique demo` | Before/after redaction on a sample prompt — no API key needed. |
+| `domestique report` | Summarize how many secrets/PII were redacted or blocked, by type. |
+| `domestique setup` | Hardware-aware first-run wizard (enables the optional detection tiers). |
+| `domestique browser on\|off\|status` | Toggle browser interception (needs the dashboard app). |
+| `domestique --version` | Print the version. |
+
+### `start` flags
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--host` | `127.0.0.1` | Address to bind the proxy to. |
+| `--port` | `8000` | Port to listen on. |
+| `--quiet` | off | Suppress the live redaction ticker (also auto-suppressed when stdout isn't a TTY). |
+| `--strict` | off | Fail **closed** — refuse to start if a configured detection tier is unavailable. Default is fail-loud-but-open: warn and run. |
+| `--access-log` | off | Restore uvicorn's raw per-request HTTP access log. Off by default so the live ticker is the single per-request voice (a clean request stays silent). |
+| `--no-setup` | off | Skip the first-run setup offer. |
+
+`report` accepts `--json` (machine-readable) and `--days N` (only count the last N days).
+
+### Environment variables
+
+**Point your tool at the wedge (client side):**
+
+| Var | Example | Used by |
+|---|---|---|
+| `OPENAI_BASE_URL` | `http://127.0.0.1:8000/v1` | OpenAI-compatible clients |
+| `ANTHROPIC_BASE_URL` | `http://127.0.0.1:8000` | Anthropic clients |
+
+Your `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` stay exactly as they are — Domestique passes
+them straight through to the provider.
+
+**Configure Domestique itself (`DOMESTIQUE_` prefix, all optional):**
+
+| Var | Default | Meaning |
+|---|---|---|
+| `DOMESTIQUE_OPENAI_UPSTREAM` | `https://api.openai.com` | Override the OpenAI upstream. |
+| `DOMESTIQUE_ANTHROPIC_UPSTREAM` | `https://api.anthropic.com` | Override the Anthropic upstream. |
+| `DOMESTIQUE_AUDIT_LOG` | `~/.domestique/audit.jsonl` | Where `report` events are written (metadata only). |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | — | Optional server-side fallback key, used only if the client sends none. |
+
+Detection settings (which tiers are on, thresholds) are written by `domestique setup` to
+`~/.domestique/config.json`; every field is also settable via a `DOMESTIQUE_`-prefixed env
+var — see [`domestique/config.py`](./domestique/config.py).
 
 ---
 
