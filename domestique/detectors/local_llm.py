@@ -183,7 +183,10 @@ class LocalLLMClassifier:
             substring = str(item.get("t", ""))
             if not substring:
                 continue
-            confidence = float(item.get("v", item.get("confidence", 0.0)))
+            try:
+                confidence = float(item.get("v", item.get("confidence", 0.0)))
+            except (TypeError, ValueError):
+                continue
             if confidence < self._threshold:
                 continue
             start = text.find(substring, search_from.get(substring, 0))
