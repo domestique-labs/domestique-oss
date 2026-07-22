@@ -262,3 +262,33 @@ class TestOrchestrator:
         )
         assert rc == 0
         assert "already" in capsys.readouterr().out.lower()
+
+
+class TestCliWiring:
+    def test_bare_browser_invokes_launcher(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(
+            cli,
+            "_cmd_browser_launch",
+            lambda url, **k: seen.update(url=url, **k) or 0,
+        )
+        assert cli.main(["browser", "--url", "http://y", "--yes", "--no-open"]) == 0
+        assert seen == {
+            "url": "http://y", "assume_yes": True, "no_install": False, "open_dashboard": False
+        }
+
+    def test_no_install_flag_passed_through(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(cli, "_cmd_browser_launch", lambda url, **k: seen.update(k) or 0)
+        assert cli.main(["browser", "--no-install"]) == 0
+        assert seen["no_install"] is True
+        assert seen["open_dashboard"] is True
+
+    def test_browser_on_still_routes_to_cmd_browser(self, monkeypatch):
+        called = {}
+        monkeypatch.setattr(
+            cli, "_cmd_browser", lambda action, url: called.update(action=action) or 0
+        )
+        monkeypatch.setattr(cli, "_cmd_browser_launch", lambda *a, **k: pytest.fail("wrong path"))
+        assert cli.main(["browser", "on", "--url", "http://y"]) == 0
+        assert called == {"action": "on"}

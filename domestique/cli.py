@@ -6,7 +6,7 @@ Commands:
     domestique demo                          show a before/after redaction, no key needed
     domestique report [--json] [--days N]    summarize redactions & blocks by type
     domestique setup [--yes]                 first-run onboarding wizard
-    domestique browser on|off|status         toggle browser interception (dashboard API)
+    domestique browser [on|off|status]       bare = set up & launch; on/off/status control
     domestique --version
 """
 
@@ -766,12 +766,32 @@ def main(argv: list[str] | None = None) -> int:
         help="accept all recommended defaults (non-interactive)",
     )
 
-    browser = sub.add_parser("browser", help="toggle browser interception via the dashboard")
-    browser.add_argument("action", choices=["on", "off", "status"])
+    browser = sub.add_parser(
+        "browser",
+        help="browser protection: bare = set up & launch; on/off/status to control",
+    )
+    browser.add_argument(
+        "action",
+        nargs="?",
+        choices=["on", "off", "status"],
+        default=None,
+        help="on/off/status to control a running dashboard; omit to set up & launch",
+    )
     browser.add_argument(
         "--url",
         default=_DASHBOARD_URL,
         help=f"dashboard API base URL (default: {_DASHBOARD_URL})",
+    )
+    browser.add_argument(
+        "--no-open", action="store_true", help="don't open the dashboard in a browser"
+    )
+    browser.add_argument(
+        "--yes", "-y", action="store_true", help="skip the browser-support install confirmation"
+    )
+    browser.add_argument(
+        "--no-install",
+        action="store_true",
+        help="never auto-install browser support; print the manual command instead",
     )
 
     args = parser.parse_args(argv)
@@ -791,6 +811,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "setup":
         return _cmd_setup(args.yes)
     if args.cmd == "browser":
+        if args.action is None:
+            return _cmd_browser_launch(
+                args.url,
+                assume_yes=args.yes,
+                no_install=args.no_install,
+                open_dashboard=not args.no_open,
+            )
         return _cmd_browser(args.action, args.url)
     parser.print_help()
     return 0
