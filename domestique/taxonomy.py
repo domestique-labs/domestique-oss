@@ -21,6 +21,7 @@ if TYPE_CHECKING:
             """Return learned prefix for category, or None if not found."""
             ...
 
+
 #: Longest prefix that fits ``[PREFIX_index]`` within MAX_TOKEN_LEN (32):
 #: 32 - len("[") - len("_") - len("]") - 6 reserved index digits.
 MAX_PREFIX_LEN = 23
@@ -104,8 +105,11 @@ def prefix_for(category: str, store: TaxonomyStore | None = None) -> str:
     canonical = CANONICAL.get(category)
     if canonical is not None:
         return canonical
-    if store is not None:
-        learned = store.prefix_of(category)
-        if learned is not None:
-            return learned
+    if store is None:
+        from domestique.taxonomy_store import default_store
+
+        store = default_store()
+    learned = store.prefix_of(category)
+    if learned is not None:
+        return learned
     return _derive_prefix(category)
