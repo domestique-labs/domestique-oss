@@ -119,6 +119,13 @@ class TestDashboardHelpers:
         # Nothing is listening on this port.
         assert cli._dashboard_call("http://127.0.0.1:9", "/api/browser-proxy", timeout=0.2) is None
 
+    def test_call_returns_json_body_on_error_status(self, stub_dashboard):
+        url, _requests, _resp = stub_dashboard
+        assert cli._dashboard_call(url, "/api/does-not-exist") == {"error": "not found"}
+
+    def test_call_returns_none_for_malformed_url(self):
+        assert cli._dashboard_call("notaurl", "/x") is None
+
     def test_reachable_true_against_stub(self, stub_dashboard):
         url, _requests, _resp = stub_dashboard
         assert cli._dashboard_reachable(url) is True

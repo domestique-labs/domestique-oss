@@ -404,12 +404,12 @@ def _dashboard_call(
     import urllib.error
     import urllib.request
 
-    req = urllib.request.Request(  # noqa: S310  # local dashboard, http only
-        url.rstrip("/") + path,
-        method=method,
-        data=b"" if method == "POST" else None,
-    )
     try:
+        req = urllib.request.Request(  # noqa: S310  # local dashboard, http only
+            url.rstrip("/") + path,
+            method=method,
+            data=b"" if method == "POST" else None,
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
             return cast("dict[str, Any]", json.loads(resp.read().decode("utf-8")))
     except urllib.error.HTTPError as exc:
@@ -417,7 +417,7 @@ def _dashboard_call(
             return cast("dict[str, Any]", json.loads(exc.read().decode("utf-8")))
         except (json.JSONDecodeError, OSError):
             return None
-    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError):
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError):
         return None
 
 
@@ -460,8 +460,14 @@ def _ensure_app_running(url: str, *, timeout: float = 30.0) -> bool:
 
 def _post_browser_start(url: str) -> dict[str, Any] | None:
     """Turn on browser interception via the dashboard (also enables the system
-    proxy server-side). Returns the dashboard's JSON response, or None."""
-    return _dashboard_call(url, "/api/browser-proxy/start", method="POST")
+    proxy server-side). Returns the dashboard's JSON response, or None.
+
+    Uses a generous timeout: on first run the dashboard's handler does
+    synchronous setup (generate CA, install to keychain, generate PAC,
+    launch mitmdump, enable system proxy) that can far exceed the default
+    timeout.
+    """
+    return _dashboard_call(url, "/api/browser-proxy/start", method="POST", timeout=60.0)
 
 
 def _warn_if_cert_untrusted(url: str) -> None:
@@ -480,10 +486,10 @@ def _cmd_browser_launch(
 ) -> int:
     """Bare `domestique browser`: one idempotent step to full browser protection.
 
-    Ensure mitmproxy -> ensure the dashboard app is up (cert trusted during its
-    portable launch) -> turn interception on (enables the system proxy
-    server-side) -> open the dashboard. Re-running when already protected just
-    re-opens the dashboard.
+    Ensure mitmproxy -> ensure the dashboard app is up -> turn interception on
+    (which generates/trusts the CA and enables the system proxy server-side)
+    -> warn if the CA still isn't trusted -> open the dashboard. Re-running
+    when already protected just re-opens the dashboard.
     """
     if not _ensure_browser_dependency(assume_yes=assume_yes, no_install=no_install):
         return 1
