@@ -292,3 +292,9 @@ class TestCliWiring:
         monkeypatch.setattr(cli, "_cmd_browser_launch", lambda *a, **k: pytest.fail("wrong path"))
         assert cli.main(["browser", "on", "--url", "http://y"]) == 0
         assert called == {"action": "on"}
+
+
+class TestBannerHint:
+    def test_start_banner_mentions_browser_command(self):
+        out = cli._banner("127.0.0.1", 8000)
+        assert "domestique browser" in out

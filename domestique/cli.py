@@ -78,6 +78,7 @@ def _banner(host: str, port: int, *, policy: str | None = None) -> str:
         + f"    export OPENAI_BASE_URL={url}/v1\n"
         + f"    export ANTHROPIC_BASE_URL={url}\n"
         + "  Redact by default.  Press Ctrl-C to stop.\n"
+        + f"  {arrow} Protect your web browser too:  domestique browser\n"
     )
 
 
