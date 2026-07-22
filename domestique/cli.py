@@ -15,8 +15,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import importlib.util
 import json
 import re
+import shutil
+import subprocess
 import sys
 from typing import TYPE_CHECKING
 
@@ -35,6 +38,9 @@ if TYPE_CHECKING:
     from domestique.policy import PolicyEngine
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
+
+_MITMPROXY_HINT = 'pipx inject domestique "domestique[browser-proxy]"'
+_APP_MODULE = "domestique_app"
 
 _DEMO_PROMPT = (
     "Here is my AWS key AKIAIOSFODNN7EXAMPLE and email jane.doe@corp.com, "
@@ -332,6 +338,60 @@ def _cmd_browser(action: str, url: str) -> int:
         return 0
     print(f"error: {payload.get('error', 'unexpected dashboard response')}")
     return 1
+
+
+def _print_mitmproxy_hint() -> None:
+    """Tell the user how to add browser support by hand."""
+    print("Browser support (mitmproxy) isn't installed. Add it with:")
+    print(f"  {_MITMPROXY_HINT}")
+    print("  then re-run:  domestique browser")
+
+
+def _detect_install_context() -> tuple[str, list[str]]:
+    """Pick the right install command for how domestique was installed.
+
+    pipx installs live in their own venv and need `pipx inject`; a plain
+    venv/pip install takes `pip install`. Returns (kind, argv).
+    """
+    import os
+
+    under_pipx = bool(os.environ.get("PIPX_HOME")) or "/pipx/venvs/" in sys.prefix
+    if under_pipx and shutil.which("pipx"):
+        return "pipx", ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
+    return "pip", [sys.executable, "-m", "pip", "install", "domestique[browser-proxy]"]
+
+
+def _ensure_browser_dependency(*, assume_yes: bool, no_install: bool) -> bool:
+    """Ensure mitmproxy is available, installing it on demand.
+
+    Returns True if the dependency is present (or was just installed), False
+    if it's missing and could not / should not be installed. Never imports
+    mitmproxy in-process (the spawned app subprocess uses a fresh interpreter),
+    so success is judged by the installer's exit code, not a re-check.
+    """
+    if importlib.util.find_spec("mitmproxy") is not None:
+        return True
+    if no_install:
+        _print_mitmproxy_hint()
+        return False
+    if not assume_yes and sys.stdin is not None and sys.stdin.isatty():
+        reply = input("Add browser support (~a few MB, mitmproxy)? [Y/n] ").strip().lower()
+        if reply in {"n", "no"}:
+            _print_mitmproxy_hint()
+            return False
+    kind, cmd = _detect_install_context()
+    print(f"→ installing browser support via {kind}…")
+    try:
+        result = subprocess.run(cmd, check=False)  # noqa: S603
+    except OSError as exc:
+        print(f"error: install command failed to run: {exc}")
+        _print_mitmproxy_hint()
+        return False
+    if result.returncode != 0:
+        print("error: installing browser support failed.")
+        _print_mitmproxy_hint()
+        return False
+    return True
 
 
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
