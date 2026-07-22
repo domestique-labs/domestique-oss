@@ -58,3 +58,36 @@ def test_coins_and_persists_new_term(monkeypatch, tmp_path):
 def test_malformed_returns_no_detections(monkeypatch):
     clf = _clf(monkeypatch, None)  # _classify returned None (unparseable)
     assert asyncio.run(clf.scan("some text here to scan")) == []
+
+
+def test_repeated_substring_gets_two_distinct_nonoverlapping_spans(monkeypatch):
+    substring = "AKIAIOSFODNN7EXAMPLE"
+    text = f"first key {substring} then later a second copy {substring} done"
+    items = [
+        {"t": substring, "c": "aws_access_key", "v": 0.9},
+        {"t": substring, "c": "aws_access_key", "v": 0.9},
+    ]
+    clf = _clf(monkeypatch, items)
+    dets = asyncio.run(clf.scan(text))
+
+    assert len(dets) == 2
+    spans = sorted((d.span.start, d.span.end) for d in dets)
+    (s1, e1), (s2, e2) = spans
+    assert (s1, e1) != (s2, e2)
+    assert e1 <= s2  # non-overlapping, ordered
+    assert text[s1:e1] == substring
+    assert text[s2:e2] == substring
+    assert {d.category for d in dets} == {"aws_access_key"}
+
+
+def test_non_numeric_confidence_drops_item_without_raising(monkeypatch):
+    text = "email jane@corp.com and ssn 123-45-6789 please"
+    items = [
+        {"t": "jane@corp.com", "c": "email", "v": "high"},
+        {"t": "123-45-6789", "c": "social_security_number", "v": 0.95},
+    ]
+    clf = _clf(monkeypatch, items)
+    dets = asyncio.run(clf.scan(text))
+
+    assert len(dets) == 1
+    assert dets[0].category == "us_ssn"
