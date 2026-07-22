@@ -25,6 +25,7 @@ from domestique.detectors.secrets import SecretDetector
 from domestique.detectors.semantic import SemanticDetector
 from domestique.models import Action, Detection, Span
 from domestique.policy import PolicyEngine
+from domestique.taxonomy import normalize_category
 
 if TYPE_CHECKING:
     from domestique.detectors import Detector
@@ -151,7 +152,7 @@ def build_detectors(settings: Settings) -> list[Detector]:
                             findings.append(
                                 Detection(
                                     detector=self.name,
-                                    category=f"pii:{e['label']}",
+                                    category=normalize_category(e["label"]),
                                     confidence=e["score"],
                                     span=Span(start=max(0, start), end=end),
                                 )
