@@ -4,6 +4,7 @@ from domestique.models import Action, Detection, Span
 from domestique.policy import PolicyEngine
 
 _CLI = Path("domestique/policy/cli-rules.yaml")
+_BROWSER = Path("domestique/policy/browser-rules.yaml")
 
 
 def _det(detector, category, conf):
@@ -26,3 +27,21 @@ def test_canonical_pii_still_redacts():
     engine = PolicyEngine.from_yaml(_CLI)
     action = engine.evaluate([_det("gliner_ner", "email_address", 0.9)])
     assert action is Action.REDACT
+
+
+def test_browser_blocks_llm_coined_term():
+    assert PolicyEngine.from_yaml(_BROWSER).evaluate(
+        [_det("local_llm_classifier", "employee_badge", 0.9)]
+    ) is Action.BLOCK
+
+
+def test_browser_llm_below_threshold_allows():
+    assert PolicyEngine.from_yaml(_BROWSER).evaluate(
+        [_det("local_llm_classifier", "employee_badge", 0.75)]
+    ) is Action.ALLOW
+
+
+def test_browser_blocks_canonical_pii():
+    assert PolicyEngine.from_yaml(_BROWSER).evaluate(
+        [_det("gliner_ner", "email_address", 0.9)]
+    ) is Action.BLOCK

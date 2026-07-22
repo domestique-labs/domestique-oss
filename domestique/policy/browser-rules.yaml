@@ -47,10 +47,7 @@ rules:
     action: block
     categories:
       - us_ssn
-      - social_security_number
-      - "pii:social_security_number"
       - credit_card
-      - "pii:credit_card"
       - us_passport
       - us_driver_license
       - iban_code
@@ -62,12 +59,8 @@ rules:
     action: block
     categories:
       - email_address
-      - "pii:email"
       - phone_number
-      - "pii:phone_number"
       - address
-      - "pii:address"
-      - "pii:password"
       - password_literal
     min_confidence: 0.7
 
@@ -87,10 +80,5 @@ rules:
   - name: block-llm-classified
     detector: local_llm_classifier
     action: block
-    categories:
-      - "llm_classified:proprietary_code"
-      - "llm_classified:customer_data"
-      - "llm_classified:business_strategy"
-      - "llm_classified:credentials"
-      - "llm_classified:internal_comms"
+    categories: []          # empty = every category the LLM tier emits (canonical or coined)
     min_confidence: 0.8
