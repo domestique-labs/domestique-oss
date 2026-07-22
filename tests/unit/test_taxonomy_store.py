@@ -1,4 +1,4 @@
-from domestique.taxonomy import CANONICAL, prefix_for
+from domestique.taxonomy import CANONICAL, MAX_PREFIX_LEN, prefix_for
 from domestique.taxonomy_store import TaxonomyStore
 
 
@@ -20,6 +20,18 @@ def test_register_avoids_collision_with_canonical(tmp_path):
     assert store.prefix_of("person") is None  # canonical never stored
 
 
+def test_register_collision_between_coined_terms_stays_within_max_prefix_len(tmp_path):
+    store = TaxonomyStore(path=tmp_path / "t.json")
+    # Two distinct coined terms that agree on their first MAX_PREFIX_LEN
+    # uppercased characters (and differ only after) derive the same base
+    # prefix, forcing the second registration through the collision path.
+    prefix1 = store.register("some very long category alpha")
+    prefix2 = store.register("some very long category beta")
+    assert prefix1 != prefix2  # second one must have gotten a disambiguating suffix
+    assert len(prefix1) <= MAX_PREFIX_LEN
+    assert len(prefix2) <= MAX_PREFIX_LEN
+
+
 def test_register_is_idempotent(tmp_path):
     store = TaxonomyStore(path=tmp_path / "t.json")
     a = store.register("badge number")
@@ -35,6 +47,7 @@ def test_failsafe_without_writable_path():
 
 def test_prefix_for_consults_default_store(tmp_path, monkeypatch):
     import domestique.taxonomy_store as ts
+
     store = TaxonomyStore(path=tmp_path / "t.json")
     store.register("employee id")
     monkeypatch.setattr(ts, "_DEFAULT", store)

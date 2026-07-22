@@ -13,7 +13,7 @@ from pathlib import Path
 
 import structlog
 
-from domestique.taxonomy import CANONICAL, _derive_prefix, normalize_category
+from domestique.taxonomy import CANONICAL, MAX_PREFIX_LEN, _derive_prefix, normalize_category
 
 logger = structlog.get_logger()
 
@@ -84,7 +84,8 @@ class TaxonomyStore:
         if base not in taken:
             return base
         for n in range(2, 1000):
-            candidate = f"{base}_{n}"
+            suffix = f"_{n}"
+            candidate = base[: MAX_PREFIX_LEN - len(suffix)].rstrip("_") + suffix
             if candidate not in taken:
                 return candidate
         return base  # pathological; accept collision over infinite loop
