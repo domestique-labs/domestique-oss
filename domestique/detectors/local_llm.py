@@ -30,6 +30,8 @@ from typing import Any
 import structlog
 
 from domestique.models import Detection, Span
+from domestique.taxonomy import CANONICAL, normalize_category
+from domestique.taxonomy_store import default_store
 
 logger = structlog.get_logger()
 
@@ -81,20 +83,22 @@ MODEL_PRESETS: dict[str, dict[str, Any]] = {
     },
 }
 
-# System prompt for the LLM classifier.
+# System prompt for the LLM extractor.
 # Participants can improve this via the workshop prompt competition.
-_CLASSIFIER_SYSTEM_PROMPT = """\
-You are a DLP classifier. Classify if text contains sensitive data.
+_EXTRACTOR_SYSTEM_PROMPT = """\
+You are a DLP entity extractor. Find every sensitive value in the text
+(secrets, credentials, PII, proprietary identifiers).
 
-Categories (pick one):
-- PROPRIETARY_CODE: source code, algorithms, internal tooling
-- BUSINESS_STRATEGY: M&A plans, financials, competitive intelligence
-- CUSTOMER_DATA: PII - emails, phones, SSNs, addresses, medical records
-- INTERNAL_COMMS: forwarded emails, Slack messages, meeting notes
-- CREDENTIALS: passwords, API keys, tokens, connection strings
-- NONE: safe content, public knowledge, generic questions
+Return a JSON array. Each element:
+  {"t": "<the exact sensitive substring, copied verbatim>",
+   "c": "<category>",
+   "v": <confidence 0.0-1.0>}
 
-Respond with JSON: {"c":"<CATEGORY>","v":<0.0-1.0>}"""
+Prefer these category names when one fits:
+%(categories)s
+If none fits, invent a short snake_case category name (e.g. employee_id).
+Copy "t" EXACTLY as it appears in the text — do not paraphrase or reformat.
+Return [] if nothing is sensitive. Output ONLY the JSON array."""
 
 
 class LocalLLMClassifier:
@@ -120,7 +124,9 @@ class LocalLLMClassifier:
         self._timeout = timeout_s
         self._threshold = confidence_threshold
         self._available: bool | None = None
-        self._system_prompt = system_prompt or _CLASSIFIER_SYSTEM_PROMPT
+        self._system_prompt = system_prompt or (
+            _EXTRACTOR_SYSTEM_PROMPT % {"categories": "\n".join(sorted(CANONICAL))}
+        )
 
         # Resolve model: explicit override > preset > default
         if model:
@@ -155,42 +161,49 @@ class LocalLLMClassifier:
         return len(ambiguous) > 0
 
     async def scan(self, text: str) -> list[Detection]:
-        """Classify text using the local LLM.
+        """Extract sensitive substrings and emit one Detection per located span.
 
         For texts longer than _MAX_CHUNK_CHARS, splits into chunks and
-        evaluates each independently. If any chunk is flagged, the full
-        request is flagged (union of all violations).
+        extracts from each independently. Each extracted substring is
+        located in the full text via a per-substring search cursor;
+        substrings the model hallucinated (not found verbatim) are dropped.
         """
         if len(text) < 20:
             return []
 
-        chunks = self._chunk_text(text)
-        all_detections: list[Detection] = []
-        seen_categories: set[str] = set()
+        items: list[dict[str, Any]] = []
+        for chunk in self._chunk_text(text):
+            parsed = await self._classify(chunk)
+            if isinstance(parsed, list):
+                items.extend(x for x in parsed if isinstance(x, dict))
 
-        for chunk in chunks:
-            result = await self._classify(chunk)
-            if result is None:
+        detections: list[Detection] = []
+        search_from: dict[str, int] = {}  # per-substring cursor for repeated values
+        for item in items:
+            substring = str(item.get("t", ""))
+            if not substring:
                 continue
-            category = result.get("c", result.get("category", "NONE"))
-            confidence = float(result.get("v", result.get("confidence", 0.0)))
-            if category == "NONE" or confidence < self._threshold:
+            confidence = float(item.get("v", item.get("confidence", 0.0)))
+            if confidence < self._threshold:
                 continue
-            cat_key = f"llm_classified:{category.lower()}"
-            # Deduplicate: overlapping chunks may flag the same category
-            if cat_key in seen_categories:
-                continue
-            seen_categories.add(cat_key)
-            all_detections.append(
+            start = text.find(substring, search_from.get(substring, 0))
+            if start == -1:
+                continue  # hallucinated / reformatted → drop (guardrail)
+            search_from[substring] = start + len(substring)
+            raw_cat = str(item.get("c", item.get("category", "sensitive")))
+            term = normalize_category(raw_cat)
+            if term not in CANONICAL:
+                default_store().register(raw_cat)  # persist the coined term
+            category = term
+            detections.append(
                 Detection(
                     detector=self.name,
-                    category=cat_key,
+                    category=category,
                     confidence=confidence,
-                    span=Span(start=0, end=len(text)),
+                    span=Span(start=start, end=start + len(substring)),
                 )
             )
-
-        return all_detections
+        return detections
 
     # 8K chars (~2K tokens) per chunk — fits in num_ctx=4096 with system prompt.
     _MAX_CHUNK_CHARS = 8000
@@ -223,7 +236,7 @@ class LocalLLMClassifier:
             start += max(step, overlap)  # ensure forward progress
         return chunks
 
-    async def _classify(self, text: str) -> dict[str, Any] | None:
+    async def _classify(self, text: str) -> list[dict[str, Any]] | None:
         """Send a single chunk to the local LLM and parse the response."""
         if self._available is False:
             return None
@@ -246,14 +259,14 @@ class LocalLLMClassifier:
                 )
             return None
 
-    async def _classify_ollama(self, text: str) -> dict[str, Any] | None:
+    async def _classify_ollama(self, text: str) -> list[dict[str, Any]] | None:
         """Classify via Ollama API.
 
         Speed optimizations (all cross-platform):
-        - stop=["}"] : halt generation the instant JSON closes
+        - stop=["]"] : halt generation the instant the JSON array closes
         - top_k=1, top_p=0.1 : greedy decoding, no sampling overhead
         - think=False : disable chain-of-thought on Qwen/Gemma
-        - Compact output format {"c":"CAT","v":0.9} minimizes tokens
+        - Compact output format [{"t":"...","c":"CAT","v":0.9}] minimizes tokens
 
         Uses stdlib urllib instead of httpx to avoid anyio dependency
         issues in py2app bundles.
@@ -278,7 +291,7 @@ class LocalLLMClassifier:
                     "top_k": 1,
                     "top_p": 0.1,
                 },
-                "stop": ["}"],
+                "stop": ["]"],
             }
         ).encode()
 
@@ -299,7 +312,7 @@ class LocalLLMClassifier:
         return self._parse_response(content)
 
     @staticmethod
-    def _parse_response(content: str) -> dict[str, Any] | None:
+    def _parse_response(content: str) -> list[dict[str, Any]] | None:
         """Parse LLM JSON response, handling stop-token truncation and markdown."""
         import json
 
@@ -307,11 +320,12 @@ class LocalLLMClassifier:
         # Strip markdown code fences (some models wrap output)
         if "```" in content:
             content = content.replace("```json", "").replace("```", "").strip()
-        # stop="}" truncates the closing brace
-        if not content.endswith("}"):
-            content += "}"
+        # stop="]" truncates the closing bracket
+        if not content.endswith("]"):
+            content += "]"
         try:
-            return json.loads(content)
+            parsed = json.loads(content)
+            return parsed if isinstance(parsed, list) else None
         except json.JSONDecodeError:
             logger.debug("local_llm_unparseable_response", content=content[:100])
             return None
