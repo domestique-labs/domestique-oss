@@ -133,3 +133,37 @@ class TestDashboardHelpers:
     def test_wait_times_out_when_never_ready(self, monkeypatch):
         monkeypatch.setattr(cli, "_dashboard_reachable", lambda url: False)
         assert cli._wait_for_dashboard("http://x", timeout=0.2, interval=0.05) is False
+
+
+class TestAppLifecycle:
+    def test_spawn_uses_portable_no_browser(self, monkeypatch):
+        captured = {}
+        monkeypatch.setattr(
+            cli.subprocess, "Popen", lambda argv, **k: captured.update(argv=argv, kw=k)
+        )
+        cli._spawn_dashboard_app()
+        assert captured["argv"] == [
+            sys.executable, "-m", "domestique_app", "--mode", "portable", "--no-browser"
+        ]
+        assert captured["kw"].get("start_new_session") is True
+
+    def test_ensure_running_skips_spawn_when_already_up(self, monkeypatch):
+        monkeypatch.setattr(cli, "_dashboard_reachable", lambda url: True)
+        spawned = []
+        monkeypatch.setattr(cli, "_spawn_dashboard_app", lambda: spawned.append(True))
+        assert cli._ensure_app_running("http://x") is True
+        assert spawned == []
+
+    def test_ensure_running_spawns_then_waits(self, monkeypatch):
+        monkeypatch.setattr(cli, "_dashboard_reachable", lambda url: False)
+        spawned = []
+        monkeypatch.setattr(cli, "_spawn_dashboard_app", lambda: spawned.append(True))
+        monkeypatch.setattr(cli, "_wait_for_dashboard", lambda url, timeout=30.0: True)
+        assert cli._ensure_app_running("http://x") is True
+        assert spawned == [True]
+
+    def test_ensure_running_returns_false_when_never_ready(self, monkeypatch):
+        monkeypatch.setattr(cli, "_dashboard_reachable", lambda url: False)
+        monkeypatch.setattr(cli, "_spawn_dashboard_app", lambda: None)
+        monkeypatch.setattr(cli, "_wait_for_dashboard", lambda url, timeout=30.0: False)
+        assert cli._ensure_app_running("http://x") is False

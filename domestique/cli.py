@@ -437,6 +437,25 @@ def _wait_for_dashboard(url: str, *, timeout: float = 30.0, interval: float = 0.
     return False
 
 
+def _spawn_dashboard_app() -> None:
+    """Launch the dashboard app detached, in portable mode, without opening a
+    browser tab (the launcher opens the dashboard itself once it's up)."""
+    subprocess.Popen(  # noqa: S603
+        [sys.executable, "-m", _APP_MODULE, "--mode", "portable", "--no-browser"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def _ensure_app_running(url: str, *, timeout: float = 30.0) -> bool:
+    """Make sure the dashboard app is up: reachable already, or spawn + wait."""
+    if _dashboard_reachable(url):
+        return True
+    _spawn_dashboard_app()
+    return _wait_for_dashboard(url, timeout=timeout)
+
+
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
