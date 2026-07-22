@@ -143,7 +143,12 @@ class TestAppLifecycle:
         )
         cli._spawn_dashboard_app()
         assert captured["argv"] == [
-            sys.executable, "-m", "domestique_app", "--mode", "portable", "--no-browser"
+            sys.executable,
+            "-m",
+            "domestique_app",
+            "--mode",
+            "portable",
+            "--no-browser",
         ]
         assert captured["kw"].get("start_new_session") is True
 
@@ -274,7 +279,10 @@ class TestCliWiring:
         )
         assert cli.main(["browser", "--url", "http://y", "--yes", "--no-open"]) == 0
         assert seen == {
-            "url": "http://y", "assume_yes": True, "no_install": False, "open_dashboard": False
+            "url": "http://y",
+            "assume_yes": True,
+            "no_install": False,
+            "open_dashboard": False,
         }
 
     def test_no_install_flag_passed_through(self, monkeypatch):
