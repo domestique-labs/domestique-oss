@@ -21,6 +21,16 @@ def test_same_entity_same_token_across_tiers() -> None:
     assert t_presidio == t_gliner == "[PERSON_1]"
 
 
+def test_distinct_values_across_tier_spellings_share_prefix() -> None:
+    """Distinct values under the two tiers' spellings for the same concept
+    normalize to the same category and thus share a token prefix, proving
+    normalization runs (not just value-caching)."""
+    svc = TokenService(SessionStore(), None)
+    t1 = svc.tokenize("Alice Smith", "person")  # Presidio spelling
+    t2 = svc.tokenize("Bob Jones", "pii:person")  # GLiNER spelling
+    assert t1 == "[PERSON_1]" and t2 == "[PERSON_2]"
+
+
 def test_coined_llm_term_mints_and_reverses() -> None:
     """A category the LLM tier coins on the fly (not in the canonical
     vocabulary) still derives a deterministic, grammar-valid prefix and

@@ -90,7 +90,9 @@ def normalize_category(raw: str) -> str:
     if c in CANONICAL:
         return c
     c = _NON_SNAKE_CHARS.sub("_", c).strip("_")
-    return c or "sensitive"
+    if not c:
+        return "sensitive"
+    return _ALIASES.get(c, c)
 
 
 def _derive_prefix(category: str) -> str:
