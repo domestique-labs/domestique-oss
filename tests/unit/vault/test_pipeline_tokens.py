@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from domestique.gateway import build_wedge_pipeline
+from domestique.gateway import build_cli_pipeline
 from domestique.models import Action
 from domestique.vault.pinned import PinnedVault
 from domestique.vault.service import TokenService
@@ -32,7 +32,7 @@ def _service(tmp_path: Path) -> TokenService:
 @pytest.mark.asyncio
 async def test_round_trip_two_ssns_and_two_emails(tmp_path: Path) -> None:
     svc = _service(tmp_path)
-    pipeline = build_wedge_pipeline(token_service=svc)
+    pipeline = build_cli_pipeline(token_service=svc)
     original = (
         "First 123-45-6789 then 987-65-4321; mail a@b.com and c@d.com "
         "plus key AKIAIOSFODNN7EXAMPLE"
@@ -56,7 +56,7 @@ async def test_round_trip_two_ssns_and_two_emails(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_same_value_same_token_across_requests(tmp_path: Path) -> None:
     svc = _service(tmp_path)
-    pipeline = build_wedge_pipeline(token_service=svc)
+    pipeline = build_cli_pipeline(token_service=svc)
     r1 = await pipeline.inspect("ssn 123-45-6789")
     r2 = await pipeline.inspect("again 123-45-6789 ok")
     assert r1.redacted_text is not None and r2.redacted_text is not None
@@ -71,7 +71,7 @@ async def test_pinned_value_caught_even_when_detectors_miss(tmp_path: Path) -> N
     assert svc.pinned is not None
     svc.pinned.pin("project-bluebird-internal", "codename")
     svc.sync_counter_floors()
-    pipeline = build_wedge_pipeline(token_service=svc)
+    pipeline = build_cli_pipeline(token_service=svc)
 
     result = await pipeline.inspect("status of project-bluebird-internal is green")
 
@@ -85,7 +85,7 @@ async def test_pinned_value_caught_even_when_detectors_miss(tmp_path: Path) -> N
 
 @pytest.mark.asyncio
 async def test_pipeline_without_service_keeps_legacy_placeholders(tmp_path: Path) -> None:
-    pipeline = build_wedge_pipeline()
+    pipeline = build_cli_pipeline()
     result = await pipeline.inspect("ssn 123-45-6789")
     assert result.redacted_text is not None
     assert "_REDACTED]" in result.redacted_text

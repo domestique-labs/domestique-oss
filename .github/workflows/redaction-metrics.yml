@@ -18,8 +18,8 @@ on:
       - "domestique/redact.py"
       - "domestique/policy/**"
       - "tests/redaction_metrics/**"
-      - "bench/redaction_bench.py"
-      - "bench/redaction_compare.py"
+      - "benchmarks/redaction_bench.py"
+      - "benchmarks/redaction_compare.py"
       - ".github/workflows/redaction-metrics.yml"
 
 concurrency:
@@ -55,13 +55,13 @@ jobs:
           pytest tests/redaction_metrics -q | tee /tmp/correctness.txt
 
       - name: Bench (head)
-        run: python bench/redaction_bench.py --json --no-gate > /tmp/head.json
+        run: python benchmarks/redaction_bench.py --json --no-gate > /tmp/head.json
 
       - name: Bench (merge-base, same runner)
         run: |
           git checkout --quiet --detach "${{ github.event.pull_request.base.sha }}"
-          if [ -f bench/redaction_bench.py ]; then
-            python bench/redaction_bench.py --json --no-gate > /tmp/base.json || rm -f /tmp/base.json
+          if [ -f benchmarks/redaction_bench.py ]; then
+            python benchmarks/redaction_bench.py --json --no-gate > /tmp/base.json || rm -f /tmp/base.json
           fi
           git checkout --quiet --detach "${{ github.event.pull_request.head.sha }}"
 
@@ -80,7 +80,7 @@ jobs:
               echo '```'
             fi
             echo ""
-            python bench/redaction_compare.py /tmp/base.json /tmp/head.json
+            python benchmarks/redaction_compare.py /tmp/base.json /tmp/head.json
           } > /tmp/report.md
           cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
 

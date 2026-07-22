@@ -12,7 +12,7 @@ import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
-from bench.eval.mock_upstream import serve
+from benchmarks.eval.mock_upstream import serve
 from domestique.gateway import create_gateway
 from domestique.vault.service import TokenService
 from domestique.vault.session import SessionStore

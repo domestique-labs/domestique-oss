@@ -2,7 +2,7 @@
 
 Spec: domestique-notes/2-Technical/2026-07-17-reversible-redaction-design.md
 Each test is one metric (M1–M5, M10). Latency metrics (M6–M9) live in
-``bench/redaction_bench.py`` because wall-clock thresholds don't belong in
+``benchmarks/redaction_bench.py`` because wall-clock thresholds don't belong in
 the always-on unit suite.
 """
 
@@ -17,7 +17,7 @@ import pytest
 
 from domestique.detectors.registry import DetectorPipeline
 from domestique.detectors.secrets import SecretDetector
-from domestique.gateway import _WEDGE_POLICY
+from domestique.gateway import _CLI_POLICY
 from domestique.models import Action
 from domestique.policy import PolicyEngine
 from domestique.vault.pinned import PinnedVault
@@ -43,7 +43,7 @@ def _service(tmp_path: Path) -> TokenService:
 def _pipeline(service: TokenService) -> DetectorPipeline:
     return DetectorPipeline(
         detectors=[SecretDetector()],
-        policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        policy=PolicyEngine.from_yaml(_CLI_POLICY),
         token_service=service,
     )
 
@@ -123,7 +123,7 @@ async def test_m4_pinned_recall_without_detectors(tmp_path: Path) -> None:
     svc.sync_counter_floors()
     pipeline = DetectorPipeline(
         detectors=[],  # no detectors at all
-        policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        policy=PolicyEngine.from_yaml(_CLI_POLICY),
         token_service=svc,
     )
     text = "wholly-unpatterned-secret-name and second secret phrase, twice: second secret phrase"

@@ -1,6 +1,6 @@
 """Latency metrics M6–M9 for the reversible redaction engine.
 
-Run:  python bench/redaction_bench.py [--json]
+Run:  python benchmarks/redaction_bench.py [--json]
 Exit code 0 only when every threshold passes. Thresholds come from the
 design spec (2026-07-17-reversible-redaction-design.md) and carry headroom
 against the industry 15–25 ms gateway envelope.
@@ -21,7 +21,7 @@ from pathlib import Path
 
 from domestique.detectors.registry import DetectorPipeline
 from domestique.detectors.secrets import SecretDetector
-from domestique.gateway import _WEDGE_POLICY
+from domestique.gateway import _CLI_POLICY
 from domestique.policy import PolicyEngine
 from domestique.vault.pinned import PinnedVault
 from domestique.vault.service import TokenService
@@ -56,7 +56,7 @@ def _prompt_1kb_with_findings() -> str:
 async def bench_m6_redact(service: TokenService, n: int = 300) -> dict[str, float]:
     pipeline = DetectorPipeline(
         detectors=[SecretDetector()],
-        policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        policy=PolicyEngine.from_yaml(_CLI_POLICY),
         token_service=service,
     )
     text = _prompt_1kb_with_findings()
@@ -120,7 +120,7 @@ async def bench_token_usage() -> dict[str, float]:
     service = TokenService(SessionStore(), None)
     pipeline = DetectorPipeline(
         detectors=[SecretDetector()],
-        policy=PolicyEngine.from_yaml(_WEDGE_POLICY),
+        policy=PolicyEngine.from_yaml(_CLI_POLICY),
         token_service=service,
     )
     markers: list[str] = []

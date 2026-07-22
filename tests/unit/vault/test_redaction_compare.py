@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bench.redaction_compare import compare
+from benchmarks.redaction_compare import compare
 
 HEAD = {
     "M6": {"p50_ms": 0.30, "p95_ms": 0.45},

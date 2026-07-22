@@ -5,7 +5,7 @@ Used by the redaction-metrics CI workflow: both scoreboards come from
 latency on shared runners is noise; same-runner deltas are signal —
 the same lesson the eval workflow learned in PR #25).
 
-Usage: python bench/redaction_compare.py base.json head.json
+Usage: python benchmarks/redaction_compare.py base.json head.json
        (base.json may be absent — e.g. the engine didn't exist at the
        merge-base — which is reported explicitly.)
 """
