@@ -6,7 +6,7 @@ Commands:
     domestique demo                          show a before/after redaction, no key needed
     domestique report [--json] [--days N]    summarize redactions & blocks by type
     domestique setup [--yes]                 first-run onboarding wizard
-    domestique browser on|off|status         toggle browser interception (dashboard API)
+    domestique browser [on|off|status]       bare = set up & launch; on/off/status control
     domestique --version
 """
 
@@ -15,10 +15,14 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import importlib.util
 import json
 import re
+import shutil
+import subprocess
 import sys
-from typing import TYPE_CHECKING
+import webbrowser
+from typing import TYPE_CHECKING, Any, cast
 
 from domestique import __version__, console
 from domestique.branding import LOGO, supports_unicode
@@ -35,6 +39,8 @@ if TYPE_CHECKING:
     from domestique.policy import PolicyEngine
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
+
+_APP_MODULE = "domestique_app"
 
 _DEMO_PROMPT = (
     "Here is my AWS key AKIAIOSFODNN7EXAMPLE and email jane.doe@corp.com, "
@@ -71,6 +77,7 @@ def _banner(host: str, port: int, *, policy: str | None = None) -> str:
         + f"    export OPENAI_BASE_URL={url}/v1\n"
         + f"    export ANTHROPIC_BASE_URL={url}\n"
         + "  Redact by default.  Press Ctrl-C to stop.\n"
+        + f"  {arrow} Protect your web browser too:  domestique browser\n"
     )
 
 
@@ -334,6 +341,209 @@ def _cmd_browser(action: str, url: str) -> int:
     return 1
 
 
+def _print_mitmproxy_hint() -> None:
+    """Tell the user how to add browser support by hand.
+
+    Uses the same detection _ensure_browser_dependency would use to install
+    it automatically, so a plain pip/venv install is never told to run
+    `pipx inject` (which may not even have pipx on PATH), or vice versa.
+    """
+    _, cmd = _detect_install_context()
+    print("Browser support (mitmproxy) isn't installed. Add it with:")
+    print(f"  {' '.join(cmd)}")
+    print("  then re-run:  domestique browser")
+
+
+def _detect_install_context() -> tuple[str, list[str]]:
+    """Pick the right install command for how domestique was installed.
+
+    pipx installs live in their own venv and need `pipx inject`; a plain
+    venv/pip install takes `pip install`. Returns (kind, argv).
+    """
+    import os
+
+    under_pipx = bool(os.environ.get("PIPX_HOME")) or "/pipx/venvs/" in sys.prefix
+    if under_pipx and shutil.which("pipx"):
+        return "pipx", ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
+    return "pip", [sys.executable, "-m", "pip", "install", "domestique[browser-proxy]"]
+
+
+def _ensure_browser_dependency(*, assume_yes: bool, no_install: bool) -> bool:
+    """Ensure mitmproxy is available, installing it on demand.
+
+    Returns True if the dependency is present (or was just installed), False
+    if it's missing and could not / should not be installed. Never imports
+    mitmproxy in-process (the spawned app subprocess uses a fresh interpreter),
+    so success is judged by the installer's exit code, not a re-check.
+    """
+    if importlib.util.find_spec("mitmproxy") is not None:
+        return True
+    if no_install:
+        _print_mitmproxy_hint()
+        return False
+    if not assume_yes and sys.stdin is not None and sys.stdin.isatty():
+        reply = input("Add browser support (~a few MB, mitmproxy)? [Y/n] ").strip().lower()
+        if reply in {"n", "no"}:
+            _print_mitmproxy_hint()
+            return False
+    kind, cmd = _detect_install_context()
+    print(f"→ installing browser support via {kind}…")
+    try:
+        result = subprocess.run(cmd, check=False)  # noqa: S603
+    except OSError as exc:
+        print(f"error: install command failed to run: {exc}")
+        _print_mitmproxy_hint()
+        return False
+    if result.returncode != 0:
+        print("error: installing browser support failed.")
+        _print_mitmproxy_hint()
+        return False
+    return True
+
+
+def _dashboard_call(
+    url: str, path: str, *, method: str = "GET", timeout: float = 5.0
+) -> dict[str, Any] | None:
+    """Call a dashboard JSON endpoint. Returns the parsed body (including a
+    4xx/5xx JSON error body), or None if unreachable / non-JSON."""
+    import urllib.error
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(  # noqa: S310  # local dashboard, http only
+            url.rstrip("/") + path,
+            method=method,
+            data=b"" if method == "POST" else None,
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+            return cast("dict[str, Any]", json.loads(resp.read().decode("utf-8")))
+    except urllib.error.HTTPError as exc:
+        try:
+            return cast("dict[str, Any]", json.loads(exc.read().decode("utf-8")))
+        except (json.JSONDecodeError, OSError):
+            return None
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def _dashboard_reachable(url: str) -> bool:
+    """True if the dashboard HTTP server answers. Uses the cheap browser-proxy
+    status endpoint (no interception-chain verification)."""
+    return _dashboard_call(url, "/api/browser-proxy", timeout=3.0) is not None
+
+
+def _wait_for_dashboard(url: str, *, timeout: float = 30.0, interval: float = 0.5) -> bool:
+    """Poll until the dashboard is reachable or the timeout elapses."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _dashboard_reachable(url):
+            return True
+        time.sleep(interval)
+    return False
+
+
+def _spawn_dashboard_app() -> None:
+    """Launch the dashboard app detached, in portable mode, without opening a
+    browser tab (the launcher opens the dashboard itself once it's up).
+
+    ``start_new_session=True`` is POSIX-only -- CPython's Windows
+    ``_execute_child`` takes the parameter but literally names it
+    ``unused_start_new_session`` and never acts on it. Without
+    ``CREATE_NEW_PROCESS_GROUP`` on Windows the spawned process stays in
+    this console's process group, so Ctrl+C while ``_wait_for_dashboard``
+    is still polling would kill the freshly-spawned dashboard along with
+    the CLI -- the opposite of "detached". Mirrors
+    ``domestique_app.services.runtime.subprocess_group_kwargs`` (same
+    logic, reimplemented here rather than imported: ``domestique/`` must
+    never import ``domestique_app/``).
+    """
+    import os
+
+    kwargs: dict[str, object] = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
+    subprocess.Popen(  # noqa: S603
+        [sys.executable, "-m", _APP_MODULE, "--mode", "portable", "--no-browser"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        **kwargs,
+    )
+
+
+def _ensure_app_running(url: str, *, timeout: float = 30.0) -> bool:
+    """Make sure the dashboard app is up: reachable already, or spawn + wait."""
+    if _dashboard_reachable(url):
+        return True
+    _spawn_dashboard_app()
+    return _wait_for_dashboard(url, timeout=timeout)
+
+
+def _post_browser_start(url: str) -> dict[str, Any] | None:
+    """Turn on browser interception via the dashboard (also enables the system
+    proxy server-side). Returns the dashboard's JSON response, or None.
+
+    Uses a generous timeout: on first run the dashboard's handler does
+    synchronous setup (generate CA, install to keychain, generate PAC,
+    launch mitmdump, enable system proxy) that can far exceed the default
+    timeout.
+    """
+    return _dashboard_call(url, "/api/browser-proxy/start", method="POST", timeout=60.0)
+
+
+def _warn_if_cert_untrusted(url: str) -> None:
+    """On platforms where the CA wasn't auto-trusted, point the user at the
+    dashboard to finish trusting it. Silent when trusted or status is unknown."""
+    status = _dashboard_call(url, "/api/cert-status")
+    if status is None:
+        return
+    if status.get("generated") and not status.get("trusted", True):
+        print("note: the Domestique certificate isn't trusted yet on this system.")
+        print(f"  finish trusting it in the dashboard: {url}")
+
+
+def _cmd_browser_launch(
+    url: str, *, assume_yes: bool, no_install: bool, open_dashboard: bool
+) -> int:
+    """Bare `domestique browser`: one idempotent step to full browser protection.
+
+    Ensure mitmproxy -> ensure the dashboard app is up -> turn interception on
+    (which generates/trusts the CA and enables the system proxy server-side)
+    -> warn if the CA still isn't trusted -> open the dashboard. Re-running
+    when already protected just re-opens the dashboard.
+    """
+    if not _ensure_browser_dependency(assume_yes=assume_yes, no_install=no_install):
+        return 1
+
+    if not _ensure_app_running(url):
+        print("error: the dashboard app didn't come up in time.")
+        print("  check logs under ~/.domestique/, then retry, or run it directly:")
+        print("    python -m domestique_app --mode portable")
+        return 1
+
+    payload = _post_browser_start(url)
+    if payload is None or payload.get("error"):
+        detail = payload.get("error") if payload else "no response from the dashboard"
+        print(f"error: could not turn on browser protection - {detail}")
+        return 1
+
+    _warn_if_cert_untrusted(url)
+
+    if open_dashboard:
+        webbrowser.open(url)
+
+    if payload.get("already_running"):
+        print("Browser protection is already on. Dashboard:")
+    else:
+        print("Your browser is now protected. Try a chatbot and watch the dashboard:")
+    print(f"  {url}")
+    print("  To stop:  domestique browser off")
+    return 0
+
+
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
@@ -587,12 +797,32 @@ def main(argv: list[str] | None = None) -> int:
         help="accept all recommended defaults (non-interactive)",
     )
 
-    browser = sub.add_parser("browser", help="toggle browser interception via the dashboard")
-    browser.add_argument("action", choices=["on", "off", "status"])
+    browser = sub.add_parser(
+        "browser",
+        help="browser protection: bare = set up & launch; on/off/status to control",
+    )
+    browser.add_argument(
+        "action",
+        nargs="?",
+        choices=["on", "off", "status"],
+        default=None,
+        help="on/off/status to control a running dashboard; omit to set up & launch",
+    )
     browser.add_argument(
         "--url",
         default=_DASHBOARD_URL,
         help=f"dashboard API base URL (default: {_DASHBOARD_URL})",
+    )
+    browser.add_argument(
+        "--no-open", action="store_true", help="don't open the dashboard in a browser"
+    )
+    browser.add_argument(
+        "--yes", "-y", action="store_true", help="skip the browser-support install confirmation"
+    )
+    browser.add_argument(
+        "--no-install",
+        action="store_true",
+        help="never auto-install browser support; print the manual command instead",
     )
 
     args = parser.parse_args(argv)
@@ -612,6 +842,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "setup":
         return _cmd_setup(args.yes)
     if args.cmd == "browser":
+        if args.action is None:
+            return _cmd_browser_launch(
+                args.url,
+                assume_yes=args.yes,
+                no_install=args.no_install,
+                open_dashboard=not args.no_open,
+            )
         return _cmd_browser(args.action, args.url)
     parser.print_help()
     return 0
