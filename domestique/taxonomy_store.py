@@ -19,6 +19,16 @@ logger = structlog.get_logger()
 
 _CANONICAL_PREFIXES = set(CANONICAL.values())
 
+#: A coined term longer than this is treated as junk and never persisted. The
+#: LLM ``c`` field is untrusted, so an over-long value is likely a hallucination
+#: echoing prompt text — persisting it would grow ``~/.domestique/taxonomy.json``
+#: unbounded and leak user data into a file the design treats as non-sensitive.
+#: It still yields a bounded derived prefix, so redaction/reversal is unaffected.
+_MAX_COINED_TERM_LEN = 64
+#: Hard ceiling on distinct persisted coined terms, bounding the file size no
+#: matter how many novel categories a model emits.
+_MAX_COINED_TERMS = 512
+
 
 def _default_path() -> Path | None:
     try:
@@ -66,14 +76,26 @@ class TaxonomyStore:
             return dict(self._terms)
 
     def register(self, raw: str) -> str:
-        """Return the prefix for ``raw``; coin + persist it if new and non-canonical."""
+        """Return the prefix for ``raw``; coin + persist it if new, non-canonical,
+        and within the length/count bounds.
+
+        An over-long term (untrusted, likely-hallucinated LLM output) or one that
+        would exceed ``_MAX_COINED_TERMS`` still gets a bounded derived prefix so
+        redaction works, but is NOT persisted — the on-disk file can neither grow
+        unbounded nor absorb prompt data echoed into the ``c`` field.
+        """
         term = normalize_category(raw)
         if term in CANONICAL:
             return CANONICAL[term]
+        if len(term) > _MAX_COINED_TERM_LEN:
+            return _derive_prefix(term)
         with self._lock:
             existing = self._terms.get(term)
             if existing is not None:
                 return existing
+            if len(self._terms) >= _MAX_COINED_TERMS:
+                logger.warning("taxonomy_store_full", limit=_MAX_COINED_TERMS)
+                return _derive_prefix(term)
             prefix = self._unique_prefix_locked(_derive_prefix(term))
             self._terms[term] = prefix
             self._persist_locked()
