@@ -125,3 +125,32 @@ class TestInjectBlockWidget:
         )
         # Must not raise, and must not corrupt anything.
         addon._maybe_inject_block_widget(flow)
+
+
+class TestInjectionIsFailSafe:
+    def test_injection_error_does_not_propagate_and_leaves_body_untouched(self):
+        """If the injection helper raises, the method must not propagate AND
+        must leave the response body/headers exactly as they were (feedback is
+        additive; a broken widget never mutates the response)."""
+        addon = DomestiqueAddon()
+        original_body = "<html><head></head><body>chat</body></html>"
+        flow = _html_flow(body=original_body.encode("utf-8"))
+        with patch(
+            "domestique_app.services.inpage_feedback.inject_widget",
+            side_effect=RuntimeError("boom"),
+        ):
+            addon._maybe_inject_block_widget(flow)  # must not raise
+        # Body is untouched: no marker, identical to the original.
+        assert INJECTION_MARKER not in flow.response.text
+        assert flow.response.text == original_body
+        assert "content-security-policy" not in {k.lower() for k in flow.response.headers}
+
+    async def test_response_hook_still_runs_when_injection_raises(self):
+        addon = DomestiqueAddon()
+        flow = _html_flow()
+        with patch(
+            "domestique_app.services.inpage_feedback.inject_widget",
+            side_effect=RuntimeError("boom"),
+        ):
+            # response() swallows the injection error and returns without raising.
+            await addon.response(flow)
