@@ -1477,6 +1477,45 @@ class DomestiqueAddon:
 
         flow.response.stream = _tee
 
+    def _maybe_inject_block_widget(self, flow: http.HTTPFlow) -> None:
+        """Inject the in-page block-feedback widget into a top-level HTML page.
+
+        Presentation-only and fail-open: fires only for an intercepted LLM
+        host serving a 2xx text/html document to a GET; on ANY error it
+        leaves the response untouched. Never affects the 403 block path.
+        """
+        try:
+            resp = flow.response
+            if resp is None:
+                return
+            if not self._is_llm_endpoint(flow.request.pretty_host):
+                return
+            if flow.request.method != "GET":
+                return
+            if not (200 <= resp.status_code < 300):
+                return
+            content_type = resp.headers.get("content-type", "")
+            if "text/html" not in content_type.lower():
+                return
+
+            from domestique_app.services import inpage_feedback as fb
+
+            injected = fb.inject_widget(resp.text)
+            if injected is None:
+                return
+            resp.text = injected
+
+            csp_key = next(
+                (k for k in resp.headers if k.lower() == "content-security-policy"), None
+            )
+            if csp_key is not None:
+                script_hash = fb.compute_script_hash(fb.load_widget_js())
+                resp.headers[csp_key] = fb.relax_csp_for_injection(
+                    resp.headers[csp_key], script_hash
+                )
+        except Exception:
+            logger.debug("in-page widget injection skipped", exc_info=True)
+
     async def response(self, flow: http.HTTPFlow) -> None:
         """Handle a completed response.
 
@@ -1500,6 +1539,9 @@ class DomestiqueAddon:
         host = flow.request.pretty_host
         if not self._is_llm_endpoint(host):
             return
+
+        # Presentation-only: surface blocks in-page. Never blocks/raises.
+        self._maybe_inject_block_widget(flow)
 
         metadata = getattr(flow, "metadata", None)
         if isinstance(metadata, dict) and metadata.get("domestique_streamed") is True:
