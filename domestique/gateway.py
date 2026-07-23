@@ -26,9 +26,13 @@ from domestique.extract import extract_texts
 from domestique.models import Action
 from domestique.policy import PolicyEngine
 from domestique.redact import apply_field_redactions
+from domestique.vault.stream import StreamDetokenizer
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
+    from collections.abc import Set as AbstractSet
+
+    from domestique.vault.service import TokenService
 
 logger = structlog.get_logger()
 
@@ -81,38 +85,54 @@ def upstream_base(provider: str) -> str:
     return override.rstrip("/") if override else _DEFAULT_UPSTREAMS[provider]
 
 
-def build_cli_pipeline(settings: Settings | None = None) -> DetectorPipeline:
-    """Build the detection pipeline with the redact-first CLI policy."""
+def build_cli_pipeline(
+    settings: Settings | None = None,
+    token_service: TokenService | None = None,
+) -> DetectorPipeline:
+    """Build the detection pipeline with the redact-first CLI policy.
+
+    With a ``token_service`` the pipeline mints reversible numbered tokens
+    (``[SSN_1]``) instead of flat ``[..._REDACTED]`` placeholders.
+    """
     settings = settings or Settings()
     return DetectorPipeline(
         detectors=build_detectors(settings),
         policy=PolicyEngine.from_yaml(_CLI_POLICY),
+        token_service=token_service,
     )
 
 
 async def _scan_and_redact(
     pipeline: DetectorPipeline, body: dict[str, Any], kind: str
-) -> tuple[Action, str, dict[str, Any], list[str]]:
-    """Return ``(action, reason, possibly-redacted body, driving categories)``.
+) -> tuple[Action, str, dict[str, Any], list[str], set[str]]:
+    """Return ``(action, reason, redacted body, driving categories, minted tokens)``.
 
-    The category list feeds the live ticker and the metadata-only audit log; it
-    never contains any prompt text.
+    ``categories`` feeds the live ticker and the metadata-only audit log; it
+    never contains any prompt text. ``minted`` is exactly the tokens present in
+    the outbound (redacted) request — response detokenization is scoped to it so
+    a reply can only ever reveal secrets this request itself redacted, never a
+    token minted for another conversation sharing the process-wide store.
     """
     texts = extract_texts(body, kind)
     redactions: list[tuple[str, str]] = []
     categories: set[str] = set()
+    minted: set[str] = set()
     for field_path, text in texts:
         result = await pipeline.inspect(text)
         if result.action is Action.BLOCK:
             blocked = sorted({f.category for f in result.findings})
-            return Action.BLOCK, result.reason, body, blocked
+            return Action.BLOCK, result.reason, body, blocked, set()
         if result.action is Action.REDACT and result.redacted_text is not None:
             redactions.append((field_path, result.redacted_text))
             categories.update(f.category for f in result.findings)
+            # Precisely the tokens this redaction minted — NOT every
+            # token-shaped substring in the body, so a literal ``[SSN_1]``
+            # the user typed can never widen the response's reversal scope.
+            minted.update(result.minted_tokens)
     if redactions:
         redacted_body = apply_field_redactions(body, redactions)
-        return Action.REDACT, "redacted", redacted_body, sorted(categories)
-    return Action.ALLOW, "", body, []
+        return Action.REDACT, "redacted", redacted_body, sorted(categories), minted
+    return Action.ALLOW, "", body, [], set()
 
 
 def _upstream_host(provider: str) -> str:
@@ -167,8 +187,49 @@ def _forward_headers(request: Request, provider: str, settings: Settings) -> dic
     return headers
 
 
-def _relay(upstream_resp: httpx.Response) -> StreamingResponse:
-    """Stream an upstream httpx response back to the client, unmodified."""
+def _relay(
+    upstream_resp: httpx.Response,
+    token_service: TokenService | None = None,
+    allowed: AbstractSet[str] | None = None,
+) -> Response:
+    """Stream an upstream response back to the client.
+
+    Without a ``token_service`` (or for non-text payloads) bytes are relayed
+    verbatim. With one, redaction tokens in the response are rewritten back
+    to their original values — buffered for JSON bodies, incrementally (with
+    bounded holdback) for SSE streams. ``allowed`` scopes which tokens may be
+    reversed to the ones this request minted (see ``_scan_and_redact``).
+    """
+    content_type = upstream_resp.headers.get("content-type", "")
+    out_headers = {
+        k: v for k, v in upstream_resp.headers.items() if k.lower() not in _STRIP_RESPONSE_HEADERS
+    }
+
+    if token_service is not None and "text/event-stream" in content_type:
+        out_headers.pop("content-length", None)
+        return StreamingResponse(
+            _detok_sse_iter(upstream_resp, token_service, allowed),
+            status_code=upstream_resp.status_code,
+            headers=out_headers,
+            media_type=content_type,
+        )
+
+    if token_service is not None and "application/json" in content_type:
+        out_headers.pop("content-length", None)
+
+        async def json_iter() -> AsyncIterator[bytes]:
+            try:
+                body = await upstream_resp.aread()
+            finally:
+                await upstream_resp.aclose()
+            yield _detok_json_bytes(body, token_service, allowed)
+
+        return StreamingResponse(
+            json_iter(),
+            status_code=upstream_resp.status_code,
+            headers=out_headers,
+            media_type=content_type,
+        )
 
     async def body_iter() -> AsyncIterator[bytes]:
         try:
@@ -177,15 +238,142 @@ def _relay(upstream_resp: httpx.Response) -> StreamingResponse:
         finally:
             await upstream_resp.aclose()
 
-    out_headers = {
-        k: v for k, v in upstream_resp.headers.items() if k.lower() not in _STRIP_RESPONSE_HEADERS
-    }
     return StreamingResponse(
         body_iter(),
         status_code=upstream_resp.status_code,
         headers=out_headers,
         media_type=upstream_resp.headers.get("content-type"),
     )
+
+
+#: JSON keys whose string values carry assistant-visible text.
+_TEXT_KEYS = ("content", "text", "output_text", "delta")
+
+
+def _detok_json_bytes(
+    body: bytes, service: TokenService, allowed: AbstractSet[str] | None = None
+) -> bytes:
+    """Detokenize every string value in a buffered JSON body."""
+    try:
+        obj = json.loads(body)
+    except (ValueError, UnicodeDecodeError):
+        return body
+
+    unknown: list[str] = []
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, str):
+            out, unk = service.detokenize_text(node, allowed)
+            unknown.extend(unk)
+            return out
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        if isinstance(node, dict):
+            return {k: walk(v) for k, v in node.items()}
+        return node
+
+    result = walk(obj)
+    if unknown:
+        logger.info("unknown_tokens_in_response", tokens=sorted(set(unknown)))
+    return json.dumps(result).encode("utf-8")
+
+
+def _rewrite_sse_event(
+    obj: Any,
+    channels: dict[str, StreamDetokenizer],
+    service: TokenService,
+    *,
+    allowed: AbstractSet[str] | None = None,
+    flush_into: str = "",
+) -> Any:
+    """Feed assistant-text fields of one SSE event through per-key channels.
+
+    ``flush_into`` (used for the synthesized final event) replaces the first
+    text field with the given remainder instead of feeding it.
+    """
+    injected = {"done": False}
+
+    def walk(node: Any) -> Any:
+        if isinstance(node, dict):
+            out: dict[str, Any] = {}
+            for key, value in node.items():
+                if key in _TEXT_KEYS and isinstance(value, str):
+                    if flush_into:
+                        out[key] = "" if injected["done"] else flush_into
+                        injected["done"] = True
+                    else:
+                        channel = channels.setdefault(key, StreamDetokenizer(service, allowed))
+                        out[key] = channel.feed(value)
+                else:
+                    out[key] = walk(value)
+            return out
+        if isinstance(node, list):
+            return [walk(item) for item in node]
+        return node
+
+    return walk(obj)
+
+
+async def _detok_sse_iter(
+    upstream_resp: httpx.Response,
+    service: TokenService,
+    allowed: AbstractSet[str] | None = None,
+) -> AsyncIterator[bytes]:
+    """Rewrite an SSE stream line-by-line, holding back partial tokens.
+
+    Non-``data:`` lines and non-JSON payloads pass through verbatim. Any
+    text still held back at end-of-stream is emitted in a synthesized event
+    cloned from the last text-bearing event, before the terminator.
+    """
+    channels: dict[str, StreamDetokenizer] = {}
+    template: str | None = None
+    buf = b""
+
+    def flush_remainder() -> bytes:
+        remainder = "".join(ch.flush() for ch in channels.values())
+        unknown = sorted({t for ch in channels.values() for t in ch.unknown_tokens})
+        if unknown:
+            logger.info("unknown_tokens_in_response", tokens=unknown)
+        if not remainder or template is None:
+            return b""
+        synthetic = _rewrite_sse_event(
+            json.loads(template), channels, service, allowed=allowed, flush_into=remainder
+        )
+        return b"data: " + json.dumps(synthetic).encode("utf-8") + b"\n\n"
+
+    def process_line(line: bytes) -> bytes:
+        nonlocal template
+        stripped = line.strip()
+        if not stripped.startswith(b"data:"):
+            return line + b"\n"
+        payload = stripped[5:].strip()
+        if payload == b"[DONE]":
+            return flush_remainder() + line + b"\n"
+        try:
+            obj = json.loads(payload)
+        except ValueError:
+            return line + b"\n"
+        template = payload.decode("utf-8", errors="replace")
+        rewritten = _rewrite_sse_event(obj, channels, service, allowed=allowed)
+        return b"data: " + json.dumps(rewritten).encode("utf-8") + b"\n"
+
+    try:
+        async for chunk in upstream_resp.aiter_raw():
+            buf += chunk
+            out = b""
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                out += process_line(line.rstrip(b"\r"))
+            if out:
+                yield out
+        tail = b""
+        if buf:
+            tail += process_line(buf.rstrip(b"\r"))
+        tail += flush_remainder()
+        if tail:
+            yield tail
+    finally:
+        await upstream_resp.aclose()
 
 
 async def _passthrough(request: Request, provider: str, path: str, raw: bytes) -> Response:
@@ -221,7 +409,9 @@ async def _proxy(request: Request, path: str) -> Response:
     if not isinstance(parsed, dict):
         return await _passthrough(request, provider, path, raw)
 
-    action, reason, out_body, categories = await _scan_and_redact(pipeline, parsed, kind)
+    action, reason, out_body, categories, allowed_tokens = await _scan_and_redact(
+        pipeline, parsed, kind
+    )
     host = _upstream_host(provider)
     if action is Action.BLOCK:
         # The clean ticker (_emit_decision) + metadata audit log are the block's
@@ -237,9 +427,21 @@ async def _proxy(request: Request, path: str) -> Response:
     headers = _forward_headers(request, provider, settings)
     headers["content-type"] = "application/json"
 
+    # Only responses to redacted requests can contain our tokens; everything
+    # else relays verbatim (zero-cost fast path). When tokens are in play we
+    # need the response uncompressed to rewrite it.
+    token_service: TokenService | None = getattr(request.app.state, "token_service", None)
+    tokens_active = action is Action.REDACT and token_service is not None
+    if tokens_active:
+        headers["accept-encoding"] = "identity"
+
     upstream_req = client.build_request("POST", url, content=payload, headers=headers)
     upstream_resp = await client.send(upstream_req, stream=True)
-    return _relay(upstream_resp)
+    return _relay(
+        upstream_resp,
+        token_service if tokens_active else None,
+        allowed_tokens if tokens_active else None,
+    )
 
 
 def create_gateway(
@@ -249,15 +451,45 @@ def create_gateway(
     on_decision: Callable[[Action, list[str], str], None] | None = None,
     audit_path: str | Path | None = None,
     enable_audit: bool = True,
+    token_service: TokenService | None = None,
 ) -> FastAPI:
     """Construct the transparent redacting reverse-proxy app.
 
     ``on_decision`` is invoked (action, categories, host) on each redact/block
     for live terminal feedback. Redact/block decisions are also appended to a
     metadata-only audit log (``enable_audit``) for ``domestique report``.
+
+    A ``TokenService`` (session-only by default) makes redaction reversible:
+    numbered tokens go out, and responses are rewritten back inline. Callers
+    that want the persistent pinned vault (the CLI does) pass a service
+    wired to one.
     """
     resolved = settings or Settings()
-    built_pipeline = pipeline or build_cli_pipeline(resolved)
+    if pipeline is None:
+        if token_service is None:
+            from domestique.vault.service import TokenService as _TokenService
+            from domestique.vault.session import SessionStore
+
+            token_service = _TokenService(SessionStore(), None)
+        built_pipeline = build_cli_pipeline(resolved, token_service=token_service)
+    else:
+        built_pipeline = pipeline
+        # getattr, not direct access: test doubles / future pipeline shapes may
+        # not have a _token_service at all, which should behave exactly like
+        # token_service=None (verbatim relay) rather than raising.
+        pipeline_token_service = getattr(built_pipeline, "_token_service", None)
+        if token_service is None:
+            # Derive it from the pipeline instead of leaving app.state.token_service
+            # None: otherwise tokens get minted going out but responses are never
+            # detokenized coming back (fails safe -- verbatim relay -- but silently
+            # breaks reversibility). Mirror image of the mistake build_cli_pipeline's
+            # caller in cli.py already guards against by passing token_service to both.
+            token_service = pipeline_token_service
+        elif token_service is not pipeline_token_service:
+            raise ValueError(
+                "create_gateway() received a pipeline and a token_service that "
+                "don't match -- pass the same TokenService to both, or only one."
+            )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -283,6 +515,7 @@ def create_gateway(
     app.state.settings = resolved
     app.state.pipeline = built_pipeline
     app.state.on_decision = on_decision
+    app.state.token_service = token_service
 
     @app.get("/health")
     async def health() -> dict[str, str]:

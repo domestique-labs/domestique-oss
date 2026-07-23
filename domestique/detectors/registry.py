@@ -30,6 +30,7 @@ from domestique.policy import PolicyEngine
 
 if TYPE_CHECKING:
     from domestique.detectors import Detector
+    from domestique.vault.service import TokenService
 
 logger = structlog.get_logger()
 
@@ -234,6 +235,10 @@ class InspectionResult:
     reason: str
     findings: list[Finding] = field(default_factory=list)
     redacted_text: str | None = None
+    #: Reversible tokens this redaction actually minted/used, e.g.
+    #: ``{"[SSN_1]"}``. Only these — never a token-shaped string the user
+    #: happened to type — are safe for the response detokenizer to reverse.
+    minted_tokens: set[str] = field(default_factory=set)
 
     @property
     def should_block(self) -> bool:
@@ -248,9 +253,15 @@ class DetectorPipeline:
     concurrently.
     """
 
-    def __init__(self, detectors: list[Detector], policy: PolicyEngine) -> None:
+    def __init__(
+        self,
+        detectors: list[Detector],
+        policy: PolicyEngine,
+        token_service: TokenService | None = None,
+    ) -> None:
         self._detectors = detectors
         self._policy = policy
+        self._token_service = token_service
 
     @property
     def policy(self) -> PolicyEngine:
@@ -267,7 +278,14 @@ class DetectorPipeline:
             return_exceptions=True,
         )
 
-        detections: list[Detection] = []
+        # Guaranteed-recall fast path: exact-match scan for pinned vault
+        # values runs regardless of what the detectors find, so a pinned
+        # secret can never leak on a detector miss.
+        pinned_detections: list[Detection] = (
+            _scan_pinned(text, self._token_service) if self._token_service else []
+        )
+
+        detections: list[Detection] = list(pinned_detections)
         for result in results:
             if isinstance(result, BaseException):
                 # A single detector failure must not silently allow the request.
@@ -285,6 +303,10 @@ class DetectorPipeline:
             detections.extend(result)
 
         action, reason = self._policy.explain(detections)
+        if pinned_detections and action is Action.ALLOW:
+            # Pinned values are user-confirmed secrets; the policy file may
+            # not know their category, but they must never pass unredacted.
+            action, reason = Action.REDACT, "pinned vault value present"
         findings = [
             Finding(
                 detector=d.detector,
@@ -296,19 +318,27 @@ class DetectorPipeline:
         ]
 
         redacted_text: str | None = None
+        minted_tokens: set[str] = set()
         if action is Action.REDACT and detections:
-            redacted_text = _redact_text(text, detections)
+            redacted_text, minted_tokens = _redact_text(text, detections, self._token_service)
 
         return InspectionResult(
             action=action,
             reason=reason,
             findings=findings,
             redacted_text=redacted_text,
+            minted_tokens=minted_tokens,
         )
 
 
-def create_detector_pipeline(settings: Settings | None = None) -> DetectorPipeline:
+def create_detector_pipeline(
+    settings: Settings | None = None,
+    token_service: TokenService | None = None,
+) -> DetectorPipeline:
     """Build the full detection pipeline used by the browser MITM addon.
+
+    A session-scoped ``TokenService`` is created by default so browser-path
+    redactions mint numbered reversible tokens like the CLI gateway does.
 
     Loads detectors from ``Settings`` and the policy from
     ``settings.policy_path``. The policy file path is resolved relative to the
@@ -327,26 +357,102 @@ def create_detector_pipeline(settings: Settings | None = None) -> DetectorPipeli
         repo_root = Path(__file__).resolve().parent.parent.parent
         policy_path = repo_root / policy_path
 
+    if token_service is None:
+        from domestique.vault.service import TokenService
+        from domestique.vault.session import SessionStore
+
+        token_service = TokenService(SessionStore(), None)
+
     return DetectorPipeline(
         detectors=build_detectors(settings),
         policy=PolicyEngine.from_yaml(policy_path),
+        token_service=token_service,
     )
 
 
-def _redact_text(text: str, detections: list[Detection]) -> str:
-    """Replace each detection span with ``[CATEGORY_REDACTED]``.
+def _redaction_priority(det: Detection) -> tuple[int, float]:
+    """Ranking used to pick the category when overlapping spans are merged.
 
-    Spans are processed right-to-left so earlier offsets stay valid.
-    Overlapping spans are coalesced by skipping any detection whose end
-    extends past the next-earliest start we have already redacted.
+    Pinned-vault detections are user-confirmed secrets and win outright;
+    otherwise the highest-confidence detection's category is used.
     """
-    sorted_dets = sorted(detections, key=lambda d: d.span.start, reverse=True)
-    last_start = len(text) + 1
+    return (1 if det.detector == "pinned_vault" else 0, det.confidence)
+
+
+def _redact_text(
+    text: str, detections: list[Detection], token_service: TokenService | None = None
+) -> tuple[str, set[str]]:
+    """Replace each detection span with a redaction marker.
+
+    Returns ``(redacted_text, minted_tokens)`` where ``minted_tokens`` are
+    exactly the reversible tokens this call produced — the scope the response
+    detokenizer is allowed to reverse.
+
+    With a ``TokenService``, markers are reversible numbered tokens like
+    ``[SSN_1]`` (distinct values → distinct numbers); without one, the
+    legacy irreversible ``[CATEGORY_REDACTED]`` placeholder is used.
+
+    Overlapping spans are coalesced into their **union** and redacted as one
+    token, never dropped. Dropping an overlapping detection (the previous
+    behaviour) forwarded the exclusive prefix of the dropped span to the
+    provider in cleartext — e.g. two spans over ``123-45-6789`` and its
+    ``5-6789`` tail leaked ``123-4``. Disjoint spans that merely touch
+    (``a.end == b.start``) are kept separate so two adjacent distinct
+    secrets still get two tokens. The merged span's category comes from its
+    highest-priority member (see ``_redaction_priority``).
+    """
+    # Drop zero-length spans (e.g. the synthetic detector_error marker at
+    # (0, 0)) — they carry no text to redact.
+    spans = [d for d in detections if d.span.end > d.span.start]
+    if not spans:
+        return text, set()
+    spans.sort(key=lambda d: (d.span.start, d.span.end))
+
+    # Coalesce true overlaps into (start, end, category) unions.
+    merged: list[tuple[int, int, str]] = []
+    cur_start = spans[0].span.start
+    cur_end = spans[0].span.end
+    cur_best = spans[0]
+    for det in spans[1:]:
+        if det.span.start < cur_end:  # overlap (touching is not overlap)
+            cur_end = max(cur_end, det.span.end)
+            if _redaction_priority(det) > _redaction_priority(cur_best):
+                cur_best = det
+        else:
+            merged.append((cur_start, cur_end, cur_best.category))
+            cur_start, cur_end, cur_best = det.span.start, det.span.end, det
+    merged.append((cur_start, cur_end, cur_best.category))
+
+    # Apply right-to-left so earlier offsets stay valid as we splice.
     redacted = text
-    for det in sorted_dets:
-        if det.span.end > last_start:
-            continue
-        placeholder = f"[{det.category.upper()}_REDACTED]"
-        redacted = redacted[: det.span.start] + placeholder + redacted[det.span.end :]
-        last_start = det.span.start
-    return redacted
+    minted: set[str] = set()
+    for start, end, category in reversed(merged):
+        value = text[start:end]
+        if token_service is not None:
+            placeholder = token_service.tokenize(value, category)
+            token_service.record_sighting(value, category)
+            minted.add(placeholder)
+        else:
+            placeholder = f"[{category.upper()}_REDACTED]"
+        redacted = redacted[:start] + placeholder + redacted[end:]
+    return redacted, minted
+
+
+def _scan_pinned(text: str, token_service: TokenService) -> list[Detection]:
+    """Exact-match every pinned vault value against *text* (all occurrences)."""
+    detections: list[Detection] = []
+    if token_service.pinned is None:
+        return detections
+    for value, (_token, category) in token_service.pinned.values().items():
+        start = text.find(value)
+        while start != -1:
+            detections.append(
+                Detection(
+                    detector="pinned_vault",
+                    category=category,
+                    confidence=1.0,
+                    span=Span(start, start + len(value)),
+                )
+            )
+            start = text.find(value, start + len(value))
+    return detections

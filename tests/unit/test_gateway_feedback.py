@@ -31,7 +31,9 @@ class _StubPipeline:
 async def test_scan_and_redact_returns_driving_categories() -> None:
     pipeline = build_cli_pipeline()
     body = {"model": "m", "messages": [{"role": "user", "content": _AWS}]}
-    action, _reason, _out, categories = await _scan_and_redact(pipeline, body, "openai_chat")
+    action, _reason, _out, categories, _minted = await _scan_and_redact(
+        pipeline, body, "openai_chat"
+    )
     assert action is Action.REDACT
     assert "aws_access_key" in categories
 

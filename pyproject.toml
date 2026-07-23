@@ -35,6 +35,8 @@ dependencies = [
     "pyyaml>=6,<7",
     "python-dotenv>=1,<2",
     "prometheus-client>=0.21,<1",
+    "cryptography>=42,<47",
+    "keyring>=24,<26",
 ]
 
 [project.urls]

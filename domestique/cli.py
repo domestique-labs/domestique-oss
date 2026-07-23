@@ -221,11 +221,22 @@ def _cmd_start(
         else None
     )
 
+    # Reversible redaction: one TokenService feeds BOTH the pipeline (which mints
+    # the numbered [SSN_1] tokens on egress) and the gateway (which rewrites them
+    # back in responses). Building the persistent pinned vault here is what makes
+    # redaction reversible — passing it only to the gateway would leave the
+    # pipeline minting flat [..._REDACTED] placeholders with nothing to reverse.
+    from domestique.vault import build_default_token_service
+
+    token_service = build_default_token_service()
+
     # Build the pipeline here (same work create_gateway would do internally, just
     # moved up) so the banner can show the actual loaded policy location.
-    pipeline = build_cli_pipeline(settings)
+    pipeline = build_cli_pipeline(settings, token_service=token_service)
     print(_banner(host, port, policy=_policy_summary(pipeline.policy)))
-    gateway = create_gateway(settings, pipeline=pipeline, on_decision=on_decision)
+    gateway = create_gateway(
+        settings, pipeline=pipeline, on_decision=on_decision, token_service=token_service
+    )
     # One voice: silence uvicorn's per-request access log + INFO startup chatter
     # so it never speaks over the ticker. The ticker (redact/block only) is the
     # single per-request signal; a clean request stays silent. --access-log
