@@ -90,3 +90,39 @@ class TestInjectWidget:
         assert h1 == h2
         assert "sha256-" not in h1  # bare digest, prefix added by the CSP layer
         assert len(h1) == 44 and h1.endswith("=")  # base64 of a 32-byte digest
+
+
+class TestRelaxCsp:
+    HASH = "abc123def456ghi789jkl012mno345pqr678stu901v="  # 44-char base64 stand-in
+
+    def test_appends_hash_to_existing_script_src(self):
+        policy = "default-src 'self'; script-src 'self' https://cdn.example.com"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        assert f"'sha256-{self.HASH}'" in out
+        # existing sources preserved
+        assert "'self'" in out
+        assert "https://cdn.example.com" in out
+        # other directives untouched
+        assert "default-src 'self'" in out
+
+    def test_derives_script_src_from_default_src_when_absent(self):
+        policy = "default-src 'self' https://x.example.com"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        assert "script-src" in out
+        assert f"'sha256-{self.HASH}'" in out
+        assert "'self'" in out  # inherited from default-src
+        # default-src is still present and unmodified
+        assert "default-src 'self' https://x.example.com" in out
+
+    def test_no_change_when_no_script_or_default_directive(self):
+        policy = "img-src 'self'; style-src 'self'"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        assert out == policy  # scripts weren't restricted; nothing to relax
+
+    def test_blank_policy_returned_unchanged(self):
+        assert fb.relax_csp_for_injection("", self.HASH) == ""
+
+    def test_does_not_duplicate_hash_if_already_present(self):
+        policy = f"script-src 'self' 'sha256-{self.HASH}'"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        assert out.count(f"'sha256-{self.HASH}'") == 1

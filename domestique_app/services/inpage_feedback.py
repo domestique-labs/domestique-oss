@@ -62,3 +62,51 @@ def inject_widget(html: str) -> str | None:
         idx = m2.start()
         return html[:idx] + block + html[idx:]
     return None
+
+
+def _parse_csp(policy: str) -> list[tuple[str, list[str]]]:
+    """Parse a CSP into an ordered list of (directive, [sources])."""
+    parsed: list[tuple[str, list[str]]] = []
+    for chunk in policy.split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        parts = chunk.split()
+        parsed.append((parts[0], parts[1:]))
+    return parsed
+
+
+def _serialize_csp(directives: list[tuple[str, list[str]]]) -> str:
+    return "; ".join(
+        name if not sources else f"{name} {' '.join(sources)}" for name, sources in directives
+    )
+
+
+def relax_csp_for_injection(policy: str, script_hash: str) -> str:
+    """Add exactly the widget's sha256 to the policy's script-src.
+
+    - If a ``script-src`` directive exists, append the hash to it.
+    - Else if a ``default-src`` exists, add a new ``script-src`` = its sources
+      plus the hash (so scripts stay as restricted as before, plus our widget).
+    - Else the policy doesn't restrict scripts, so return it unchanged.
+    Every other directive is preserved verbatim. Blank input is returned as-is.
+    """
+    if not policy.strip():
+        return policy
+    token = f"'sha256-{script_hash}'"
+    directives = _parse_csp(policy)
+    names = [name.lower() for name, _ in directives]
+
+    if "script-src" in names:
+        i = names.index("script-src")
+        name, sources = directives[i]
+        if token not in sources:
+            directives[i] = (name, [*sources, token])
+        return _serialize_csp(directives)
+
+    if "default-src" in names:
+        default_sources = directives[names.index("default-src")][1]
+        directives.append(("script-src", [*default_sources, token]))
+        return _serialize_csp(directives)
+
+    return policy
