@@ -40,7 +40,6 @@ if TYPE_CHECKING:
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
 
-_MITMPROXY_HINT = 'pipx inject domestique "domestique[browser-proxy]"'
 _APP_MODULE = "domestique_app"
 
 _DEMO_PROMPT = (
@@ -343,9 +342,15 @@ def _cmd_browser(action: str, url: str) -> int:
 
 
 def _print_mitmproxy_hint() -> None:
-    """Tell the user how to add browser support by hand."""
+    """Tell the user how to add browser support by hand.
+
+    Uses the same detection _ensure_browser_dependency would use to install
+    it automatically, so a plain pip/venv install is never told to run
+    `pipx inject` (which may not even have pipx on PATH), or vice versa.
+    """
+    _, cmd = _detect_install_context()
     print("Browser support (mitmproxy) isn't installed. Add it with:")
-    print(f"  {_MITMPROXY_HINT}")
+    print(f"  {' '.join(cmd)}")
     print("  then re-run:  domestique browser")
 
 
@@ -453,12 +458,31 @@ def _wait_for_dashboard(url: str, *, timeout: float = 30.0, interval: float = 0.
 
 def _spawn_dashboard_app() -> None:
     """Launch the dashboard app detached, in portable mode, without opening a
-    browser tab (the launcher opens the dashboard itself once it's up)."""
+    browser tab (the launcher opens the dashboard itself once it's up).
+
+    ``start_new_session=True`` is POSIX-only -- CPython's Windows
+    ``_execute_child`` takes the parameter but literally names it
+    ``unused_start_new_session`` and never acts on it. Without
+    ``CREATE_NEW_PROCESS_GROUP`` on Windows the spawned process stays in
+    this console's process group, so Ctrl+C while ``_wait_for_dashboard``
+    is still polling would kill the freshly-spawned dashboard along with
+    the CLI -- the opposite of "detached". Mirrors
+    ``domestique_app.services.runtime.subprocess_group_kwargs`` (same
+    logic, reimplemented here rather than imported: ``domestique/`` must
+    never import ``domestique_app/``).
+    """
+    import os
+
+    kwargs: dict[str, object] = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
     subprocess.Popen(  # noqa: S603
         [sys.executable, "-m", _APP_MODULE, "--mode", "portable", "--no-browser"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        start_new_session=True,
+        **kwargs,
     )
 
 
