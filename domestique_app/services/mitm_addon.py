@@ -834,7 +834,7 @@ class DomestiqueAddon:
             try:
                 from domestique_app.services.notifications import notify_block
 
-                notify_block(host)
+                notify_block(host, detail=self._format_block_detail(reasons))
             except Exception:
                 logger.debug("Desktop notification failed", exc_info=True)
 
@@ -953,6 +953,32 @@ class DomestiqueAddon:
             get_audit_store().record(event)
         except Exception:  # noqa: S110
             pass  # Never let audit failure affect request path
+
+    def _format_block_detail(self, reasons: list[str] | None) -> str | None:
+        """Turn the first block reason into a short "Category (NN%)" string.
+
+        Feeds the opt-in enriched desktop toast (see
+        domestique_app.services.notifications.notify_block's `detail` kwarg);
+        the toast only shows this when the user has enabled that setting.
+        `reasons` entries come from _DetectorPipeline.inspect's
+        `description` ("detector: category (NN%)") - this is purely
+        cosmetic and defensive, so any unexpected shape falls back to the
+        raw first reason (or None) rather than raising.
+        """
+        if not reasons:
+            return None
+        try:
+            first = reasons[0]
+            if not isinstance(first, str) or not first.strip():
+                return None
+            # Drop a leading "detector: " prefix if present, e.g.
+            # "secrets: us_ssn (92%)" -> "us_ssn (92%)".
+            category_part = first.split(": ", 1)[-1] if ": " in first else first
+            label = category_part.replace("_", " ").strip()
+            return label or first
+        except Exception:
+            logger.debug("Failed to format block detail", exc_info=True)
+            return None
 
     # --- Approval flow -----------------------------------------------
 
