@@ -18,7 +18,7 @@ from importlib.resources import files
 
 INJECTION_MARKER = "domestique-inpage-widget"
 
-_HEAD_RE = re.compile(r"<head[^>]*>", re.IGNORECASE)
+_HEAD_RE = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
 _BODY_CLOSE_RE = re.compile(r"</body\s*>", re.IGNORECASE)
 
 

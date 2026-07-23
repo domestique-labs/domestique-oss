@@ -73,6 +73,16 @@ class TestInjectWidget:
         assert once is not None
         assert fb.inject_widget(once) is None  # marker present -> skip
 
+    def test_header_element_is_not_mistaken_for_head(self):
+        # A page with no <head> but a <header> must NOT inject into <header>;
+        # it must fall back to before </body>.
+        html = "<html><body><header>site</header><main>hi</main></body></html>"
+        out = fb.inject_widget(html)
+        assert out is not None
+        marker_idx = out.index(fb.INJECTION_MARKER)
+        assert marker_idx > out.index("</header>")  # after the header, not inside it
+        assert marker_idx < out.index("</body>")  # via the body-close fallback
+
     def test_hash_is_stable_base64_sha256(self):
         js = fb.load_widget_js()
         h1 = fb.compute_script_hash(js)
