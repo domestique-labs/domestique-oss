@@ -7,6 +7,7 @@ side-effecting calls (install, spawn, open-browser) are mocked.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -85,8 +86,23 @@ class TestEnsureBrowserDependency:
 
     def test_missing_no_install_prints_hint(self, monkeypatch, capsys):
         monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(cli, "_detect_install_context", lambda: ("pipx", ["pipx", "inject"]))
         assert cli._ensure_browser_dependency(assume_yes=True, no_install=True) is False
-        assert "pipx inject domestique" in capsys.readouterr().out
+        assert "pipx inject" in capsys.readouterr().out
+
+    def test_hint_matches_actual_install_method_not_hardcoded_pipx(self, monkeypatch, capsys):
+        # Regression: _print_mitmproxy_hint used to always say "pipx inject",
+        # even for a plain pip/venv install where that command may not even
+        # have pipx on PATH. It must reflect _detect_install_context()'s real
+        # answer instead.
+        monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(
+            cli, "_detect_install_context", lambda: ("pip", [cli.sys.executable, "-m", "pip"])
+        )
+        assert cli._ensure_browser_dependency(assume_yes=True, no_install=True) is False
+        out = capsys.readouterr().out
+        assert "pip" in out
+        assert "pipx" not in out
 
     def test_missing_yes_installs_and_succeeds(self, monkeypatch):
         monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
@@ -98,12 +114,54 @@ class TestEnsureBrowserDependency:
 
     def test_missing_install_fails_returns_false(self, monkeypatch, capsys):
         monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
-        monkeypatch.setattr(cli, "_detect_install_context", lambda: ("pip", ["x"]))
+        monkeypatch.setattr(cli, "_detect_install_context", lambda: ("pipx", ["pipx", "inject"]))
         monkeypatch.setattr(
             cli.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 1})()
         )
         assert cli._ensure_browser_dependency(assume_yes=True, no_install=False) is False
-        assert "pipx inject domestique" in capsys.readouterr().out
+        assert "pipx inject" in capsys.readouterr().out
+
+    def test_interactive_tty_decline_prints_hint_and_returns_false(self, monkeypatch, capsys):
+        monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(cli, "_detect_install_context", lambda: ("pip", ["x"]))
+        monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(cli, "input", lambda prompt: "n", raising=False)
+        called = []
+        monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: called.append(a))
+
+        assert cli._ensure_browser_dependency(assume_yes=False, no_install=False) is False
+        assert called == []  # declining must never invoke the installer
+        assert "isn't installed" in capsys.readouterr().out
+
+    def test_interactive_tty_accept_proceeds_to_install(self, monkeypatch):
+        monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(cli, "_detect_install_context", lambda: ("pip", ["x"]))
+        monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: True)
+        monkeypatch.setattr(cli, "input", lambda prompt: "y", raising=False)
+        monkeypatch.setattr(
+            cli.subprocess, "run", lambda *a, **k: type("R", (), {"returncode": 0})()
+        )
+
+        assert cli._ensure_browser_dependency(assume_yes=False, no_install=False) is True
+
+    def test_non_tty_without_yes_or_no_install_proceeds_to_install(self, monkeypatch):
+        # Documents the current, deliberate behavior: when stdin isn't a TTY
+        # (piped/non-interactive) and the caller passed neither --yes nor
+        # --no-install, there's no way to prompt, so the launcher proceeds to
+        # install rather than hanging or silently doing nothing. Locking this
+        # in as a test rather than leaving it as an unverified side effect.
+        monkeypatch.setattr(cli.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(cli, "_detect_install_context", lambda: ("pip", ["x"]))
+        monkeypatch.setattr(cli.sys.stdin, "isatty", lambda: False)
+        called = []
+        monkeypatch.setattr(
+            cli.subprocess,
+            "run",
+            lambda *a, **k: (called.append(a), type("R", (), {"returncode": 0})())[1],
+        )
+
+        assert cli._ensure_browser_dependency(assume_yes=False, no_install=False) is True
+        assert len(called) == 1
 
 
 class TestDashboardHelpers:
@@ -157,7 +215,15 @@ class TestAppLifecycle:
             "portable",
             "--no-browser",
         ]
-        assert captured["kw"].get("start_new_session") is True
+        # Detachment kwarg is platform-specific: start_new_session (POSIX
+        # setsid) is a documented no-op on Windows, so it must not be relied
+        # on there -- CREATE_NEW_PROCESS_GROUP is the real mechanism.
+        if os.name == "nt":
+            assert captured["kw"].get("creationflags") == cli.subprocess.CREATE_NEW_PROCESS_GROUP
+            assert "start_new_session" not in captured["kw"]
+        else:
+            assert captured["kw"].get("start_new_session") is True
+            assert "creationflags" not in captured["kw"]
 
     def test_ensure_running_skips_spawn_when_already_up(self, monkeypatch):
         monkeypatch.setattr(cli, "_dashboard_reachable", lambda url: True)
