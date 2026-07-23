@@ -82,14 +82,43 @@ def _serialize_csp(directives: list[tuple[str, list[str]]]) -> str:
     )
 
 
-def relax_csp_for_injection(policy: str, script_hash: str) -> str:
-    """Add exactly the widget's sha256 to the policy's script-src.
+def _has_nonce_or_hash(sources: list[str]) -> bool:
+    """True if the source list already contains a nonce or hash expression
+    (which per CSP2/3 means 'unsafe-inline' is already being ignored)."""
+    return any(s.startswith(("'nonce-", "'sha256-", "'sha384-", "'sha512-")) for s in sources)
 
-    - If a ``script-src`` directive exists, append the hash to it.
-    - Else if a ``default-src`` exists, add a new ``script-src`` = its sources
-      plus the hash (so scripts stay as restricted as before, plus our widget).
-    - Else the policy doesn't restrict scripts, so return it unchanged.
-    Every other directive is preserved verbatim. Blank input is returned as-is.
+
+def _ensure_hash_on_directive(
+    directives: list[tuple[str, list[str]]], names: list[str], dname: str, token: str
+) -> bool:
+    """Ensure `token` is allowed by directive `dname` if it exists. Returns True
+    if a change was made. If the directive already permits inline via
+    'unsafe-inline' and has no nonce/hash yet, leave it untouched (our script
+    already runs, and adding a hash would disable 'unsafe-inline' and break the
+    page's own inline scripts)."""
+    if dname not in names:
+        return False
+    i = names.index(dname)
+    name, sources = directives[i]
+    if "'unsafe-inline'" in sources and not _has_nonce_or_hash(sources):
+        return False
+    if token in sources:
+        return False
+    directives[i] = (name, [*sources, token])
+    return True
+
+
+def relax_csp_for_injection(policy: str, script_hash: str) -> str:
+    """Add exactly the widget's sha256 to whichever directive governs element
+    scripts, without ever weakening the policy. See module docstring.
+
+    - If `script-src-elem`/`script-src` exist, ensure the hash is allowed there
+      (respecting the 'unsafe-inline' guard, and covering `script-src-attr` too).
+    - Else if `default-src` exists, add a `script-src` = its sources + the hash
+      (unless default-src already allows inline via 'unsafe-inline' with no
+      nonce/hash, in which case the widget already runs — leave it).
+    - Else the policy doesn't restrict scripts; return it unchanged.
+    Every other directive is preserved verbatim. Blank input returned as-is.
     """
     if not policy.strip():
         return policy
@@ -97,15 +126,17 @@ def relax_csp_for_injection(policy: str, script_hash: str) -> str:
     directives = _parse_csp(policy)
     names = [name.lower() for name, _ in directives]
 
-    if "script-src" in names:
-        i = names.index("script-src")
-        name, sources = directives[i]
-        if token not in sources:
-            directives[i] = (name, [*sources, token])
-        return _serialize_csp(directives)
+    if "script-src-elem" in names or "script-src" in names or "script-src-attr" in names:
+        changed = False
+        for dname in ("script-src-elem", "script-src", "script-src-attr"):
+            if _ensure_hash_on_directive(directives, names, dname, token):
+                changed = True
+        return _serialize_csp(directives) if changed else policy
 
     if "default-src" in names:
         default_sources = directives[names.index("default-src")][1]
+        if "'unsafe-inline'" in default_sources and not _has_nonce_or_hash(default_sources):
+            return policy
         directives.append(("script-src", [*default_sources, token]))
         return _serialize_csp(directives)
 

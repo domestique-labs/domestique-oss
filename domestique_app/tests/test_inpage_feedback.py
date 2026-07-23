@@ -126,3 +126,35 @@ class TestRelaxCsp:
         policy = f"script-src 'self' 'sha256-{self.HASH}'"
         out = fb.relax_csp_for_injection(policy, self.HASH)
         assert out.count(f"'sha256-{self.HASH}'") == 1
+
+    def test_unsafe_inline_script_src_left_unchanged(self):
+        # Adding a hash would disable 'unsafe-inline' and break the page's own
+        # inline scripts; the widget already runs under 'unsafe-inline'.
+        policy = "script-src 'self' 'unsafe-inline'"
+        assert fb.relax_csp_for_injection(policy, self.HASH) == policy
+
+    def test_unsafe_inline_default_src_left_unchanged(self):
+        policy = "default-src 'self' 'unsafe-inline'"
+        assert fb.relax_csp_for_injection(policy, self.HASH) == policy
+
+    def test_nonce_present_still_gets_hash(self):
+        # A nonce already disables 'unsafe-inline', and our inline widget has no
+        # nonce, so it needs the hash to run.
+        policy = "script-src 'self' 'nonce-abc123'"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        assert f"'sha256-{self.HASH}'" in out
+
+    def test_script_src_elem_gets_hash(self):
+        # script-src-elem overrides script-src for element scripts; the widget
+        # must be allowed there.
+        policy = "script-src 'self'; script-src-elem 'self'"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        # hash present on BOTH governing directives
+        elem = [d for d in out.split(";") if "script-src-elem" in d][0]
+        assert f"'sha256-{self.HASH}'" in elem
+
+    def test_script_src_elem_only_gets_hash(self):
+        policy = "script-src-elem 'self'"
+        out = fb.relax_csp_for_injection(policy, self.HASH)
+        assert "script-src-elem" in out
+        assert f"'sha256-{self.HASH}'" in out
