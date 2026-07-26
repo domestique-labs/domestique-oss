@@ -9,8 +9,11 @@ short-circuits on text shorter than 4 characters.
 
 from __future__ import annotations
 
+import threading
+
 import structlog
 
+from domestique.detectors._offload import offload
 from domestique.models import Detection, Span
 
 logger = structlog.get_logger()
@@ -45,16 +48,28 @@ class PIIDetector:
         self._spacy_model = spacy_model
         self._analyzer: object | None = None
         self._available: bool | None = None  # tri-state: None = untried
+        self._init_lock = threading.Lock()
 
     @property
     def name(self) -> str:
         return "pii_detector"
 
     async def scan(self, text: str) -> list[Detection]:
-        """Scan for PII entities. Returns empty list if Presidio unavailable."""
+        """Scan for PII entities. Returns empty list if Presidio unavailable.
+
+        Presidio analysis is synchronous CPU work costing several milliseconds
+        even on short text, so it is always dispatched to a worker thread --
+        unlike the regex tier, there is no input size at which running it
+        inline is cheaper than the hop. spaCy releases the GIL for its native
+        pipeline stages, so concurrent scans genuinely overlap.
+        """
         if len(text) < 4:
             return []
 
+        return await offload(lambda: self._scan_sync(text))
+
+    def _scan_sync(self, text: str) -> list[Detection]:
+        """Blocking body of :meth:`scan`. Safe to call from a worker thread."""
         analyzer = self._get_analyzer()
         if analyzer is None:
             return []
@@ -81,20 +96,32 @@ class PIIDetector:
         ]
 
     def _get_analyzer(self) -> object | None:
-        """Lazy-load Presidio analyzer. Returns None if unavailable."""
+        """Lazy-load Presidio analyzer. Returns None if unavailable.
+
+        Guarded by a lock: ``scan`` now runs on worker threads, so concurrent
+        first-calls would otherwise race and each construct their own
+        ``AnalyzerEngine`` (seconds of model loading, duplicated).
+        """
         if self._available is False:
             return None
         if self._analyzer is not None:
             return self._analyzer
 
-        try:
-            from presidio_analyzer import AnalyzerEngine  # type: ignore[import-untyped]
+        with self._init_lock:
+            # Re-check: another thread may have finished while we waited.
+            if self._available is False:
+                return None
+            if self._analyzer is not None:
+                return self._analyzer
 
-            self._analyzer = AnalyzerEngine()
-            self._available = True
-            logger.info("pii_detector_ready", model=self._spacy_model)
-            return self._analyzer
-        except (ImportError, OSError) as exc:
-            self._available = False
-            logger.warning("pii_detector_unavailable", reason=str(exc))
-            return None
+            try:
+                from presidio_analyzer import AnalyzerEngine  # type: ignore[import-untyped]
+
+                self._analyzer = AnalyzerEngine()
+                self._available = True
+                logger.info("pii_detector_ready", model=self._spacy_model)
+                return self._analyzer
+            except (ImportError, OSError) as exc:
+                self._available = False
+                logger.warning("pii_detector_unavailable", reason=str(exc))
+                return None

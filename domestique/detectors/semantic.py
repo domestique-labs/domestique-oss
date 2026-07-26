@@ -17,11 +17,14 @@ For GPU deployments, < 2 ms.
 from __future__ import annotations
 
 import base64
+import os
 import re
+import threading
 from typing import Any
 
 import structlog
 
+from domestique.detectors._offload import offload
 from domestique.models import Detection, Span
 
 logger = structlog.get_logger()
@@ -55,16 +58,31 @@ class SemanticDetector:
         self._model: Any = None
         self._topic_embeddings: Any = None
         self._available: bool | None = None
+        self._init_lock = threading.Lock()
 
     @property
     def name(self) -> str:
         return "semantic_classifier"
 
     async def scan(self, text: str) -> list[Detection]:
-        """Run all semantic detection strategies on the input text."""
+        """Run all semantic detection strategies on the input text.
+
+        Offloaded to a worker thread only when the embedding strategy is
+        active. Sentence-transformer inference is native code that releases
+        the GIL, so moving it off the loop genuinely helps. Strategies 1 and 2
+        are pure ``re``/entropy work that holds the GIL, where offloading buys
+        nothing and costs a ~31 us hop -- see :meth:`SecretDetector.scan` for
+        the measurements.
+        """
         if len(text) < 10:
             return []
 
+        if self._enable_embedding and self._sensitive_topics:
+            return await offload(lambda: self._scan_sync(text))
+        return self._scan_sync(text)
+
+    def _scan_sync(self, text: str) -> list[Detection]:
+        """Blocking body of :meth:`scan`. Safe to call from a worker thread."""
         findings: list[Detection] = []
 
         # Strategy 1: Obfuscation / encoding detection (always available, no ML)
@@ -75,8 +93,7 @@ class SemanticDetector:
 
         # Strategy 3: Embedding-based topic similarity (requires model)
         if self._enable_embedding and self._sensitive_topics:
-            topic_findings = await self._detect_sensitive_topics(text)
-            findings.extend(topic_findings)
+            findings.extend(self._detect_sensitive_topics(text))
 
         return findings
 
@@ -173,7 +190,7 @@ class SemanticDetector:
 
     # -- Strategy 3: Embedding-based topic detection --------------------------
 
-    async def _detect_sensitive_topics(self, text: str) -> list[Detection]:
+    def _detect_sensitive_topics(self, text: str) -> list[Detection]:
         """Compare text embedding against sensitive topic embeddings.
 
         Uses sentence-transformers (all-MiniLM-L6-v2) for fast local inference.
@@ -211,12 +228,37 @@ class SemanticDetector:
             return []
 
     def _get_model(self) -> Any:
-        """Lazy-load the sentence-transformer model."""
+        """Lazy-load the sentence-transformer model.
+
+        Guarded by a lock: ``scan`` now runs on worker threads, so concurrent
+        first-calls would otherwise each load their own copy of the model and
+        re-encode the topic embeddings.
+        """
         if self._available is False:
             return None
         if self._model is not None:
             return self._model
 
+        with self._init_lock:
+            # Re-read under the lock. Another thread may have flipped these
+            # while we waited, so the narrowing mypy inferred from the checks
+            # above is not sound here -- hence the explicit local.
+            available: bool | None = self._available
+            if available is False:
+                return None
+            if self._model is not None:
+                return self._model
+            return self._load_model_locked()
+
+    def _load_model_locked(self) -> Any:
+        # Force offline before loading, mirroring GLiNER (Tier 2b): a cold model
+        # cache must fail fast here rather than trigger a ~90 MB HuggingFace
+        # fetch on the request hot path. ``domestique setup`` pre-caches the
+        # model when the ``semantic`` extra is selected; without that, this
+        # tier stays disabled instead of stalling every scan on a live download.
+        # ``setdefault`` respects an operator who has explicitly opted into
+        # online fetches.
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")
         try:
             from sentence_transformers import SentenceTransformer
 
@@ -234,11 +276,24 @@ class SemanticDetector:
             )
             return self._model
 
-        except ImportError:
+        except (ImportError, OSError) as exc:
+            # ImportError: the ``semantic`` extra (sentence-transformers) was
+            # never installed. OSError (huggingface_hub raises
+            # LocalEntryNotFoundError, an OSError subclass): the package is
+            # present but the model was never cached, and HF_HUB_OFFLINE=1
+            # above forbids fetching it now.
             self._available = False
             logger.warning(
                 "semantic_detector_unavailable",
-                reason="Install sentence-transformers: pip install sentence-transformers",
+                error=str(exc),
+                error_type=type(exc).__name__,
+                hint=(
+                    "Semantic topic detection is enabled but the embedding "
+                    "model is not available: install the 'semantic' extra "
+                    "(pip install -e '.[semantic]') and warm the model cache "
+                    "(run `domestique setup` and select Tier 2c), or disable "
+                    "semantic detection in the dashboard."
+                ),
             )
             return None
 

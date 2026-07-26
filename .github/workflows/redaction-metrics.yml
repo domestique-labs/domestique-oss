@@ -1,0 +1,119 @@
+name: Redaction metrics
+
+# Per-PR gate + report for the reversible redaction engine:
+#   1. Correctness (M1-M5, M10, M11) — blocking.
+#   2. Token-usage delta vs merge-base — deterministic, reported as %.
+#   3. Latency delta vs merge-base — same-runner compare (absolute numbers
+#      on shared runners are noise; deltas are signal — see PR #25 lesson).
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "domestique/vault/**"
+      - "domestique/redaction.py"
+      - "domestique/detectors/**"
+      - "domestique/gateway.py"
+      - "domestique/cli.py"
+      - "domestique/extract.py"
+      - "domestique/redact.py"
+      - "domestique/policy/**"
+      - "tests/redaction_metrics/**"
+      - "benchmarks/redaction_bench.py"
+      - "benchmarks/redaction_compare.py"
+      - ".github/workflows/redaction-metrics.yml"
+
+concurrency:
+  group: redaction-metrics-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  metrics:
+    name: Correctness + deltas (ubuntu, py3.12)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install (core + dev)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Redaction correctness (blocking)
+        id: correctness
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pytest tests/redaction_metrics -q | tee /tmp/correctness.txt
+
+      - name: Bench (head)
+        run: python benchmarks/redaction_bench.py --json --no-gate > /tmp/head.json
+
+      - name: Bench (merge-base, same runner)
+        run: |
+          git checkout --quiet --detach "${{ github.event.pull_request.base.sha }}"
+          if [ -f benchmarks/redaction_bench.py ]; then
+            python benchmarks/redaction_bench.py --json --no-gate > /tmp/base.json || rm -f /tmp/base.json
+          fi
+          git checkout --quiet --detach "${{ github.event.pull_request.head.sha }}"
+
+      - name: Build report
+        run: |
+          {
+            echo "<!-- redaction-metrics -->"
+            echo "## Redaction engine metrics"
+            echo ""
+            if [ "${{ steps.correctness.outcome }}" = "success" ]; then
+              echo "**Correctness:** ✅ $(tail -1 /tmp/correctness.txt)"
+            else
+              echo "**Correctness:** ❌ FAILED"
+              echo '```'
+              tail -20 /tmp/correctness.txt
+              echo '```'
+            fi
+            echo ""
+            python benchmarks/redaction_compare.py /tmp/base.json /tmp/head.json
+          } > /tmp/report.md
+          cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Post sticky PR comment
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('/tmp/report.md', 'utf8');
+            const marker = '<!-- redaction-metrics -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Gate on correctness
+        if: steps.correctness.outcome != 'success'
+        run: exit 1

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
+import domestique.setup_wizard as wizard
 from domestique.setup_wizard import detect_install_env, extras_install_argv
 
 
@@ -76,6 +79,29 @@ class TestExtrasInstallArgv:
 
         monkeypatch.setattr(wizard, "detect_install_env", lambda: "pipx")
         assert extras_install_argv(["ner"])[0] == "pipx"
+
+
+class TestEditableInstallArgv:
+    """Regression: a uv-created `.venv` ships without pip, so the source-checkout
+    editable install must not hardcode `python -m pip` (crashed with 'No module
+    named pip' during a real `domestique setup`)."""
+
+    def test_prefers_pip_when_available(self, monkeypatch):
+        monkeypatch.setattr(wizard.importlib.util, "find_spec", lambda name: object())
+        argv = wizard._editable_install_argv(".[ner]")
+        assert argv == [sys.executable, "-m", "pip", "install", "-e", ".[ner]"]
+
+    def test_falls_back_to_uv_when_pip_absent(self, monkeypatch):
+        monkeypatch.setattr(wizard.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(wizard.shutil, "which", lambda name: "/usr/bin/uv")
+        argv = wizard._editable_install_argv(".[ner]")
+        assert argv == ["uv", "pip", "install", "--python", sys.executable, "-e", ".[ner]"]
+
+    def test_errors_actionably_when_neither_present(self, monkeypatch):
+        monkeypatch.setattr(wizard.importlib.util, "find_spec", lambda name: None)
+        monkeypatch.setattr(wizard.shutil, "which", lambda name: None)
+        with pytest.raises(SystemExit, match="neither pip nor uv"):
+            wizard._editable_install_argv(".[ner]")
 
 
 class TestPipxSegmentMatch:

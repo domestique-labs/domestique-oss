@@ -98,10 +98,34 @@ class SecretDetector:
         return "secret_scanner"
 
     async def scan(self, text: str) -> list[Detection]:
-        """Scan text for credentials. O(n) in text length."""
+        """Scan text for credentials. O(n) in text length.
+
+        Deliberately NOT dispatched to a worker thread. This body is one long
+        ``re.finditer`` over the whole input, and CPython's ``re`` holds the
+        GIL for the duration of a match call -- there are no bytecode
+        boundaries inside it where the interpreter could switch threads. So
+        offloading does not free the event loop; it only adds a ~31 us hop.
+
+        Measured (``benchmarks/concurrency``, 64 KB input, macOS/CPython
+        3.12), event-loop availability while scans run:
+
+            concurrent scans      1        4       16
+            inline              ~8%      ~3%     ~1%
+            via to_thread       ~8%     ~25%     ~6%     (no better)
+
+        Compare a GIL-releasing detector under the same harness, which holds
+        ~88% availability at 16 concurrent. The fix for this tier is to yield
+        between bounded chunks, not to move the work to a thread -- see
+        ``docs`` / DetectionTiers notes. Left inline until that lands, because
+        chunking a regex scan risks missing matches that span chunk
+        boundaries and this is a security control.
+        """
         if not text:
             return []
+        return self._scan_sync(text)
 
+    def _scan_sync(self, text: str) -> list[Detection]:
+        """Blocking body of :meth:`scan`."""
         findings: list[Detection] = []
         assert self._combined_re is not None  # noqa: S101
 

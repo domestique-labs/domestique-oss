@@ -15,6 +15,7 @@ Entry points:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import platform
@@ -54,6 +55,7 @@ class FeatureInfo(TypedDict):
     default: bool
     spacy_model: NotRequired[str]
     hf_model: NotRequired[str]
+    st_model: NotRequired[str]
 
 
 FEATURE_EXTRAS: dict[str, FeatureInfo] = {
@@ -70,6 +72,18 @@ FEATURE_EXTRAS: dict[str, FeatureInfo] = {
         "extra_download_mb": 300,
         "hf_model": "knowledgator/gliner-pii-base-v1.0",
         "default": True,
+    },
+    # Default-off: the embedding model only earns its keep once the operator
+    # configures ``sensitive_topics`` (its topic-similarity strategy is a no-op
+    # otherwise), so we don't pull the ~90 MB model onto every install. Offered
+    # here so enabling semantic detection later doesn't trigger a live model
+    # fetch on the request hot path -- see SemanticDetector._load_model_locked.
+    "semantic": {
+        "label": "Semantic topic similarity (Tier 2c)",
+        "extra": "semantic",
+        "extra_download_mb": 90,
+        "st_model": "all-MiniLM-L6-v2",
+        "default": False,
     },
     "browser-proxy": {
         "label": "Browser MITM interception (mitmproxy)",
@@ -424,13 +438,34 @@ def run(
     return r.returncode
 
 
+def _editable_install_argv(spec: str) -> list[str]:
+    """Choose an editable-install command that works in THIS interpreter.
+
+    A uv-created ``.venv`` ships without ``pip`` -- ``python -m pip`` then dies
+    with "No module named pip", which is exactly what a developer running
+    ``domestique setup`` from a uv-managed source checkout hits. Prefer pip when
+    it is importable here; otherwise fall back to ``uv pip`` targeting this
+    interpreter; otherwise fail with an actionable message rather than a raw
+    traceback.
+    """
+    if importlib.util.find_spec("pip") is not None:
+        return [sys.executable, "-m", "pip", "install", "-e", spec]
+    if shutil.which("uv") is not None:
+        return ["uv", "pip", "install", "--python", sys.executable, "-e", spec]
+    raise SystemExit(
+        "cannot install extras: this environment has neither pip nor uv.\n"
+        "  Add pip with:  python -m ensurepip --upgrade\n"
+        "  or install uv: https://docs.astral.sh/uv/  then re-run `domestique setup`."
+    )
+
+
 def install_extras(extras: list[str]) -> None:
     """Install extras editable from the source checkout (installer-script path)."""
     if not extras:
         return
     spec = f".[{','.join(extras)}]"
-    _print(f"\n▶ installing pip extras: {spec}")
-    run([sys.executable, "-m", "pip", "install", "-e", spec])
+    _print(f"\n▶ installing extras (editable): {spec}")
+    run(_editable_install_argv(spec))
 
 
 def wizard_install_extras(extras: list[str]) -> None:
@@ -460,6 +495,17 @@ def cache_huggingface_model(repo_id: str) -> None:
         "import os; os.environ.pop('HF_HUB_OFFLINE', None);"
         "from gliner import GLiNER;"
         f"GLiNER.from_pretrained({repo_id!r});"
+        "print('cached')"
+    )
+    run([sys.executable, "-c", code], env={"HF_HUB_OFFLINE": "0"})
+
+
+def cache_sentence_transformer_model(model: str) -> None:
+    _print(f"\n▶ caching sentence-transformer model: {model}")
+    code = (
+        "import os; os.environ.pop('HF_HUB_OFFLINE', None);"
+        "from sentence_transformers import SentenceTransformer;"
+        f"SentenceTransformer({model!r});"
         "print('cached')"
     )
     run([sys.executable, "-c", code], env={"HF_HUB_OFFLINE": "0"})
@@ -916,6 +962,9 @@ def _run_installer() -> int:
     if "ner" in extras:
         cache_huggingface_model(FEATURE_EXTRAS["ner"].get("hf_model", ""))
 
+    if "semantic" in extras:
+        cache_sentence_transformer_model(FEATURE_EXTRAS["semantic"].get("st_model", ""))
+
     if preset and ollama_present:
         already = detect_existing_ollama_models()
         pull_ollama_model(LLM_PRESETS[preset]["model"], already)
@@ -1025,9 +1074,18 @@ def _wizard_walkthrough(hw: HardwareProfile, *, yes: bool) -> WizardChoices:
     _print("  Always on: compiled patterns for API keys, tokens, SSNs and more.")
     _print("  Zero download, ~0.03 ms per prompt. Nothing to decide here.")
 
+    # Tier 2 is on by default -- lowest-friction setup enables PII detection
+    # without a prompt. Still hardware-gated: on a <8 GB machine the 300 MB
+    # model loads slowly, so we skip it rather than force a heavy download.
     section("Tier 2 - GLiNER PII detection (~300 MB) [ner]")
     _print(f"  {_gliner_why(hw)}")
-    gliner = _decide("  enable GLiNER PII detection?", default=hw.ram_gb >= 8, yes=yes)
+    gliner = hw.ram_gb >= 8
+    if gliner:
+        _print("  -> enabled by default. Remove later with `pip uninstall gliner`")
+        _print("     and clear detection_stack.gliner_pii in the dashboard.")
+    else:
+        _print("  -> skipped: under 8 GB RAM. Enable later by installing the 'ner'")
+        _print("     extra and setting detection_stack.gliner_pii=true.")
 
     section("Tier 3 - local LLM classifier (via Ollama)")
     _print(f"  {_tier3_why(hw, recommended)}")
@@ -1036,7 +1094,10 @@ def _wizard_walkthrough(hw: HardwareProfile, *, yes: bool) -> WizardChoices:
         _print(f"  -> using recommended preset: {recommended} ({model}) (auto)")
         preset: str | None = recommended
     else:
-        options = [(k, LLM_PRESETS[k]["model"]) for k in LLM_PRESETS]
+        options = [
+            (k, f"{LLM_PRESETS[k]['model']}  (~{LLM_PRESETS[k]['size_gb']:g} GB download)")
+            for k in LLM_PRESETS
+        ]
         options.append(("none", "skip Tier 3 (regex/GLiNER only)"))
         choice = prompt_choice("\n  pick a Tier-3 model:", options, default=recommended)
         preset = None if choice == "none" else choice
