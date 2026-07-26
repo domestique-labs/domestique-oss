@@ -370,10 +370,22 @@ def _detect_install_context() -> tuple[str, list[str]]:
 
     pipx installs live in their own venv and need `pipx inject`; a plain
     venv/pip install takes `pip install`. Returns (kind, argv).
+
+    Detection is OS-agnostic: ``sys.prefix`` is normalised to forward slashes
+    (Windows pipx venvs use backslashes, so the raw substring never matched),
+    and pipx's own ``pipx_metadata.json`` marker at the venv root is treated as
+    definitive — it also catches custom PIPX_HOME layouts whose path isn't
+    literally ".../pipx/venvs/...".
     """
     import os
+    from pathlib import Path
 
-    under_pipx = bool(os.environ.get("PIPX_HOME")) or "/pipx/venvs/" in sys.prefix
+    prefix_posix = sys.prefix.replace("\\", "/")
+    under_pipx = (
+        bool(os.environ.get("PIPX_HOME"))
+        or "/pipx/venvs/" in prefix_posix
+        or (Path(sys.prefix) / "pipx_metadata.json").is_file()
+    )
     if under_pipx and shutil.which("pipx"):
         return "pipx", ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
     return "pip", [sys.executable, "-m", "pip", "install", "domestique[browser-proxy]"]

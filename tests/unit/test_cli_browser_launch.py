@@ -75,6 +75,46 @@ class TestDetectInstallContext:
         assert kind == "pip"
         assert cmd == [sys.executable, "-m", "pip", "install", "domestique[browser-proxy]"]
 
+    def test_pipx_windows_style_prefix(self, monkeypatch):
+        # sys.prefix uses backslashes on Windows; the pipx-venv marker must
+        # still be recognised (regression: forward-slash literal never matched).
+        monkeypatch.delenv("PIPX_HOME", raising=False)
+        monkeypatch.setattr(
+            cli.sys, "prefix", r"C:\Users\x\AppData\Local\pipx\venvs\domestique"
+        )
+        monkeypatch.setattr(cli.shutil, "which", lambda name: r"C:\pipx.exe")
+        kind, cmd = cli._detect_install_context()
+        assert kind == "pipx"
+        assert cmd == ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
+
+    def test_pipx_via_metadata_marker_custom_home(self, monkeypatch, tmp_path):
+        # Custom PIPX_HOME (dir not literally named "pipx") — the substring check
+        # misses it on every OS, but pipx_metadata.json at the venv root is
+        # definitive.
+        (tmp_path / "pipx_metadata.json").write_text("{}")
+        monkeypatch.delenv("PIPX_HOME", raising=False)
+        monkeypatch.setattr(cli.sys, "prefix", str(tmp_path))
+        monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/pipx")
+        assert cli._detect_install_context()[0] == "pipx"
+
+    def test_linux_pipx_prefix_still_detected(self, monkeypatch):
+        # Regression guard: posix pipx layout keeps working.
+        monkeypatch.delenv("PIPX_HOME", raising=False)
+        monkeypatch.setattr(
+            cli.sys, "prefix", "/home/u/.local/share/pipx/venvs/domestique"
+        )
+        monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/pipx")
+        assert cli._detect_install_context()[0] == "pipx"
+
+    def test_pip_when_pipx_binary_absent(self, monkeypatch):
+        # Detected as under-pipx but the pipx CLI isn't on PATH -> safe pip fallback.
+        monkeypatch.delenv("PIPX_HOME", raising=False)
+        monkeypatch.setattr(cli.sys, "prefix", r"C:\Users\x\pipx\venvs\domestique")
+        monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+        kind, cmd = cli._detect_install_context()
+        assert kind == "pip"
+        assert cmd == [sys.executable, "-m", "pip", "install", "domestique[browser-proxy]"]
+
 
 class TestEnsureBrowserDependency:
     def test_present_returns_true_no_install(self, monkeypatch):
