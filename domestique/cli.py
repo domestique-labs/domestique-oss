@@ -470,20 +470,29 @@ def _spawn_dashboard_app() -> None:
     ``domestique_app.services.runtime.subprocess_group_kwargs`` (same
     logic, reimplemented here rather than imported: ``domestique/`` must
     never import ``domestique_app/``).
-    """
-    import os
 
-    kwargs: dict[str, object] = (
-        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-        if os.name == "nt"
-        else {"start_new_session": True}
-    )
-    subprocess.Popen(  # noqa: S603
-        [sys.executable, "-m", _APP_MODULE, "--mode", "portable", "--no-browser"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        **kwargs,
-    )
+    Two concrete branches, not one call with a **kwargs dict: mypy's
+    typeshed only exposes ``CREATE_NEW_PROCESS_GROUP`` under a literal
+    ``sys.platform == "win32"`` check (not ``os.name == "nt"``, which it
+    doesn't special-case), and unpacking a loosely-typed ``dict[str,
+    object]`` into ``Popen`` defeats its overload resolution regardless of
+    platform.
+    """
+    argv = [sys.executable, "-m", _APP_MODULE, "--mode", "portable", "--no-browser"]
+    if sys.platform == "win32":
+        subprocess.Popen(  # noqa: S603
+            argv,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
+    else:
+        subprocess.Popen(  # noqa: S603
+            argv,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
 
 
 def _ensure_app_running(url: str, *, timeout: float = 30.0) -> bool:
