@@ -48,34 +48,26 @@ def mock_ctx():
 
 class TestDetectLowResourceHardware:
     def test_low_ram_and_no_gpu_is_low_resource(self):
-        with (
-            patch("scripts.install.detect_total_ram_gb", return_value=4.0),
-            patch("scripts.install.detect_gpu", return_value=(None, 0.0)),
-        ):
+        with patch("scripts.install.detect_total_ram_gb", return_value=4.0), \
+             patch("scripts.install.detect_gpu", return_value=(None, 0.0)):
             assert _detect_low_resource_hardware() is True
 
     def test_no_gpu_alone_is_low_resource_even_with_plenty_of_ram(self):
         """A capable-RAM machine with no discrete GPU still gets the light
         profile -- in-process model loading on pure CPU is slow to bind
         even when it wouldn't OOM."""
-        with (
-            patch("scripts.install.detect_total_ram_gb", return_value=32.0),
-            patch("scripts.install.detect_gpu", return_value=(None, 0.0)),
-        ):
+        with patch("scripts.install.detect_total_ram_gb", return_value=32.0), \
+             patch("scripts.install.detect_gpu", return_value=(None, 0.0)):
             assert _detect_low_resource_hardware() is True
 
     def test_low_ram_alone_is_low_resource_even_with_a_gpu(self):
-        with (
-            patch("scripts.install.detect_total_ram_gb", return_value=4.0),
-            patch("scripts.install.detect_gpu", return_value=("Some GPU", 4.0)),
-        ):
+        with patch("scripts.install.detect_total_ram_gb", return_value=4.0), \
+             patch("scripts.install.detect_gpu", return_value=("Some GPU", 4.0)):
             assert _detect_low_resource_hardware() is True
 
     def test_capable_machine_is_not_low_resource(self):
-        with (
-            patch("scripts.install.detect_total_ram_gb", return_value=32.0),
-            patch("scripts.install.detect_gpu", return_value=("NVIDIA RTX 4090", 24.0)),
-        ):
+        with patch("scripts.install.detect_total_ram_gb", return_value=32.0), \
+             patch("scripts.install.detect_gpu", return_value=("NVIDIA RTX 4090", 24.0)):
             assert _detect_low_resource_hardware() is False
 
     def test_detection_failure_fails_toward_capable(self):
@@ -136,13 +128,17 @@ class TestLightProfileStack:
         be honored on low-resource hardware instead of forced off. This is
         the low-resource user's supported way to keep (or re-enable) the
         shipped-default heavy detector."""
-        light = _light_profile_stack({"regex": True, "qwen3_1_7b": True}, stack_configured=True)
+        light = _light_profile_stack(
+            {"regex": True, "qwen3_1_7b": True}, stack_configured=True
+        )
         assert light["qwen3_1_7b"] is True
 
     def test_unconfigured_stack_still_forces_off_default_qwen3(self):
         """Sanity check: leaving stack_configured at its default (False)
         preserves the pre-fix behavior exactly."""
-        light = _light_profile_stack({"regex": True, "qwen3_1_7b": True}, stack_configured=False)
+        light = _light_profile_stack(
+            {"regex": True, "qwen3_1_7b": True}, stack_configured=False
+        )
         assert light["qwen3_1_7b"] is False
 
     def test_configured_stack_also_honors_explicit_false(self):
@@ -176,15 +172,12 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: False
         settings_seen: list = []
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline(settings_seen),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
 
@@ -197,15 +190,12 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline(settings_seen),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
 
@@ -220,15 +210,12 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "gliner_pii": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline(settings_seen),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "gliner_pii": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
 
@@ -241,15 +228,12 @@ class TestAddonHardwareProfileWiring:
         addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: True
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline([]),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
 
@@ -264,15 +248,12 @@ class TestAddonHardwareProfileWiring:
         addon = DomestiqueAddon()
         addon._hardware_is_low_resource = lambda: False
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline([]),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
 
@@ -288,10 +269,7 @@ class TestAddonHardwareProfileWiring:
             calls.append(1)
             return False
 
-        with patch(
-            "domestique_app.services.mitm_addon._detect_low_resource_hardware",
-            side_effect=_tracked,
-        ):
+        with patch("domestique_app.services.mitm_addon._detect_low_resource_hardware", side_effect=_tracked):
             addon._hardware_is_low_resource()
             addon._hardware_is_low_resource()
             addon._hardware_is_low_resource()
@@ -309,30 +287,27 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={
-                    # A real on-disk config always serializes every
-                    # DetectionStackConfig field (AppConfig.to_dict()) -- here
-                    # every field is already at its safe default (including the
-                    # qwen3_1_7b default of True), so an honored/configured
-                    # stack is identical to the raw stack: no forced change, no
-                    # light-profile note.
-                    "detection_stack": {
-                        "regex": True,
-                        "gliner_pii": False,
-                        "gemma4_e2b": False,
-                        "qwen3_1_7b": True,
-                        "legacy_cpu": False,
-                    },
-                    "detection_stack_configured": True,
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={
+                # A real on-disk config always serializes every
+                # DetectionStackConfig field (AppConfig.to_dict()) -- here
+                # every field is already at its safe default (including the
+                # qwen3_1_7b default of True), so an honored/configured
+                # stack is identical to the raw stack: no forced change, no
+                # light-profile note.
+                "detection_stack": {
+                    "regex": True,
+                    "gliner_pii": False,
+                    "gemma4_e2b": False,
+                    "qwen3_1_7b": True,
+                    "legacy_cpu": False,
                 },
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline(settings_seen),
-            ),
+                "detection_stack_configured": True,
+            },
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
 
@@ -352,15 +327,12 @@ class TestAddonHardwareProfileWiring:
         addon._hardware_is_low_resource = lambda: True
         settings_seen: list = []
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline(settings_seen),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline(settings_seen),
         ):
             addon._init_detector()
 
@@ -386,20 +358,16 @@ class TestLightProfileSurfacedInStats:
         addon._stats_file = tmp_path / "browser_stats.json"
         addon._hardware_is_low_resource = lambda: True
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline([]),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
 
         import json as _json
-
         persisted = _json.loads(addon._stats_file.read_text())
         assert persisted["light_profile_active"] is True
 
@@ -409,19 +377,15 @@ class TestLightProfileSurfacedInStats:
         addon._stats_file = tmp_path / "browser_stats.json"
         addon._hardware_is_low_resource = lambda: False
 
-        with (
-            patch(
-                "domestique_app.services.pipeline_config.load_config_dict",
-                return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
-            ),
-            patch(
-                "domestique.detectors.registry.create_detector_pipeline",
-                side_effect=_patched_pipeline([]),
-            ),
+        with patch(
+            "domestique_app.services.pipeline_config.load_config_dict",
+            return_value={"detection_stack": {"regex": True, "qwen3_1_7b": True}},
+        ), patch(
+            "domestique.detectors.registry.create_detector_pipeline",
+            side_effect=_patched_pipeline([]),
         ):
             addon._init_detector()
 
         import json as _json
-
         persisted = _json.loads(addon._stats_file.read_text())
         assert persisted["light_profile_active"] is False

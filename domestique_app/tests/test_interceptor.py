@@ -365,7 +365,9 @@ class TestWindowsSystemProxyPACOnly:
         assert "ProxyServer" not in store
         assert "ProxyOverride" not in store
 
-    def test_enable_backs_up_and_disable_restores_existing_system_pac(self, tmp_path, monkeypatch):
+    def test_enable_backs_up_and_disable_restores_existing_system_pac(
+        self, tmp_path, monkeypatch
+    ):
         store = _install_fake_winreg(monkeypatch)
         self._patch_platform(monkeypatch, tmp_path)
 

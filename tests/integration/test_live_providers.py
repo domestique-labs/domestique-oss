@@ -55,8 +55,7 @@ _needs_openai = pytest.mark.skipif(
     not _OPENAI_KEY, reason="set DOMESTIQUE_LIVE_OPENAI_KEY to run the live OpenAI-door test"
 )
 _needs_anthropic = pytest.mark.skipif(
-    not _ANTHROPIC_KEY,
-    reason="set DOMESTIQUE_LIVE_ANTHROPIC_KEY to run the live Anthropic-door test",
+    not _ANTHROPIC_KEY, reason="set DOMESTIQUE_LIVE_ANTHROPIC_KEY to run the live Anthropic-door test"
 )
 
 

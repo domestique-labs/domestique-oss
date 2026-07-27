@@ -44,9 +44,7 @@ class TestPolicyEvaluation:
         assert engine.evaluate([_det(category="github_token")]) is Action.BLOCK
 
     def test_blocks_password(self, engine: PolicyEngine) -> None:
-        assert (
-            engine.evaluate([_det(category="password_literal", confidence=0.87)]) is Action.BLOCK
-        )
+        assert engine.evaluate([_det(category="password_literal", confidence=0.87)]) is Action.BLOCK
 
     def test_redacts_ssn(self, engine: PolicyEngine) -> None:
         det = _det(detector="pii_detector", category="us_ssn", confidence=0.85)
@@ -91,26 +89,13 @@ class TestCustomRules:
         assert engine.evaluate([det]) is Action.BLOCK
 
     def test_category_filter(self) -> None:
-        engine = PolicyEngine(
-            rules=[
-                Rule(
-                    name="only-emails",
-                    detector="pii_detector",
-                    action=Action.REDACT,
-                    categories=["email_address"],
-                ),
-            ]
-        )
+        engine = PolicyEngine(rules=[
+            Rule(name="only-emails", detector="pii_detector", action=Action.REDACT, categories=["email_address"]),
+        ])
         # Phone should not match.
-        assert (
-            engine.evaluate([_det(detector="pii_detector", category="phone_number")])
-            is Action.ALLOW
-        )
+        assert engine.evaluate([_det(detector="pii_detector", category="phone_number")]) is Action.ALLOW
         # Email should match.
-        assert (
-            engine.evaluate([_det(detector="pii_detector", category="email_address")])
-            is Action.REDACT
-        )
+        assert engine.evaluate([_det(detector="pii_detector", category="email_address")]) is Action.REDACT
 
 
 class TestDisplayPath:

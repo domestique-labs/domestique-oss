@@ -54,7 +54,9 @@ class TestInstallerPromptsFailSafeOnEof:
         assert wizard.pick_features(_installer_args()) == set()
 
     def test_pick_preset_eof_returns_none(self, eof_stdin):
-        preset = wizard.pick_preset(_installer_args(), ram_gb=16.0, vram_gb=4.0, free_vram_gb=1.0)
+        preset = wizard.pick_preset(
+            _installer_args(), ram_gb=16.0, vram_gb=4.0, free_vram_gb=1.0
+        )
         assert preset is None
 
     def test_confirm_plan_eof_aborts(self, eof_stdin):

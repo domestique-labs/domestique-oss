@@ -39,10 +39,8 @@ def test_report_command_shows_counts(capsys) -> None:
     path = Path(os.environ["DOMESTIQUE_AUDIT_LOG"])
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps({"action": "redact", "categories": ["us_ssn"]})
-        + "\n"
-        + json.dumps({"action": "block", "categories": ["private_key"]})
-        + "\n"
+        json.dumps({"action": "redact", "categories": ["us_ssn"]}) + "\n"
+        + json.dumps({"action": "block", "categories": ["private_key"]}) + "\n"
     )
     rc = main(["report"])
     out = capsys.readouterr().out

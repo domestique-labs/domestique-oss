@@ -126,24 +126,20 @@ class TestVenvScannerPipeReading:
 class TestPathEscaping:
     """Verify Windows backslash paths are properly escaped in inline scripts."""
 
-    @pytest.mark.parametrize(
-        "path",
-        [
-            r"C:\Users\david\domestique",
-            r"C:\Program Files\Python311",
-            r"D:\projects\my app\src",
-            "/home/user/domestique",  # Unix paths should also work
-            "/Users/david/Projects/domestique",
-        ],
-    )
+    @pytest.mark.parametrize("path", [
+        r"C:\Users\david\domestique",
+        r"C:\Program Files\Python311",
+        r"D:\projects\my app\src",
+        "/home/user/domestique",  # Unix paths should also work
+        "/Users/david/Projects/domestique",
+    ])
     def test_escaped_path_in_inline_script(self, path: str):
         """An escaped path embedded in a Python -c script must be importable."""
         escaped = path.replace("\\", "\\\\")
         script = f"import sys; sys.path.insert(0, '{escaped}'); print(sys.path[0])"
         result = subprocess.run(
             [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
+            capture_output=True, text=True,
         )
         assert result.returncode == 0
         assert result.stdout.strip() == path
@@ -155,8 +151,7 @@ class TestPathEscaping:
         script = f"import sys; sys.path.insert(0, '{path}')"
         result = subprocess.run(
             [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
+            capture_output=True, text=True,
         )
         # This should fail because \U is an invalid escape sequence
         assert result.returncode != 0
@@ -212,7 +207,9 @@ class TestLineEndingHandling:
             {"action": "allowed", "user": "test2", "model": "claude"},
         ]
         # Write with Windows line endings
-        log_file.write_text("\r\n".join(json.dumps(e) for e in entries) + "\r\n")
+        log_file.write_text(
+            "\r\n".join(json.dumps(e) for e in entries) + "\r\n"
+        )
         # Parse the way the fixed code does
         lines = log_file.read_text().strip().splitlines()
         parsed = []
@@ -238,11 +235,9 @@ class TestClearPortDispatch:
         from domestique_app.services.proxy import BrowserProxyService
 
         svc = BrowserProxyService()
-        with (
-            patch("domestique_app.services.proxy.is_port_listening", return_value=True),
-            patch("domestique_app.services.proxy.is_windows", return_value=True),
-            patch.object(svc, "_clear_stale_windows_mitmproxy", return_value=False) as mock_win,
-        ):
+        with patch("domestique_app.services.proxy.is_port_listening", return_value=True), \
+             patch("domestique_app.services.proxy.is_windows", return_value=True), \
+             patch.object(svc, "_clear_stale_windows_mitmproxy", return_value=False) as mock_win:
             with pytest.raises(RuntimeError, match="already in use"):
                 svc._clear_port()
             mock_win.assert_called_once()
@@ -252,11 +247,9 @@ class TestClearPortDispatch:
         from domestique_app.services.proxy import BrowserProxyService
 
         svc = BrowserProxyService()
-        with (
-            patch("domestique_app.services.proxy.is_port_listening", return_value=True),
-            patch("domestique_app.services.proxy.is_windows", return_value=False),
-            patch("subprocess.run") as mock_run,
-        ):
+        with patch("domestique_app.services.proxy.is_port_listening", return_value=True), \
+             patch("domestique_app.services.proxy.is_windows", return_value=False), \
+             patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="")
             svc._clear_port()
             # Should have called lsof
@@ -269,10 +262,8 @@ class TestClearPortDispatch:
         from domestique_app.services.proxy import BrowserProxyService
 
         svc = BrowserProxyService()
-        with (
-            patch("domestique_app.services.proxy.is_port_listening", return_value=False),
-            patch("subprocess.run") as mock_run,
-        ):
+        with patch("domestique_app.services.proxy.is_port_listening", return_value=False), \
+             patch("subprocess.run") as mock_run:
             svc._clear_port()
             mock_run.assert_not_called()
 
@@ -287,7 +278,6 @@ class TestRuntimeHelpers:
 
     def test_subprocess_group_kwargs_returns_dict(self):
         from domestique_app.services.runtime import subprocess_group_kwargs
-
         kwargs = subprocess_group_kwargs()
         assert isinstance(kwargs, dict)
         if sys.platform == "win32":
@@ -315,12 +305,10 @@ class TestRuntimeHelpers:
 
     def test_venv_python_returns_none_when_missing(self, tmp_path: Path):
         from domestique_app.services.runtime import venv_python
-
         assert venv_python(tmp_path) is None
 
     def test_is_port_listening_false_for_unbound_port(self):
         from domestique_app.services.runtime import is_port_listening
-
         # Port 1 should never be listening (requires root/admin)
         assert is_port_listening(1, timeout=0.1) is False
 
@@ -340,17 +328,8 @@ class TestProxyRestart:
 
         from domestique_app.server.api import _proxy_service, _browser_proxy_service
 
-        with (
-            patch.object(
-                type(_proxy_service), "is_running", new_callable=PropertyMock, return_value=False
-            ),
-            patch.object(
-                type(_browser_proxy_service),
-                "is_running",
-                new_callable=PropertyMock,
-                return_value=False,
-            ),
-        ):
+        with patch.object(type(_proxy_service), "is_running", new_callable=PropertyMock, return_value=False), \
+             patch.object(type(_browser_proxy_service), "is_running", new_callable=PropertyMock, return_value=False):
             # Simulate the handler logic
             restarted = []
             failed = []
@@ -376,10 +355,8 @@ class TestProxyRestart:
         svc._process = MagicMock()
         svc._process.poll.return_value = None  # Process is running
 
-        with (
-            patch.object(svc, "stop") as mock_stop,
-            patch.object(svc, "start", side_effect=fake_start),
-        ):
+        with patch.object(svc, "stop") as mock_stop, \
+             patch.object(svc, "start", side_effect=fake_start):
             # Simulate restart
             if svc.is_running:
                 svc.stop()
@@ -400,7 +377,6 @@ class TestResourceMonitor:
     def test_snapshot_returns_nonzero_memory(self):
         """Memory RSS must be non-zero on any platform."""
         from domestique_app.server.api import _ResourceMonitor
-
         mon = _ResourceMonitor()
         snap = mon.snapshot()
         assert snap["mem_rss_mb"] > 0, "Memory RSS should be non-zero"
@@ -408,23 +384,18 @@ class TestResourceMonitor:
     def test_snapshot_returns_cpu_count(self):
         import os
         from domestique_app.server.api import _ResourceMonitor
-
         mon = _ResourceMonitor()
         snap = mon.snapshot()
         assert snap["cpu_count"] == (os.cpu_count() or 1)
 
     def test_snapshot_cpu_percent_is_nonnegative(self):
         from domestique_app.server.api import _ResourceMonitor
-
         mon = _ResourceMonitor()
         snap = mon.snapshot()
         assert snap["cpu_percent"] >= 0
 
     def test_snapshot_returns_all_keys(self):
         from domestique_app.server.api import _ResourceMonitor
-
         mon = _ResourceMonitor()
         snap = mon.snapshot()
-        assert {"cpu_percent", "mem_rss_mb", "gpu_vram_mb", "cpu_count", "ollama"} <= set(
-            snap.keys()
-        )
+        assert {"cpu_percent", "mem_rss_mb", "gpu_vram_mb", "cpu_count", "ollama"} <= set(snap.keys())

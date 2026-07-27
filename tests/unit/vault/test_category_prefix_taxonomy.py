@@ -8,6 +8,6 @@ def test_existing_categories_keep_their_prefixes():
 
 
 def test_gliner_and_llm_prefixes_normalize():
-    assert category_prefix("pii:person") == "PERSON"  # was PII_PERSON
+    assert category_prefix("pii:person") == "PERSON"      # was PII_PERSON
     assert category_prefix("pii:email") == "EMAIL"
-    assert category_prefix("person") == "PERSON"  # same token as GLiNER now
+    assert category_prefix("person") == "PERSON"          # same token as GLiNER now

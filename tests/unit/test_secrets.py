@@ -75,7 +75,9 @@ class TestTrueNegatives:
             "The meeting is at 3pm on Monday.",
         ],
     )
-    async def test_no_detection_on_clean_text(self, detector: SecretDetector, text: str) -> None:
+    async def test_no_detection_on_clean_text(
+        self, detector: SecretDetector, text: str
+    ) -> None:
         findings = await detector.scan(text)
         high_confidence = [f for f in findings if f.confidence >= 0.85]
         assert high_confidence == []

@@ -8,27 +8,17 @@ DATA = Path("benchmarks/eval/data/corpus.jsonl")
 
 
 def _m(**kw):
-    base = dict(
-        bypass_rate=0.1,
-        false_positive_rate=0.0,
-        precision=1.0,
-        recall=0.9,
-        f1=0.95,
-        action_match_rate=0.9,
-        latency_p50_ms=1.0,
-        latency_p95_ms=2.0,
-        latency_p99_ms=3.0,
-        n=15,
-    )
+    base = dict(bypass_rate=0.1, false_positive_rate=0.0, precision=1.0, recall=0.9,
+               f1=0.95, action_match_rate=0.9, latency_p50_ms=1.0, latency_p95_ms=2.0,
+               latency_p99_ms=3.0, n=15)
     base.update(kw)
     return Metrics(**base)
 
 
 def _write(path, metrics):
     path.write_text(
-        json.dumps(
-            {"commit": "x", "corpus_sha": "y", "profile": "core", "metrics": metrics.__dict__}
-        ),
+        json.dumps({"commit": "x", "corpus_sha": "y", "profile": "core",
+                    "metrics": metrics.__dict__}),
         encoding="utf-8",
     )
 
@@ -77,8 +67,8 @@ def test_compare_gate_exit_codes(tmp_path):
     _write(main, _m(bypass_rate=0.10, recall=0.90))
 
     _write(pr, _m(bypass_rate=0.10, recall=0.90, latency_p50_ms=99.0))
-    assert compare(main, pr, fail_on_regression=True) == 0  # latency-only → pass
+    assert compare(main, pr, fail_on_regression=True) == 0        # latency-only → pass
 
     _write(pr, _m(bypass_rate=0.40, recall=0.60))
-    assert compare(main, pr, fail_on_regression=True) == 1  # quality drop → fail
-    assert compare(main, pr, fail_on_regression=False) == 0  # gate off → report only
+    assert compare(main, pr, fail_on_regression=True) == 1        # quality drop → fail
+    assert compare(main, pr, fail_on_regression=False) == 0       # gate off → report only

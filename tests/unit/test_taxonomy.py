@@ -31,7 +31,6 @@ def test_prefix_for_canonical_and_derived():
 
 def test_prefix_for_never_exceeds_bound():
     from domestique.taxonomy import MAX_PREFIX_LEN
-
     long = "a_very_long_made_up_category_" * 3
     assert len(prefix_for(long)) <= MAX_PREFIX_LEN
 

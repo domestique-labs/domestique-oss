@@ -76,7 +76,9 @@ class TestRealWindowsBackend:
             "this environment can't validate the DPAPI-backed path"
         )
 
-    def test_real_roundtrip_persists_across_instances(self, throwaway_keyring_entry: None) -> None:
+    def test_real_roundtrip_persists_across_instances(
+        self, throwaway_keyring_entry: None
+    ) -> None:
         first = KeyringKeyProvider().get_or_create_key()
         assert first is not None
         assert len(first) == 32
