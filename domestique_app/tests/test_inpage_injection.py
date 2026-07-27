@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("mitmproxy")  # requires the [browser-proxy] extra; skip cleanly when absent
+
 from domestique_app.services.inpage_feedback import INJECTION_MARKER
 from domestique_app.services.mitm_addon import DomestiqueAddon
 
