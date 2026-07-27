@@ -240,3 +240,33 @@ class TestLedgerNeverMintsTokens:
         # every token shown must actually appear in the AFTER text
         for token in re.findall(r"\[[A-Z0-9_]+_\d+\]", out):
             assert token in (res.redacted_text or ""), f"{token} shown but never sent"
+
+
+class TestBlockedLedgerStillListsFindings:
+    """A blocked prompt must never render as "nothing sensitive detected".
+
+    On BLOCK the pipeline mints no tokens, so the token lookup skipped every
+    row and the ledger claimed nothing was found - for a prompt blocked because
+    it contained a private key.
+    """
+
+    def test_blocked_with_token_service_lists_the_finding(self) -> None:
+        from domestique.vault import build_default_token_service
+
+        ts = build_default_token_service(pinned=False)
+        secret = "-----BEGIN RSA PRIVATE KEY-----"
+        before = f"here is my key {secret}"
+        findings = [
+            Finding(
+                detector="regex",
+                category="private_key",
+                confidence=0.99,
+                span=Span(15, 15 + len(secret)),
+            )
+        ]
+        out = _render_ledger(
+            before, None, findings, color=False, token_service=ts, action=Action.BLOCK
+        )
+        assert "nothing sensitive detected" not in out
+        assert "Private key" in out
+        assert "blocked" in out.lower()

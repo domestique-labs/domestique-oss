@@ -743,14 +743,23 @@ def _render_ledger(
     if token_service is not None:
         token_of = {value: token for token, value in token_service.session.entries().items()}
 
+    # A blocked prompt is never tokenized — nothing is sent, so nothing is
+    # minted. Findings must still be listed: reporting "nothing sensitive
+    # detected" for a prompt blocked over a private key is the worst possible
+    # lie this view can tell.
+    blocked = action is Action.BLOCK
+
     rows = []
     for f in ordered:
         assert f.span is not None
         value = before[f.span.start : f.span.end]
-        if token_service is not None:
-            token = token_of.get(value)
-            if token is None:
+        if blocked:
+            token = "not sent"
+        elif token_service is not None:
+            found = token_of.get(value)
+            if found is None:
                 continue  # merged into an overlapping span; not its own redaction
+            token = found
         else:
             token = f"[{f.category.upper()}_REDACTED]"
         rows.append((_label(f.category), _truncate(value), token, f"{f.confidence:.0%}"))
@@ -760,12 +769,16 @@ def _render_ledger(
 
     lw = max(len(r[0]) for r in rows)
     vw = max(len(r[1]) for r in rows)
-    out = [f"  {paint(g['check'], 'green')} redacted {len(rows)} secret(s)"]
+    if blocked:
+        out = [f"  {paint(g['cross'], 'red')} blocked on {len(rows)} finding(s)"]
+    else:
+        out = [f"  {paint(g['check'], 'green')} redacted {len(rows)} secret(s)"]
     for label, leaked, token, conf in rows:
+        mark = paint(g["cross"], "red") if blocked else paint(g["check"], "green")
         out.append(
-            f"    {paint(g['check'], 'green')} {label:<{lw}}  "
+            f"    {mark} {label:<{lw}}  "
             f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
-            f"{paint(token, 'green')}  {paint(conf, 'dim')}"
+            f"{paint(token, 'red' if blocked else 'green')}  {paint(conf, 'dim')}"
         )
     out.extend(_render_outcome(after, paint, g, action=action))
     return "\n".join(out)
