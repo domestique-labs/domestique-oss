@@ -56,29 +56,41 @@ def _resolve_gemma_model() -> str:
 # Model presets - tuned for different hardware profiles.
 # ═══════════════════════════════════════════════════════════════════════════════
 
+#: Generation cap for the extractor (Ollama ``num_predict``).
+#:
+#: This tier used to be a whole-text classifier answering with a single word, so
+#: 40 tokens was plenty. It is now a *span extractor* that returns a JSON array
+#: of ``{"t","c","v"}`` objects — roughly 25-30 tokens each — and 40 truncated
+#: that array mid-object on any realistic multi-entity prompt, which parsed to
+#: nothing and silently dropped every LLM finding.
+#:
+#: Raising the cap costs no latency: the request sets ``stop=["]"]``, so
+#: generation halts at the array close. The cap is only a runaway guard.
+_EXTRACTOR_MAX_TOKENS = 512
+
 MODEL_PRESETS: dict[str, dict[str, Any]] = {
     "minimal": {
         "model": "qwen3:1.7b",
         "description": "CPU-only, 1.5GB RAM, lightweight",
-        "max_tokens": 40,
+        "max_tokens": _EXTRACTOR_MAX_TOKENS,
         "temperature": 0.0,
     },
     "balanced": {
         "model": _resolve_gemma_model(),
         "description": "Gemma 4 E2B, auto-selects MLX on Apple Silicon",
-        "max_tokens": 40,
+        "max_tokens": _EXTRACTOR_MAX_TOKENS,
         "temperature": 0.0,
     },
     "quality": {
         "model": _resolve_gemma_model(),
         "description": "Same as balanced (Gemma 4 E2B is already high quality)",
-        "max_tokens": 40,
+        "max_tokens": _EXTRACTOR_MAX_TOKENS,
         "temperature": 0.0,
     },
     "legacy-cpu": {
         "model": "llama3.2:1b",
         "description": "Fallback for non-Google environments, 2GB RAM",
-        "max_tokens": 40,
+        "max_tokens": _EXTRACTOR_MAX_TOKENS,
         "temperature": 0.0,
     },
 }
@@ -330,5 +342,22 @@ class LocalLLMClassifier:
             parsed = json.loads(content)
             return parsed if isinstance(parsed, list) else None
         except json.JSONDecodeError:
-            logger.debug("local_llm_unparseable_response", content=content[:100])
-            return None
+            pass
+
+        # Hitting num_predict cuts the array mid-object. Dropping the whole
+        # response would fail open on a DLP path — the entities the model *did*
+        # find would pass through unredacted — so salvage the complete prefix by
+        # cutting back to the last closed object.
+        last_complete = content.rfind("}")
+        if last_complete != -1:
+            try:
+                parsed = json.loads(content[: last_complete + 1] + "]")
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(parsed, list):
+                    logger.debug("local_llm_salvaged_truncated_response", kept=len(parsed))
+                    return parsed
+
+        logger.debug("local_llm_unparseable_response", content=content[:100])
+        return None

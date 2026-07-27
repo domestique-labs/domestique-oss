@@ -91,3 +91,56 @@ def test_non_numeric_confidence_drops_item_without_raising(monkeypatch):
 
     assert len(dets) == 1
     assert dets[0].category == "us_ssn"
+
+
+class TestExtractorTokenBudget:
+    """The tier emits a JSON array now, not a one-word verdict.
+
+    ``max_tokens`` (-> Ollama ``num_predict``) is only a safety cap: the request
+    sets ``stop=["]"]``, so generation halts at the array close and a larger cap
+    costs no extra latency. The classifier-era budget of 40 truncated the array
+    mid-object, which parsed to nothing and silently dropped every LLM finding.
+    """
+
+    def test_every_preset_budgets_a_json_array(self):
+        from domestique.detectors.local_llm import MODEL_PRESETS
+
+        for name, preset in MODEL_PRESETS.items():
+            # ~25-30 tokens per {"t","c","v"} entity; 40 fit barely one.
+            assert preset["max_tokens"] >= 256, f"{name} cannot fit a multi-entity array"
+
+
+class TestParseResponseSalvage:
+    """A truncated array must degrade to its complete prefix, never to nothing.
+
+    Returning ``None`` makes ``scan`` yield zero detections — a fail-open on a
+    DLP path, so the secrets the model *did* find would pass through unredacted.
+    """
+
+    def test_salvages_complete_objects_from_truncated_array(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        # what num_predict truncation actually produces (observed with qwen3:1.7b)
+        content = '[\n  {"t": "123-45-6789", "c": "us_ssn", "v": 0.9},\n  {"t": "EB-'
+        parsed = LocalLLMClassifier._parse_response(content)
+        assert parsed is not None, "truncation dropped every finding (fail-open)"
+        assert len(parsed) == 1
+        assert parsed[0]["t"] == "123-45-6789"
+
+    def test_still_parses_a_complete_array(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        content = '[{"t": "a@b.com", "c": "email", "v": 0.9}]'
+        assert LocalLLMClassifier._parse_response(content) == [
+            {"t": "a@b.com", "c": "email", "v": 0.9}
+        ]
+
+    def test_empty_array_stays_empty(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        assert LocalLLMClassifier._parse_response("[]") == []
+
+    def test_unsalvageable_garbage_returns_none(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        assert LocalLLMClassifier._parse_response("I cannot help with that") is None
