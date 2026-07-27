@@ -96,10 +96,10 @@ def test_non_numeric_confidence_drops_item_without_raising(monkeypatch):
 class TestExtractorTokenBudget:
     """The tier emits a JSON array now, not a one-word verdict.
 
-    ``max_tokens`` (-> Ollama ``num_predict``) is only a safety cap: the request
-    sets ``stop=["]"]``, so generation halts at the array close and a larger cap
-    costs no extra latency. The classifier-era budget of 40 truncated the array
-    mid-object, which parsed to nothing and silently dropped every LLM finding.
+    ``max_tokens`` (-> Ollama ``num_predict``) is a runaway guard, not a target:
+    the model emits its array and stops, so a larger cap costs nothing in the
+    normal case. The classifier-era budget of 40 truncated the array mid-object,
+    which parsed to nothing and silently dropped every LLM finding.
     """
 
     def test_every_preset_budgets_a_json_array(self):
@@ -196,3 +196,139 @@ class TestBackendFailureIsVisible:
         clf = LocalLLMClassifier(confidence_threshold=0.7)
         # must degrade gracefully, never raise into the pipeline
         assert asyncio.run(clf.scan("a longer piece of text to scan here")) == []
+
+
+class TestLegacyPromptFormat:
+    """A prompt saved before the extractor rewrite must not silently kill the tier.
+
+    `config_loader` restores `classifier_prompt` from config verbatim, so a
+    prompt saved via the dashboard still asks for the old classifier shape - a
+    single JSON object rather than an array. That parsed to None, yielding zero
+    detections forever with only a DEBUG line: a silent fail-open.
+    """
+
+    def test_lone_object_is_accepted_as_a_single_item(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        parsed = LocalLLMClassifier._parse_response('{"t":"a@b.com","c":"email","v":0.9}')
+        assert parsed == [{"t": "a@b.com", "c": "email", "v": 0.9}]
+
+    def test_unparseable_response_warns_once_not_only_debug(self, monkeypatch):
+        import urllib.request
+
+        import structlog.testing
+
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        class _Resp:
+            def read(self):
+                return b'{"message": {"content": "SENSITIVE"}}'
+
+        class _Opener:
+            def open(self, *a, **k):
+                return _Resp()
+
+        monkeypatch.setattr(urllib.request, "build_opener", lambda *a, **k: _Opener())
+        clf = LocalLLMClassifier(confidence_threshold=0.7)
+        with structlog.testing.capture_logs() as logs:
+            assert asyncio.run(clf._classify("some text with a secret in it")) is None
+            asyncio.run(clf._classify("more text with another secret here"))
+
+        warned = [e for e in logs if e.get("event") == "local_llm_unusable_response"]
+        assert len(warned) == 1, "a tier producing nothing must say so exactly once"
+        assert warned[0].get("log_level") == "warning"
+
+
+class TestSalvageWithBracesInValues:
+    """A "}" inside a string value must not defeat truncation salvage."""
+
+    def test_brace_in_password_value(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        parsed = LocalLLMClassifier._parse_response(
+            '[{"t":"pw=a{b}c","c":"password","v":0.9},{"t":"unter}minated'
+        )
+        assert parsed == [{"t": "pw=a{b}c", "c": "password", "v": 0.9}]
+
+    def test_brace_in_truncated_tail(self):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        parsed = LocalLLMClassifier._parse_response(
+            '[{"t":"first@x.com","c":"email","v":0.9},{"t":"code {x} = }'
+        )
+        assert parsed == [{"t": "first@x.com", "c": "email", "v": 0.9}]
+
+
+class TestEveryOccurrenceRedacted:
+    """A value reported once but appearing N times must be redacted N times.
+
+    The model reports each entity once; the old per-substring cursor mapped that
+    to exactly one span, so occurrences 2..N went upstream in cleartext. Tiers
+    1/2 cover canonical categories, but for an LLM-COINED category the LLM is
+    the only source - so this was a live leak path.
+    """
+
+    def test_repeated_value_reported_once_redacts_all_occurrences(self, monkeypatch):
+        text = "badge EB-99213 issued; reissued badge EB-99213; still EB-99213 today"
+        items = [{"t": "EB-99213", "c": "employee_badge", "v": 0.9}]
+        clf = _clf(monkeypatch, items)
+        dets = asyncio.run(clf.scan(text))
+        spans = sorted((d.span.start, d.span.end) for d in dets)
+        assert len(spans) == 3, f"only {len(spans)} of 3 occurrences detected: {spans}"
+        for start, end in spans:
+            assert text[start:end] == "EB-99213"
+
+    def test_duplicate_reports_do_not_double_count(self, monkeypatch):
+        text = "key AKIAIOSFODNN7EXAMPLE and again AKIAIOSFODNN7EXAMPLE here"
+        items = [
+            {"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key", "v": 0.9},
+            {"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key", "v": 0.9},
+        ]
+        clf = _clf(monkeypatch, items)
+        dets = asyncio.run(clf.scan(text))
+        spans = sorted({(d.span.start, d.span.end) for d in dets})
+        assert len(spans) == 2, f"expected 2 distinct spans, got {spans}"
+
+
+class TestParseResponseIsTolerant:
+    """A malformed wrapper must not discard entities the model did find.
+
+    Returning None means zero detections and the request goes upstream in
+    CLEARTEXT - a total tier bypass. These shapes were all observed from
+    supported models (qwen3:1.7b) with the shipped default prompt.
+    """
+
+    def _p(self, content):
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        return LocalLLMClassifier._parse_response(content)
+
+    def test_array_of_pairs_missing_braces(self):
+        # observed verbatim from qwen3:1.7b: '{' dropped on every element
+        got = self._p(
+            '["t":"Priya Raman","c":"person","v":0.9],'
+            '["t":"Tomas Berg","c":"person","v":0.9],'
+            '["t":"Wei Chen","c":"person","v":0.9]'
+        )
+        assert got is not None, "malformed wrapper dropped every entity (cleartext)"
+        assert [d["t"] for d in got] == ["Priya Raman", "Tomas Berg", "Wei Chen"]
+
+    def test_prose_preamble_before_the_array(self):
+        got = self._p('Here is the JSON:\n[{"t":"a@b.com","c":"email","v":0.9}]')
+        assert got == [{"t": "a@b.com", "c": "email", "v": 0.9}]
+
+    def test_think_block_then_array(self):
+        got = self._p('<think>reasoning...</think>\n[{"t":"a@b.com","c":"email","v":0.9}]')
+        assert got == [{"t": "a@b.com", "c": "email", "v": 0.9}]
+
+    def test_trailing_garbage_after_the_array(self):
+        got = self._p('[{"t":"a@b.com","c":"email","v":0.9}] Hope this helps!')
+        assert got == [{"t": "a@b.com", "c": "email", "v": 0.9}]
+
+    def test_deeply_nested_brackets_do_not_recurse(self):
+        # "["*100000 raised RecursionError, which _classify caught and used to
+        # mark the tier permanently unavailable for the whole process.
+        assert self._p("[" * 100_000) is None
+
+    def test_genuine_prose_still_returns_none(self):
+        assert self._p("I cannot help with that request.") is None

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import TYPE_CHECKING
 
 from domestique.cli import _render_canned, _render_config_header, _render_ledger, _truncate
 from domestique.config import Settings
 from domestique.detectors.registry import Finding
 from domestique.gateway import build_cli_pipeline
-from domestique.models import Span
+from domestique.models import Action, Span
 from domestique.policy import PolicyEngine
 
 if TYPE_CHECKING:
@@ -56,8 +57,12 @@ class TestCanned:
         # never show up in the Findings list as a "detection".
         before = "key AKIAIOSFODNN7EXAMPLE"
         findings = [
-            Finding(detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)),
-            Finding(detector="gliner", category="gliner_not_cached", confidence=1.0, span=Span(0, 0)),
+            Finding(
+                detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)
+            ),
+            Finding(
+                detector="gliner", category="gliner_not_cached", confidence=1.0, span=Span(0, 0)
+            ),
         ]
         after = "key [AWS_ACCESS_KEY_REDACTED]"
         out = _render_canned(before, after, findings, color=False)
@@ -91,7 +96,9 @@ class TestLedger:
         before = "key AKIAIOSFODNN7EXAMPLE"
         after = "key [AWS_ACCESS_KEY_REDACTED]"
         findings = [
-            Finding(detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)),
+            Finding(
+                detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)
+            ),
         ]
         out = _render_ledger(before, after, findings, color=False)
         assert "AFTER" in out
@@ -103,8 +110,12 @@ class TestLedger:
         before = "key AKIAIOSFODNN7EXAMPLE"
         after = "key [AWS_ACCESS_KEY_REDACTED]"
         findings = [
-            Finding(detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)),
-            Finding(detector="gliner", category="gliner_not_cached", confidence=1.0, span=Span(0, 0)),
+            Finding(
+                detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)
+            ),
+            Finding(
+                detector="gliner", category="gliner_not_cached", confidence=1.0, span=Span(0, 0)
+            ),
         ]
         out = _render_ledger(before, after, findings, color=False)
         assert "redacted 1 secret" in out  # only the real one counted
@@ -154,10 +165,78 @@ class TestDemoEnumeratesTokens:
 
         from domestique.cli import run_demo
 
-        monkeypatch.setattr(
-            "builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", ""])
-        )
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", ""]))
         run_demo(interactive=True)
         out = capsys.readouterr().out
         assert "[SSN_1]" in out
         assert "[US_SSN_REDACTED]" not in out
+
+
+class TestBlockVerdictNeverPrintsCleartext:
+    """A blocked prompt must not be echoed under "AFTER -> sent to the model".
+
+    On BLOCK the pipeline returns redacted_text=None, so `after = redacted_text
+    or text` fell back to the ORIGINAL text - printing the raw secret to the
+    terminal and claiming it was sent, when nothing was sent at all.
+    """
+
+    def test_ledger_reports_blocked_instead_of_the_secret(self) -> None:
+        secret = "-----BEGIN RSA PRIVATE KEY-----"
+        before = f"here is my key {secret}"
+        findings = [
+            Finding(
+                detector="regex",
+                category="private_key",
+                confidence=0.99,
+                span=Span(15, 15 + len(secret)),
+            ),
+        ]
+        out = _render_ledger(before, None, findings, color=False, action=Action.BLOCK)
+        assert secret not in out.split("AFTER")[-1] if "AFTER" in out else True
+        assert "blocked" in out.lower()
+        assert "sent to the model" not in out.lower()
+
+    def test_canned_reports_blocked_instead_of_the_secret(self) -> None:
+        secret = "-----BEGIN RSA PRIVATE KEY-----"
+        before = f"here is my key {secret}"
+        findings = [
+            Finding(
+                detector="regex",
+                category="private_key",
+                confidence=0.99,
+                span=Span(15, 15 + len(secret)),
+            ),
+        ]
+        out = _render_canned(before, None, findings, color=False, action=Action.BLOCK)
+        assert "blocked" in out.lower()
+        # the BEFORE block legitimately shows it; the AFTER block must not exist
+        assert "sent to the model" not in out.lower()
+
+
+class TestLedgerNeverMintsTokens:
+    """Rendering must not mutate the vault.
+
+    `_redact_text` merges overlapping spans into one token, but the ledger
+    deduped by raw span - so a sub-span got its own FRESH token via tokenize().
+    That row then contradicted the AFTER text (the token appears nowhere in it)
+    and inflated the category counter with a bogus vault entry.
+    """
+
+    def test_overlapping_subspan_does_not_mint_a_new_token(self) -> None:
+        from domestique.gateway import build_cli_pipeline
+        from domestique.vault import build_default_token_service
+
+        ts = build_default_token_service(pinned=False)
+        text = "SSN 123-45-6789 now"
+        res = asyncio.run(build_cli_pipeline(token_service=ts).inspect(text))
+        before_entries = dict(ts.session.entries())
+
+        findings = list(res.findings) + [
+            Finding(detector="x", category="us_ssn", confidence=0.9, span=Span(10, 19))
+        ]
+        out = _render_ledger(text, res.redacted_text, findings, color=False, token_service=ts)
+
+        assert ts.session.entries() == before_entries, "rendering minted a new token"
+        # every token shown must actually appear in the AFTER text
+        for token in re.findall(r"\[[A-Z0-9_]+_\d+\]", out):
+            assert token in (res.redacted_text or ""), f"{token} shown but never sent"

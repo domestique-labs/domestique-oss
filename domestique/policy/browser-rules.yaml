@@ -82,3 +82,13 @@ rules:
     action: block
     categories: []          # empty = every category the LLM tier emits (canonical or coined)
     min_confidence: 0.8
+
+  # The detector emits at >= 0.7, and cli-rules.yaml redacts from 0.7. Without
+  # this rule findings in [0.7, 0.8) matched nothing here and were ALLOWED in
+  # cleartext — the same detector, redacted on the CLI and leaked in the
+  # browser. Keep the two surfaces' floors in step.
+  - name: redact-llm-findings
+    detector: local_llm_classifier
+    action: redact
+    categories: []
+    min_confidence: 0.7

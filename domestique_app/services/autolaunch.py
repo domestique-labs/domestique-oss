@@ -182,8 +182,7 @@ class AutoLaunchManager:
             ) as key:
                 value, _ = winreg.QueryValueEx(key, APP_NAME)
             return (
-                "domestique_app.main" in value
-                or "from domestique_app.main import launch" in value
+                "domestique_app.main" in value or "from domestique_app.main import launch" in value
             )
         except FileNotFoundError:
             return False
@@ -211,9 +210,12 @@ class AutoLaunchManager:
         """Remove Domestique from the current user's Windows Run key."""
         import winreg
 
-        with winreg.CreateKeyEx(
-            winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE
-        ) as key, contextlib.suppress(FileNotFoundError):
+        with (
+            winreg.CreateKeyEx(
+                winreg.HKEY_CURRENT_USER, WINDOWS_RUN_KEY, 0, winreg.KEY_SET_VALUE
+            ) as key,
+            contextlib.suppress(FileNotFoundError),
+        ):
             winreg.DeleteValue(key, APP_NAME)
         logger.info("Windows auto-launch disabled")
         return True

@@ -157,3 +157,25 @@ class TestAPIEndpoints:
         assert data["total"] == 1
         assert data["entries"][0]["action"] == "blocked"
         assert data["entries"][0]["prompt"] == "secret"
+
+
+class TestClassifierPromptDefault:
+    """The dashboard's "reset prompt to default" endpoint.
+
+    It reached into a private name in the detector module, so renaming that
+    symbol broke the endpoint with an ImportError and nothing caught it - the
+    root suite does not import domestique_app, and no test hit this path.
+    """
+
+    def _get(self, base_url: str, path: str) -> dict:
+        res = urllib.request.urlopen(f"{base_url}{path}")  # noqa: S310
+        return json.loads(res.read())
+
+    def test_serves_the_real_rendered_default(self, api_server):
+        from domestique.detectors.local_llm import default_system_prompt
+
+        data = self._get(api_server, "/api/classifier-prompt/default")
+        assert data["prompt"] == default_system_prompt()
+        # the served text must be usable as-is, not a raw template
+        assert "%(categories)s" not in data["prompt"]
+        assert "us_ssn" in data["prompt"]  # canonical vocabulary interpolated

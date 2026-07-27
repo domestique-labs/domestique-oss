@@ -66,9 +66,7 @@ def _post(gw: str, content: str, *, stream: bool = False) -> httpx.Response:
     )
 
 
-def _gateway_with_service(
-    monkeypatch: Any, provider: EchoProvider
-) -> tuple[Any, TokenService]:
+def _gateway_with_service(monkeypatch: Any, provider: EchoProvider) -> tuple[Any, TokenService]:
     svc = TokenService(SessionStore(), None)
     app = create_gateway(token_service=svc)
     return app, svc
@@ -164,9 +162,9 @@ def test_cross_conversation_token_not_reversed(monkeypatch: Any) -> None:
             resp_a = _post(gw, "conv A ssn 111-11-1111 and echoing [SSN_1]")
 
     a_content = resp_a.json()["choices"][0]["message"]["content"]
-    assert "111-11-1111" in a_content        # A's own secret restored
-    assert "[SSN_1]" in a_content            # B's token left verbatim
-    assert "444-44-4444" not in a_content    # B's secret never leaks into A
+    assert "111-11-1111" in a_content  # A's own secret restored
+    assert "[SSN_1]" in a_content  # B's token left verbatim
+    assert "444-44-4444" not in a_content  # B's secret never leaks into A
 
 
 class TestCreateGatewayTokenServiceWiring:

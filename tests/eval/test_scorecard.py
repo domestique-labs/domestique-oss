@@ -10,9 +10,18 @@ from benchmarks.eval.scorecard import (
 
 
 def _m(**kw):
-    base = dict(bypass_rate=0.1, false_positive_rate=0.0, precision=1.0, recall=0.9,
-               f1=0.95, action_match_rate=0.9, latency_p50_ms=1.0, latency_p95_ms=2.0,
-               latency_p99_ms=3.0, n=15)
+    base = dict(
+        bypass_rate=0.1,
+        false_positive_rate=0.0,
+        precision=1.0,
+        recall=0.9,
+        f1=0.95,
+        action_match_rate=0.9,
+        latency_p50_ms=1.0,
+        latency_p95_ms=2.0,
+        latency_p99_ms=3.0,
+        n=15,
+    )
     base.update(kw)
     return Metrics(**base)
 
@@ -35,11 +44,11 @@ def test_single_table_lists_all_metrics():
 
 def test_compare_shows_delta_direction_and_percent():
     main = _m(bypass_rate=0.10)
-    pr = _m(bypass_rate=0.05)          # lower bypass is better
+    pr = _m(bypass_rate=0.05)  # lower bypass is better
     md = to_markdown_compare(main, pr)
     assert "bypass_rate" in md
     assert "better" in md
-    assert "-50.0%" in md              # (0.05 - 0.10) / 0.10
+    assert "-50.0%" in md  # (0.05 - 0.10) / 0.10
 
 
 def test_quality_regression_reads_worse():
@@ -54,8 +63,8 @@ def test_identical_quality_metric_is_tie():
 
 def test_latency_within_band_is_noise_not_a_verdict():
     # A docs-only PR: latency wobbles by a few percent → must NOT read "better".
-    assert verdict("latency_p50_ms", 22.68, 21.0) == "≈ noise"    # ~7% drop
-    assert verdict("latency_p50_ms", 22.68, 24.0) == "≈ noise"    # ~6% rise
+    assert verdict("latency_p50_ms", 22.68, 21.0) == "≈ noise"  # ~7% drop
+    assert verdict("latency_p50_ms", 22.68, 24.0) == "≈ noise"  # ~6% rise
 
 
 def test_latency_beyond_band_still_reported():

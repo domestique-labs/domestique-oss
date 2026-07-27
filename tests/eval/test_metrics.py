@@ -28,10 +28,10 @@ def test_one_bypass_one_false_positive():
     # s3 slips through (bypass); b1 wrongly flagged (false positive)
     observed = {"s1": "block", "s2": "redact", "s3": "allow", "b1": "block", "b2": "allow"}
     m = compute_metrics(_rows(), observed, [10.0] * 5)
-    assert round(m.bypass_rate, 3) == round(1 / 3, 3)      # 1 of 3 sensitive allowed
-    assert m.false_positive_rate == 0.5                     # 1 of 2 benign flagged
-    assert round(m.recall, 3) == round(2 / 3, 3)           # TP=2, FN=1
-    assert round(m.precision, 3) == round(2 / 3, 3)        # TP=2, FP=1
+    assert round(m.bypass_rate, 3) == round(1 / 3, 3)  # 1 of 3 sensitive allowed
+    assert m.false_positive_rate == 0.5  # 1 of 2 benign flagged
+    assert round(m.recall, 3) == round(2 / 3, 3)  # TP=2, FN=1
+    assert round(m.precision, 3) == round(2 / 3, 3)  # TP=2, FP=1
 
 
 def test_latency_percentiles():

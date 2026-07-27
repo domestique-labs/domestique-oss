@@ -58,7 +58,9 @@ class TestBlockBehavior:
             "/v1/chat/completions",
             json={
                 "model": "gpt-4",
-                "messages": [{"role": "user", "content": "-----BEGIN RSA PRIVATE KEY-----\nMII..."}],
+                "messages": [
+                    {"role": "user", "content": "-----BEGIN RSA PRIVATE KEY-----\nMII..."}
+                ],
             },
         )
         assert r.status_code == 403
@@ -68,7 +70,9 @@ class TestBlockBehavior:
             "/v1/chat/completions",
             json={
                 "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Use postgresql://admin:pass@db:5432/prod"}],
+                "messages": [
+                    {"role": "user", "content": "Use postgresql://admin:pass@db:5432/prod"}
+                ],
             },
         )
         assert r.status_code == 403
@@ -78,7 +82,9 @@ class TestBlockBehavior:
             "/v1/chat/completions",
             json={
                 "model": "gpt-4",
-                "messages": [{"role": "user", "content": "Token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"}],
+                "messages": [
+                    {"role": "user", "content": "Token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"}
+                ],
             },
         )
         assert r.status_code == 403
@@ -121,9 +127,7 @@ class TestAllowBehavior:
                 "/v1/chat/completions",
                 json={
                     "model": "gpt-4",
-                    "messages": [
-                        {"role": "user", "content": "What is the capital of France?"}
-                    ],
+                    "messages": [{"role": "user", "content": "What is the capital of France?"}],
                 },
             )
 
@@ -142,7 +146,9 @@ class TestErrorHandling:
         )
         assert r.status_code == 400
 
-    @patch("domestique.transport.litellm.acompletion", side_effect=TimeoutError("upstream timeout"))
+    @patch(
+        "domestique.transport.litellm.acompletion", side_effect=TimeoutError("upstream timeout")
+    )
     async def test_upstream_failure_returns_502_in_closed_mode(
         self, _mock: AsyncMock, client: AsyncClient
     ) -> None:

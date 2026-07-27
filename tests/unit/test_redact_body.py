@@ -17,9 +17,7 @@ def test_set_by_path_content_block():
 
 def test_apply_field_redactions_does_not_mutate_input():
     body = {"system": "s", "messages": [{"content": "hi"}]}
-    out = apply_field_redactions(
-        body, [("system", "[REDACTED]"), ("messages.0.content", "safe")]
-    )
+    out = apply_field_redactions(body, [("system", "[REDACTED]"), ("messages.0.content", "safe")])
     assert out["system"] == "[REDACTED]"
     assert out["messages"][0]["content"] == "safe"
     # original untouched

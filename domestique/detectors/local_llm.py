@@ -25,6 +25,7 @@ the common-case latency near zero.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import structlog
@@ -64,8 +65,9 @@ def _resolve_gemma_model() -> str:
 #: that array mid-object on any realistic multi-entity prompt, which parsed to
 #: nothing and silently dropped every LLM finding.
 #:
-#: Raising the cap costs no latency: the request sets ``stop=["]"]``, so
-#: generation halts at the array close. The cap is only a runaway guard.
+#: The cap is a runaway guard, not a target: the model emits its array and
+#: stops, so a larger cap costs nothing in the normal case — 40 was capping
+#: *ordinary* output. Truncation past the cap is salvaged in _parse_response.
 _EXTRACTOR_MAX_TOKENS = 512
 
 MODEL_PRESETS: dict[str, dict[str, Any]] = {
@@ -122,6 +124,16 @@ leaks nothing on its own. Extract every other value in the text as usual:
 Return [] if nothing is sensitive. Output ONLY the JSON array."""
 
 
+def default_system_prompt() -> str:
+    """The extractor prompt as the detector actually uses it.
+
+    Public on purpose: the dashboard's "reset prompt to default" endpoint needs
+    the same string, and importing the private template left it serving a raw,
+    uninterpolated template — then broke outright when the template was renamed.
+    """
+    return _EXTRACTOR_SYSTEM_PROMPT % {"categories": "\n".join(sorted(CANONICAL))}
+
+
 class LocalLLMClassifier:
     """Uses a local LLM for nuanced sensitive content classification.
 
@@ -145,9 +157,8 @@ class LocalLLMClassifier:
         self._timeout = timeout_s
         self._threshold = confidence_threshold
         self._available: bool | None = None
-        self._system_prompt = system_prompt or (
-            _EXTRACTOR_SYSTEM_PROMPT % {"categories": "\n".join(sorted(CANONICAL))}
-        )
+        self._warned_unusable = False
+        self._system_prompt = system_prompt or default_system_prompt()
 
         # Resolve model: explicit override > preset > default
         if model:
@@ -185,9 +196,10 @@ class LocalLLMClassifier:
         """Extract sensitive substrings and emit one Detection per located span.
 
         For texts longer than _MAX_CHUNK_CHARS, splits into chunks and
-        extracts from each independently. Each extracted substring is
-        located in the full text via a per-substring search cursor;
-        substrings the model hallucinated (not found verbatim) are dropped.
+        extracts from each independently. Substrings the model hallucinated
+        (not present verbatim) are dropped; each surviving substring is redacted
+        at every occurrence in the text, since the model reports an entity once
+        even when it repeats.
         """
         if len(text) < 20:
             return []
@@ -199,10 +211,10 @@ class LocalLLMClassifier:
                 items.extend(x for x in parsed if isinstance(x, dict))
 
         detections: list[Detection] = []
-        search_from: dict[str, int] = {}  # per-substring cursor for repeated values
+        emitted: set[str] = set()  # substrings already expanded to all occurrences
         for item in items:
             substring = str(item.get("t", ""))
-            if not substring:
+            if not substring or substring in emitted:
                 continue
             try:
                 confidence = float(item.get("v", item.get("confidence", 0.0)))
@@ -210,23 +222,29 @@ class LocalLLMClassifier:
                 continue
             if confidence < self._threshold:
                 continue
-            start = text.find(substring, search_from.get(substring, 0))
-            if start == -1:
+            if substring not in text:
                 continue  # hallucinated / reformatted → drop (guardrail)
-            search_from[substring] = start + len(substring)
+            emitted.add(substring)
             raw_cat = str(item.get("c", item.get("category", "sensitive")))
             term = normalize_category(raw_cat)
             if term not in CANONICAL:
                 default_store().register(raw_cat)  # persist the coined term
             category = term
-            detections.append(
-                Detection(
-                    detector=self.name,
-                    category=category,
-                    confidence=confidence,
-                    span=Span(start=start, end=start + len(substring)),
+            # Redact EVERY occurrence, not just the one the model happened to
+            # point at. The model reports an entity once even when it repeats,
+            # and for an LLM-coined category no other tier will catch the rest —
+            # so the remaining occurrences would go upstream in cleartext.
+            start = text.find(substring)
+            while start != -1:
+                detections.append(
+                    Detection(
+                        detector=self.name,
+                        category=category,
+                        confidence=confidence,
+                        span=Span(start=start, end=start + len(substring)),
+                    )
                 )
-            )
+                start = text.find(substring, start + len(substring))
         return detections
 
     # 8K chars (~2K tokens) per chunk — fits in num_ctx=4096 with system prompt.
@@ -287,7 +305,6 @@ class LocalLLMClassifier:
         """Classify via Ollama API.
 
         Speed optimizations (all cross-platform):
-        - stop=["]"] : halt generation the instant the JSON array closes
         - top_k=1, top_p=0.1 : greedy decoding, no sampling overhead
         - think=False : disable chain-of-thought on Qwen/Gemma
         - Compact output format [{"t":"...","c":"CAT","v":0.9}] minimizes tokens
@@ -315,7 +332,6 @@ class LocalLLMClassifier:
                     "top_k": 1,
                     "top_p": 0.1,
                 },
-                "stop": ["]"],
             }
         ).encode()
 
@@ -336,40 +352,97 @@ class LocalLLMClassifier:
         body = json.loads(resp.read())
 
         content = body.get("message", {}).get("content", "")
-        return self._parse_response(content)
+        parsed = self._parse_response(content)
+        if parsed is None and not self._warned_unusable:
+            # The tier is reachable but producing nothing usable — most often a
+            # custom prompt saved before this became a span extractor. That is a
+            # silent fail-open otherwise: DEBUG-level only, so nobody sees that
+            # detection has stopped. Warn once, not per request.
+            self._warned_unusable = True
+            logger.warning(
+                "local_llm_unusable_response",
+                model=self._model,
+                hint=(
+                    "the model's reply could not be parsed as the extractor's JSON array; "
+                    "if you saved a custom prompt in the dashboard it predates this format "
+                    "— reset it to the default, or the LLM tier contributes no detections."
+                ),
+                sample=content[:120],
+            )
+        return parsed
 
-    @staticmethod
-    def _parse_response(content: str) -> list[dict[str, Any]] | None:
-        """Parse LLM JSON response, handling stop-token truncation and markdown."""
+    #: Recovers "t"/"c"/"v" triples when the model drops the object braces
+    #: entirely (observed from qwen3:1.7b: ["t":"x","c":"y","v":0.9],[...]).
+    _TRIPLE_RE = re.compile(
+        r'"t"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*'
+        r'"c"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*'
+        r'"v"\s*:\s*"?([-\d.eE]+)"?'
+    )
+
+    @classmethod
+    def _parse_response(cls, content: str) -> list[dict[str, Any]] | None:
+        """Recover the extractor's items from whatever the model actually said.
+
+        Returning ``None`` means zero detections and the prompt goes upstream in
+        CLEARTEXT, so this is deliberately tolerant: small models wrap the array
+        in prose, emit a ``<think>`` block despite ``think=False``, append
+        trailing chatter, get cut off mid-object by ``num_predict``, or drop the
+        object braces altogether. Every recovered item is still re-vetted by
+        ``scan`` (must appear verbatim in the text, must clear the confidence
+        threshold), so tolerating junk here cannot manufacture a redaction.
+        """
         import json
 
+        if not isinstance(content, str):
+            return None
         content = content.strip()
-        # Strip markdown code fences (some models wrap output)
         if "```" in content:
             content = content.replace("```json", "").replace("```", "").strip()
-        # stop="]" truncates the closing bracket
-        if not content.endswith("]"):
-            content += "]"
-        try:
-            parsed = json.loads(content)
-            return parsed if isinstance(parsed, list) else None
-        except json.JSONDecodeError:
-            pass
+        # some models emit reasoning even with think=False
+        content = re.sub(r"(?s)<think>.*?</think>", "", content).strip()
 
-        # Hitting num_predict cuts the array mid-object. Dropping the whole
-        # response would fail open on a DLP path — the entities the model *did*
-        # find would pass through unredacted — so salvage the complete prefix by
-        # cutting back to the last closed object.
-        last_complete = content.rfind("}")
-        if last_complete != -1:
+        def _as_items(value: object) -> list[dict[str, Any]] | None:
+            if isinstance(value, dict):
+                return [value]  # legacy classifier-era prompts return one object
+            if isinstance(value, list):
+                return [x for x in value if isinstance(x, dict)]
+            return None
+
+        # 1. the well-formed case
+        try:
+            items = _as_items(json.loads(content))
+        except (json.JSONDecodeError, RecursionError):
+            items = None
+        if items is not None:
+            return items
+
+        # 2. Scan for complete objects anywhere in the text. This subsumes
+        #    truncation (the incomplete tail simply fails to decode and is
+        #    skipped) and is immune to a "}" inside a string value, unlike
+        #    cutting back to the last "}".
+        decoder = json.JSONDecoder()
+        found: list[dict[str, Any]] = []
+        i = content.find("{")
+        while i != -1:
             try:
-                parsed = json.loads(content[: last_complete + 1] + "]")
-            except json.JSONDecodeError:
-                pass
+                obj, offset = decoder.raw_decode(content, i)
+            except (json.JSONDecodeError, RecursionError):
+                i = content.find("{", i + 1)
+                continue
+            if isinstance(obj, dict):
+                found.append(obj)
+                i = content.find("{", offset)
             else:
-                if isinstance(parsed, list):
-                    logger.debug("local_llm_salvaged_truncated_response", kept=len(parsed))
-                    return parsed
+                i = content.find("{", i + 1)
+        if found:
+            logger.debug("local_llm_salvaged_response", kept=len(found))
+            return found
+
+        # 3. Braces dropped entirely — pull the triples out directly.
+        triples = cls._TRIPLE_RE.findall(content)
+        if triples:
+            logger.debug("local_llm_recovered_braceless_items", kept=len(triples))
+            return [{"t": t, "c": c, "v": v} for t, c, v in triples]
 
         logger.debug("local_llm_unparseable_response", content=content[:100])
         return None

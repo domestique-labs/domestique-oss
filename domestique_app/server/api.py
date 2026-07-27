@@ -633,10 +633,11 @@ class APIHandler(BaseHTTPRequestHandler):
             self._send_json({"token": mgr.csrf_token})
 
         elif self.path == "/api/classifier-prompt/default":
-            # Serve the built-in default classifier prompt
-            from domestique.detectors.local_llm import _CLASSIFIER_SYSTEM_PROMPT
+            # Serve the built-in default extractor prompt, rendered exactly as
+            # the detector uses it (public accessor - not the raw template).
+            from domestique.detectors.local_llm import default_system_prompt
 
-            self._send_json({"prompt": _CLASSIFIER_SYSTEM_PROMPT})
+            self._send_json({"prompt": default_system_prompt()})
 
         elif self.path == "/api/builtin-patterns":
             from domestique.detectors.secrets import _PATTERNS

@@ -50,6 +50,23 @@ def _isolate_audit_log(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DOMESTIQUE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_taxonomy_store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point the taxonomy store at a temp file so tests never touch ~/.domestique.
+
+    Any non-canonical category reaches ``default_store()`` — via the LLM tier
+    coining a term, or ``category_prefix`` resolving a prefix — which otherwise
+    reads *and writes* the developer's real ~/.domestique/taxonomy.json. That
+    both leaks machine state into assertions and permanently mutates the user's
+    config from a test run.
+    """
+    import domestique.taxonomy_store as taxonomy_store
+
+    monkeypatch.setattr(
+        taxonomy_store, "_DEFAULT", taxonomy_store.TaxonomyStore(path=tmp_path / "taxonomy.json")
+    )
+
+
 @pytest.fixture()
 def mock_openai(monkeypatch: pytest.MonkeyPatch) -> Iterator[MockProvider]:
     provider = MockProvider()

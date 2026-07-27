@@ -649,7 +649,32 @@ def _highlight_tokens(after: str, paint: console.Palette) -> str:
     )
 
 
-def _render_canned(before: str, after: str, findings: list[Finding], *, color: bool) -> str:
+def _render_outcome(
+    after: str | None,
+    paint: console.Palette,
+    g: dict[str, str],
+    *,
+    action: Action | None,
+) -> list[str]:
+    """The "what actually left the machine" block.
+
+    On BLOCK the pipeline returns no redacted text, because nothing is sent.
+    Falling back to the original text there printed the raw secret under
+    "sent to the model" — a cleartext echo of the very thing that was blocked.
+    """
+    if action is Action.BLOCK or after is None:
+        return [f"  {paint(g['cross'], 'red')} BLOCKED {g['arrow']} nothing was sent"]
+    return [f"  AFTER {g['arrow']} sent to the model", "    " + _highlight_tokens(after, paint)]
+
+
+def _render_canned(
+    before: str,
+    after: str | None,
+    findings: list[Finding],
+    *,
+    color: bool,
+    action: Action | None = None,
+) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
     rule = "  " + g["rule"] * 60
@@ -660,8 +685,7 @@ def _render_canned(before: str, after: str, findings: list[Finding], *, color: b
         "  BEFORE",
         "    " + _highlight_secrets(before, findings, paint),
         "",
-        f"  AFTER {g['arrow']} sent to the model",
-        "    " + _highlight_tokens(after, paint),
+        *_render_outcome(after, paint, g, action=action),
         rule,
         "  Findings",
     ]
@@ -684,11 +708,12 @@ def _truncate(value: str, width: int = 22) -> str:
 
 def _render_ledger(
     before: str,
-    after: str,
+    after: str | None,
     findings: list[Finding],
     *,
     color: bool,
     token_service: TokenService | None = None,
+    action: Action | None = None,
 ) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
@@ -708,19 +733,30 @@ def _render_ledger(
     if not ordered:
         return f"  {g['dot']} nothing sensitive detected"
 
+    # Reverse the session map rather than calling tokenize(): rendering must
+    # never mutate the vault. _redact_text merges overlapping spans into one
+    # token, so a sub-span has no token of its own — minting one here invented a
+    # row citing a token that appears nowhere in AFTER, and left a bogus entry
+    # in the store. A value with no token was folded into an overlapping span
+    # and is already covered by that span's row.
+    token_of: dict[str, str] = {}
+    if token_service is not None:
+        token_of = {value: token for token, value in token_service.session.entries().items()}
+
     rows = []
     for f in ordered:
         assert f.span is not None
         value = before[f.span.start : f.span.end]
-        # Ask the service for the token it already minted for this value rather
-        # than synthesising one — tokenize() is idempotent, so this returns the
-        # existing token and the row always agrees with the AFTER text.
-        token = (
-            token_service.tokenize(value, f.category)
-            if token_service is not None
-            else f"[{f.category.upper()}_REDACTED]"
-        )
+        if token_service is not None:
+            token = token_of.get(value)
+            if token is None:
+                continue  # merged into an overlapping span; not its own redaction
+        else:
+            token = f"[{f.category.upper()}_REDACTED]"
         rows.append((_label(f.category), _truncate(value), token, f"{f.confidence:.0%}"))
+
+    if not rows:
+        return f"  {g['dot']} nothing sensitive detected"
 
     lw = max(len(r[0]) for r in rows)
     vw = max(len(r[1]) for r in rows)
@@ -731,8 +767,7 @@ def _render_ledger(
             f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
             f"{paint(token, 'green')}  {paint(conf, 'dim')}"
         )
-    out.append(f"  AFTER {g['arrow']} sent to the model")
-    out.append("    " + _highlight_tokens(after, paint))
+    out.extend(_render_outcome(after, paint, g, action=action))
     return "\n".join(out)
 
 
@@ -797,8 +832,15 @@ def run_demo(*, interactive: bool | None = None) -> int:
     print(_render_config_header(settings, pipeline.policy, color=color))
 
     result = asyncio.run(pipeline.inspect(_DEMO_PROMPT))
-    after = result.redacted_text or _DEMO_PROMPT
-    print(_render_canned(_DEMO_PROMPT, after, result.findings, color=color))
+    print(
+        _render_canned(
+            _DEMO_PROMPT,
+            result.redacted_text,
+            result.findings,
+            color=color,
+            action=result.action,
+        )
+    )
 
     if interactive is None:
         try:
@@ -820,9 +862,15 @@ def run_demo(*, interactive: bool | None = None) -> int:
             if not text:
                 break
             res = asyncio.run(pipeline.inspect(text))
-            after = res.redacted_text or text
             print(
-                _render_ledger(text, after, res.findings, color=color, token_service=token_service)
+                _render_ledger(
+                    text,
+                    res.redacted_text,
+                    res.findings,
+                    color=color,
+                    token_service=token_service,
+                    action=res.action,
+                )
             )
     return 0
 

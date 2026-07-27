@@ -20,8 +20,10 @@ class TestPipelineConfig:
 
         cfg = {
             "detection_stack": {
-                "regex": True, "gliner_pii": True,
-                "qwen3_1_7b": True, "gemma4_e2b": False,
+                "regex": True,
+                "gliner_pii": True,
+                "qwen3_1_7b": True,
+                "gemma4_e2b": False,
             },
         }
         s = settings_from_config(cfg)
@@ -36,8 +38,10 @@ class TestPipelineConfig:
 
         cfg = {
             "detection_stack": {
-                "regex": True, "gliner_pii": False,
-                "qwen3_1_7b": False, "gemma4_e2b": True,
+                "regex": True,
+                "gliner_pii": False,
+                "qwen3_1_7b": False,
+                "gemma4_e2b": True,
             },
         }
         s = settings_from_config(cfg)
@@ -50,8 +54,10 @@ class TestPipelineConfig:
 
         cfg = {
             "detection_stack": {
-                "regex": True, "gliner_pii": False,
-                "qwen3_1_7b": False, "gemma4_e2b": False,
+                "regex": True,
+                "gliner_pii": False,
+                "qwen3_1_7b": False,
+                "gemma4_e2b": False,
             },
         }
         s = settings_from_config(cfg)
@@ -66,8 +72,10 @@ class TestPipelineConfig:
 
         cfg = {
             "detection_stack": {
-                "regex": True, "gliner_pii": False,
-                "qwen3_1_7b": False, "gemma4_e2b": False,
+                "regex": True,
+                "gliner_pii": False,
+                "qwen3_1_7b": False,
+                "gemma4_e2b": False,
                 "legacy_cpu": True,
             },
         }
@@ -167,6 +175,7 @@ class TestCrossPlatform:
             load_config_dict,
             config_mtime_ns,
         )
+
         # All should be importable without platform-specific deps
         assert callable(settings_from_config)
         assert callable(config_hash)
@@ -174,18 +183,21 @@ class TestCrossPlatform:
     def test_settings_from_config_no_platform_deps(self):
         """settings_from_config should not import AppKit or other macOS deps."""
         from domestique_app.services.pipeline_config import settings_from_config
+
         s = settings_from_config({"detection_stack": {"regex": True}})
         assert s.enable_secret_detection is True
 
     def test_httpx_transport_bypass(self):
         """Verify httpx AsyncHTTPTransport is available (cross-platform)."""
         import httpx
+
         t = httpx.AsyncHTTPTransport()
         assert t is not None
 
     def test_thread_pool_executor(self):
         """ThreadPoolExecutor works on all platforms."""
         from concurrent.futures import ThreadPoolExecutor
+
         with ThreadPoolExecutor(1) as pool:
             result = pool.submit(lambda: 42).result(timeout=5)
         assert result == 42

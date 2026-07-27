@@ -79,9 +79,7 @@ class TestDetectInstallContext:
         # sys.prefix uses backslashes on Windows; the pipx-venv marker must
         # still be recognised (regression: forward-slash literal never matched).
         monkeypatch.delenv("PIPX_HOME", raising=False)
-        monkeypatch.setattr(
-            cli.sys, "prefix", r"C:\Users\x\AppData\Local\pipx\venvs\domestique"
-        )
+        monkeypatch.setattr(cli.sys, "prefix", r"C:\Users\x\AppData\Local\pipx\venvs\domestique")
         monkeypatch.setattr(cli.shutil, "which", lambda name: r"C:\pipx.exe")
         kind, cmd = cli._detect_install_context()
         assert kind == "pipx"
@@ -100,9 +98,7 @@ class TestDetectInstallContext:
     def test_linux_pipx_prefix_still_detected(self, monkeypatch):
         # Regression guard: posix pipx layout keeps working.
         monkeypatch.delenv("PIPX_HOME", raising=False)
-        monkeypatch.setattr(
-            cli.sys, "prefix", "/home/u/.local/share/pipx/venvs/domestique"
-        )
+        monkeypatch.setattr(cli.sys, "prefix", "/home/u/.local/share/pipx/venvs/domestique")
         monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/pipx")
         assert cli._detect_install_context()[0] == "pipx"
 

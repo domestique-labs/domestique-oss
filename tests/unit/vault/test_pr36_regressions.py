@@ -38,10 +38,12 @@ class TestBug1OverlapUnion:
         text = "my ssn is 123-45-6789"
         # Two detectors flag the same SSN with different left boundaries.
         dets = [
-            Detection(detector="secrets", category="us_ssn", confidence=0.9,
-                      span=Span(10, 21)),          # full "123-45-6789"
-            Detection(detector="secrets", category="us_ssn", confidence=0.8,
-                      span=Span(15, 21)),          # inner "5-6789"
+            Detection(
+                detector="secrets", category="us_ssn", confidence=0.9, span=Span(10, 21)
+            ),  # full "123-45-6789"
+            Detection(
+                detector="secrets", category="us_ssn", confidence=0.8, span=Span(15, 21)
+            ),  # inner "5-6789"
         ]
         out, minted = _redact_text(text, dets, _service())
         assert "123-4" not in out  # the leaked prefix from the old drop logic
@@ -52,10 +54,12 @@ class TestBug1OverlapUnion:
     def test_pinned_prefix_of_email_does_not_leak(self) -> None:
         text = "email bob@acme.com"
         dets = [
-            Detection(detector="secrets", category="email_address", confidence=0.9,
-                      span=Span(6, 18)),           # "bob@acme.com"
-            Detection(detector="pinned_vault", category="domain", confidence=1.0,
-                      span=Span(10, 18)),          # pinned "acme.com"
+            Detection(
+                detector="secrets", category="email_address", confidence=0.9, span=Span(6, 18)
+            ),  # "bob@acme.com"
+            Detection(
+                detector="pinned_vault", category="domain", confidence=1.0, span=Span(10, 18)
+            ),  # pinned "acme.com"
         ]
         out, _ = _redact_text(text, dets, _service())
         assert "bob@" not in out
@@ -67,13 +71,11 @@ class TestBug1OverlapUnion:
         text = "AAAABBBB"
         svc = _service()
         dets = [
-            Detection(detector="secrets", category="us_ssn", confidence=0.9,
-                      span=Span(0, 4)),
-            Detection(detector="secrets", category="us_ssn", confidence=0.9,
-                      span=Span(4, 8)),
+            Detection(detector="secrets", category="us_ssn", confidence=0.9, span=Span(0, 4)),
+            Detection(detector="secrets", category="us_ssn", confidence=0.9, span=Span(4, 8)),
         ]
         out, minted = _redact_text(text, dets, svc)
-        assert len(minted) == 2                      # two distinct tokens, not merged
+        assert len(minted) == 2  # two distinct tokens, not merged
         assert minted == {"[SSN_1]", "[SSN_2]"}
         # Both halves are fully covered and each round-trips to its own value.
         assert "A" not in out and "B" not in out
@@ -82,8 +84,11 @@ class TestBug1OverlapUnion:
 
     def test_zero_length_span_is_ignored(self) -> None:
         text = "clean text"
-        dets = [Detection(detector="pipeline", category="detector_error",
-                          confidence=1.0, span=Span(0, 0))]
+        dets = [
+            Detection(
+                detector="pipeline", category="detector_error", confidence=1.0, span=Span(0, 0)
+            )
+        ]
         out, minted = _redact_text(text, dets, _service())
         assert out == text
         assert minted == set()
@@ -129,9 +134,9 @@ class TestBug3ConversationScope:
         # merely echoes B's token string.
         reply_a = f"as you said, {tok_b} — done"
         restored, unknown = svc.detokenize_text(reply_a, allowed=set())
-        assert "444-44-4444" not in restored     # B's secret stays out of A
-        assert tok_b in restored                  # echoed token left verbatim
-        assert unknown == [tok_b]                 # and reported, not silent
+        assert "444-44-4444" not in restored  # B's secret stays out of A
+        assert tok_b in restored  # echoed token left verbatim
+        assert unknown == [tok_b]  # and reported, not silent
 
     def test_scoped_detok_restores_own_tokens(self) -> None:
         svc = _service()
@@ -153,9 +158,7 @@ class TestBug3ConversationScope:
 
 
 class TestBug4VaultConcurrency:
-    def test_concurrent_pins_and_reads_no_exceptions_no_lost_writes(
-        self, tmp_path: Path
-    ) -> None:
+    def test_concurrent_pins_and_reads_no_exceptions_no_lost_writes(self, tmp_path: Path) -> None:
         provider = FakeKeyProvider()
         vault = PinnedVault(tmp_path / "vault.bin", provider)
         vault.load()
@@ -189,7 +192,7 @@ class TestBug4VaultConcurrency:
 
         assert errors == [], f"races raised: {errors[:3]}"
         expected = n_writers * per_writer
-        assert len(vault.values()) == expected      # no lost writes in memory
+        assert len(vault.values()) == expected  # no lost writes in memory
 
         # And the persisted file agrees after a reload (durability).
         reloaded = PinnedVault(tmp_path / "vault.bin", provider)
@@ -237,10 +240,10 @@ class TestCategoryPrefixIdempotent:
         # whose truncation boundary lands on a "_". category_prefix must be a
         # fixed point, or sync_counter_floors keys the floor differently from
         # the session counter and the collision re-opens.
-        long_cat = "a" * 22 + "_bb"           # -> "AAA…(22)_" before rstrip
+        long_cat = "a" * 22 + "_bb"  # -> "AAA…(22)_" before rstrip
         p = category_prefix(long_cat)
         assert not p.endswith("_")
-        assert category_prefix(p) == p          # idempotent
+        assert category_prefix(p) == p  # idempotent
         realistic = "llm_classified:medical patient identifier"
         r = category_prefix(realistic)
         assert not r.endswith("_")
@@ -266,9 +269,9 @@ class TestCategoryPrefixIdempotent:
 class TestPinAfterMintNoCollision:
     def test_runtime_pin_reserves_index_above_session(self, tmp_path: Path) -> None:
         svc = _vault_service(tmp_path)
-        a = svc.session.tokenize("val-A", "us_ssn")   # [SSN_1]
-        b = svc.session.tokenize("val-B", "us_ssn")   # [SSN_2]
-        v = svc.session.tokenize("val-V", "us_ssn")   # [SSN_3]
+        a = svc.session.tokenize("val-A", "us_ssn")  # [SSN_1]
+        b = svc.session.tokenize("val-B", "us_ssn")  # [SSN_2]
+        v = svc.session.tokenize("val-V", "us_ssn")  # [SSN_3]
         assert (a, b, v) == ("[SSN_1]", "[SSN_2]", "[SSN_3]")
 
         # Pinning val-V at runtime must NOT reuse [SSN_1] (which already maps

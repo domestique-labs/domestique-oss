@@ -38,7 +38,9 @@ def _gliner_only_settings() -> Settings:
 
 
 class TestGLiNERNotCached:
-    def test_missing_package_yields_gliner_not_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_missing_package_yields_gliner_not_cached(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`gliner` package not installed -> ModuleNotFoundError -> gliner_not_cached."""
         monkeypatch.setitem(sys.modules, "gliner", None)  # forces ImportError on `import gliner`
 
@@ -53,7 +55,9 @@ class TestGLiNERNotCached:
         assert result.action is Action.BLOCK
         assert result.should_block is True
 
-    def test_uncached_model_yields_gliner_not_cached(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_uncached_model_yields_gliner_not_cached(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """`gliner` package present but model not in the offline HF cache -> OSError -> gliner_not_cached."""
         fake_gliner = types.ModuleType("gliner")
 
