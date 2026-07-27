@@ -41,7 +41,7 @@ def test_demo_subprocess_redacts_secret():
     # The secret appears in the BEFORE line but must be gone from what the model sees.
     after_block = out.split("AFTER")[-1]
     assert _SECRET not in after_block
-    assert "REDACTED" in out
+    assert "[AWSKEY_1]" in out  # reversible numbered token, as the wedge sends
 
 
 class TestDemoFormatting:
@@ -55,7 +55,7 @@ class TestDemoFormatting:
         assert "Active configuration" in out
         assert "Detection stack" in out
         assert "BEFORE" in out and "AFTER" in out
-        assert "[AWS_ACCESS_KEY_REDACTED]" in out
+        assert "[AWSKEY_1]" in out
 
     def test_non_tty_emits_no_ansi(self, capsys: pytest.CaptureFixture[str]) -> None:
         from domestique.cli import run_demo
@@ -76,4 +76,4 @@ class TestDemoFormatting:
         run_demo(interactive=True)
         out = capsys.readouterr().out
         assert "redacted" in out
-        assert "[US_SSN_REDACTED]" in out
+        assert "[SSN_1]" in out

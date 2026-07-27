@@ -19,7 +19,7 @@ def test_demo_redacts_and_prints(capsys):
     assert rc == 0
     after_block = out.split("AFTER")[-1]
     assert "AKIAIOSFODNN7EXAMPLE" not in after_block
-    assert "REDACTED" in out
+    assert "[AWSKEY_1]" in out  # reversible numbered token, as the wedge sends
 
 
 def test_start_is_wired(monkeypatch, capsys):

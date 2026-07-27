@@ -110,6 +110,15 @@ Prefer these category names when one fits:
 %(categories)s
 If none fits, invent a short snake_case category name (e.g. employee_id).
 Copy "t" EXACTLY as it appears in the text — do not paraphrase or reformat.
+
+"t" must be the sensitive VALUE, never the word that labels it — a field name
+leaks nothing on its own. Extract every other value in the text as usual:
+  "Employee Jane Roe, badge B-77, mobile 555-0142"
+  [{"t":"Jane Roe","c":"person","v":0.9},
+   {"t":"B-77","c":"employee_id","v":0.8},
+   {"t":"555-0142","c":"phone_number","v":0.9}]
+  ("Employee", "badge" and "mobile" are labels, so they are not extracted.)
+
 Return [] if nothing is sensitive. Output ONLY the JSON array."""
 
 
@@ -317,11 +326,14 @@ class LocalLLMClassifier:
             data=payload,
             headers={"Content-Type": "application/json"},
         )
-        try:
-            resp = opener.open(req, timeout=self._timeout)
-            body = json.loads(resp.read())
-        except Exception:
-            return None
+        # Deliberately unguarded: transport/decode failures propagate to
+        # ``_classify``, which marks the tier unavailable and logs
+        # ``local_llm_unavailable`` once. Swallowing them here made that handler
+        # dead code for the ollama backend, so a missing or misnamed model (404)
+        # silently produced zero findings forever with no operator signal — a
+        # fail-open on a DLP path.
+        resp = opener.open(req, timeout=self._timeout)
+        body = json.loads(resp.read())
 
         content = body.get("message", {}).get("content", "")
         return self._parse_response(content)

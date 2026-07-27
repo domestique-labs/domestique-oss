@@ -37,6 +37,7 @@ if TYPE_CHECKING:
     from domestique.detectors.registry import Finding
     from domestique.detectors.status import TierStatus
     from domestique.policy import PolicyEngine
+    from domestique.vault.service import TokenService
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
 
@@ -681,7 +682,14 @@ def _truncate(value: str, width: int = 22) -> str:
     return value[: keep // 2] + "…" + value[-(keep - keep // 2) :]
 
 
-def _render_ledger(before: str, after: str, findings: list[Finding], *, color: bool) -> str:
+def _render_ledger(
+    before: str,
+    after: str,
+    findings: list[Finding],
+    *,
+    color: bool,
+    token_service: TokenService | None = None,
+) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
 
@@ -703,9 +711,16 @@ def _render_ledger(before: str, after: str, findings: list[Finding], *, color: b
     rows = []
     for f in ordered:
         assert f.span is not None
-        leaked = _truncate(before[f.span.start : f.span.end])
-        token = f"[{f.category.upper()}_REDACTED]"
-        rows.append((_label(f.category), leaked, token, f"{f.confidence:.0%}"))
+        value = before[f.span.start : f.span.end]
+        # Ask the service for the token it already minted for this value rather
+        # than synthesising one — tokenize() is idempotent, so this returns the
+        # existing token and the row always agrees with the AFTER text.
+        token = (
+            token_service.tokenize(value, f.category)
+            if token_service is not None
+            else f"[{f.category.upper()}_REDACTED]"
+        )
+        rows.append((_label(f.category), _truncate(value), token, f"{f.confidence:.0%}"))
 
     lw = max(len(r[0]) for r in rows)
     vw = max(len(r[1]) for r in rows)
@@ -765,11 +780,18 @@ def run_demo(*, interactive: bool | None = None) -> int:
     """
     from domestique.config_loader import settings_from_config
     from domestique.gateway import build_cli_pipeline
+    from domestique.vault import build_default_token_service
 
     _quiet_process_logs()
     color = console.supports_color()
     settings = settings_from_config()
-    pipeline = build_cli_pipeline(settings)
+    # Same reversible numbered tokens the wedge sends ([EMAIL_1], [EMAIL_2]).
+    # Without a service the pipeline falls back to flat [CATEGORY_REDACTED]
+    # placeholders, so two different emails render identically — which reads as
+    # a token collision and hides the taxonomy's compact prefixes. `pinned=False`
+    # keeps this session-only: no keyring access and no ~/.domestique writes.
+    token_service = build_default_token_service(pinned=False)
+    pipeline = build_cli_pipeline(settings, token_service=token_service)
     # Reuse the pipeline's own policy for the header — loading it a second
     # time via from_yaml_default() re-parsed the YAML and double-logged.
     print(_render_config_header(settings, pipeline.policy, color=color))
@@ -799,7 +821,9 @@ def run_demo(*, interactive: bool | None = None) -> int:
                 break
             res = asyncio.run(pipeline.inspect(text))
             after = res.redacted_text or text
-            print(_render_ledger(text, after, res.findings, color=color))
+            print(
+                _render_ledger(text, after, res.findings, color=color, token_service=token_service)
+            )
     return 0
 
 

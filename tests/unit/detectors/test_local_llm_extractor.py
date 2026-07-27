@@ -144,3 +144,55 @@ class TestParseResponseSalvage:
         from domestique.detectors.local_llm import LocalLLMClassifier
 
         assert LocalLLMClassifier._parse_response("I cannot help with that") is None
+
+
+class TestBackendFailureIsVisible:
+    """A dead backend must announce itself, not fail open in silence.
+
+    ``_classify`` already has the right handler (mark unavailable + warn
+    ``local_llm_unavailable``), but a bare ``except`` inside ``_classify_ollama``
+    swallowed transport errors before it could run — so a missing/misnamed
+    Ollama model made the whole tier return nothing, forever, with no log line.
+    On a DLP path that is a silent fail-open.
+    """
+
+    def _raising_opener(self, exc):
+        class _Opener:
+            def open(self, *a, **k):
+                raise exc
+
+        return lambda *a, **k: _Opener()
+
+    def test_missing_model_marks_tier_unavailable_and_warns(self, monkeypatch):
+        import urllib.error
+        import urllib.request
+
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        err = urllib.error.HTTPError("http://x/api/chat", 404, "Not Found", {}, None)
+        monkeypatch.setattr(urllib.request, "build_opener", self._raising_opener(err))
+
+        # structlog's own capture API - patching logger.warning directly mutates
+        # a global lazy proxy and leaks broken logging config into later tests.
+        import structlog.testing
+
+        clf = LocalLLMClassifier(confidence_threshold=0.7)
+        with structlog.testing.capture_logs() as logs:
+            assert asyncio.run(clf._classify("some text with a secret in it")) is None
+
+        assert clf._available is False, "dead backend not marked unavailable"
+        assert any(entry.get("event") == "local_llm_unavailable" for entry in logs), (
+            "backend failure was swallowed silently (fail-open, no operator signal)"
+        )
+
+    def test_scan_still_returns_no_detections_on_failure(self, monkeypatch):
+        import urllib.error
+        import urllib.request
+
+        from domestique.detectors.local_llm import LocalLLMClassifier
+
+        err = urllib.error.URLError("connection refused")
+        monkeypatch.setattr(urllib.request, "build_opener", self._raising_opener(err))
+        clf = LocalLLMClassifier(confidence_threshold=0.7)
+        # must degrade gracefully, never raise into the pipeline
+        assert asyncio.run(clf.scan("a longer piece of text to scan here")) == []

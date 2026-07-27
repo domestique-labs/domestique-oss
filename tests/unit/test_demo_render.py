@@ -121,3 +121,43 @@ class TestLedger:
 
     def test_truncate_leaves_short_values_unchanged(self) -> None:
         assert _truncate("short", 22) == "short"
+
+
+class TestDemoEnumeratesTokens:
+    """The demo must showcase the same reversible tokens the wedge sends.
+
+    `domestique start` passes a TokenService, so distinct values get distinct
+    numbered tokens ([EMAIL_1], [EMAIL_2]). `run_demo` built its pipeline
+    without one and fell back to the legacy flat [CATEGORY_REDACTED]
+    placeholder, so two different emails rendered identically - looking like a
+    collision, and hiding the taxonomy's compact prefixes.
+    """
+
+    def test_distinct_values_get_distinct_tokens(self, capsys, monkeypatch) -> None:
+        from unittest.mock import MagicMock
+
+        from domestique.cli import run_demo
+
+        monkeypatch.setattr(
+            "builtins.input",
+            MagicMock(side_effect=["mail a@corp.com and also b@corp.com", ""]),
+        )
+        run_demo(interactive=True)
+        out = capsys.readouterr().out
+        assert "[EMAIL_1]" in out and "[EMAIL_2]" in out, "distinct emails not enumerated"
+        assert "[EMAIL_ADDRESS_REDACTED]" not in out, "legacy flat placeholder still used"
+
+    def test_ledger_token_matches_the_after_text(self, capsys, monkeypatch) -> None:
+        # the ledger row used to synthesise "[CATEGORY_REDACTED]" itself, which
+        # would disagree with the real minted token shown in AFTER.
+        from unittest.mock import MagicMock
+
+        from domestique.cli import run_demo
+
+        monkeypatch.setattr(
+            "builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", ""])
+        )
+        run_demo(interactive=True)
+        out = capsys.readouterr().out
+        assert "[SSN_1]" in out
+        assert "[US_SSN_REDACTED]" not in out
