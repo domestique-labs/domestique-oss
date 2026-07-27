@@ -613,6 +613,18 @@ def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bo
     )
 
 
+def _is_redaction(f: Finding) -> bool:
+    """True for a finding that maps to a real redacted span.
+
+    Diagnostic sentinels (``gliner_not_cached``, ``detector_error``) are emitted
+    with a zero-length ``Span(0, 0)``: policy uses them to treat a request as
+    suspect, and ``_redact_text`` already excludes them (``end > start``), but
+    they are not redacted secrets — they must not be rendered as detections in
+    the demo Findings list or the interactive ledger.
+    """
+    return f.span is not None and f.span.end > f.span.start
+
+
 def _highlight_secrets(before: str, findings: list[Finding], paint: console.Palette) -> str:
     """Paint each finding's leaked span red, non-overlapping, left to right."""
     spans = sorted({(f.span.start, f.span.end) for f in findings if f.span is not None})
@@ -653,6 +665,8 @@ def _render_canned(before: str, after: str, findings: list[Finding], *, color: b
         "  Findings",
     ]
     for f in findings:
+        if not _is_redaction(f):
+            continue
         lines.append(
             f"    {paint(g['check'], 'green')} {_label(f.category):<16} {f.confidence:.0%}"
         )
@@ -667,15 +681,17 @@ def _truncate(value: str, width: int = 22) -> str:
     return value[: keep // 2] + "…" + value[-(keep - keep // 2) :]
 
 
-def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
+def _render_ledger(before: str, after: str, findings: list[Finding], *, color: bool) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
 
-    # dedupe by span, keep highest confidence per span
+    # dedupe by span, keep highest confidence per span. Zero-length diagnostic
+    # sentinels (gliner_not_cached / detector_error) are not real redactions.
     best: dict[tuple[int, int], Finding] = {}
     for f in findings:
-        if f.span is None:
+        if not _is_redaction(f):
             continue
+        assert f.span is not None
         key = (f.span.start, f.span.end)
         if key not in best or f.confidence > best[key].confidence:
             best[key] = f
@@ -700,6 +716,8 @@ def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
             f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
             f"{paint(token, 'green')}  {paint(conf, 'dim')}"
         )
+    out.append(f"  AFTER {g['arrow']} sent to the model")
+    out.append("    " + _highlight_tokens(after, paint))
     return "\n".join(out)
 
 
@@ -780,7 +798,8 @@ def run_demo(*, interactive: bool | None = None) -> int:
             if not text:
                 break
             res = asyncio.run(pipeline.inspect(text))
-            print(_render_ledger(text, res.findings, color=color))
+            after = res.redacted_text or text
+            print(_render_ledger(text, after, res.findings, color=color))
     return 0
 
 

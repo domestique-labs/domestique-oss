@@ -5,11 +5,13 @@ from typing import TYPE_CHECKING
 
 from domestique.cli import _render_canned, _render_config_header, _render_ledger, _truncate
 from domestique.config import Settings
+from domestique.detectors.registry import Finding
 from domestique.gateway import build_cli_pipeline
+from domestique.models import Span
 from domestique.policy import PolicyEngine
 
 if TYPE_CHECKING:
-    from domestique.detectors.registry import Finding, InspectionResult
+    from domestique.detectors.registry import InspectionResult
 
 
 class TestConfigHeader:
@@ -48,6 +50,21 @@ class TestCanned:
         assert "\033[31m" in out  # red used for a leaked secret
         assert "\033[32m" in out  # green used for a token
 
+    def test_hides_zero_length_diagnostic_sentinel(self) -> None:
+        # A gliner_not_cached / detector_error sentinel is a zero-length Span(0,0)
+        # diagnostic that policy uses but which is NOT a redacted secret; it must
+        # never show up in the Findings list as a "detection".
+        before = "key AKIAIOSFODNN7EXAMPLE"
+        findings = [
+            Finding(detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)),
+            Finding(detector="gliner", category="gliner_not_cached", confidence=1.0, span=Span(0, 0)),
+        ]
+        after = "key [AWS_ACCESS_KEY_REDACTED]"
+        out = _render_canned(before, after, findings, color=False)
+        assert "AWS access key" in out  # the real finding still shown
+        assert "Gliner not cached" not in out  # sentinel suppressed
+        assert "gliner_not_cached" not in out
+
 
 class TestLedger:
     def _findings(self, text: str) -> list[Finding]:
@@ -55,7 +72,8 @@ class TestLedger:
 
     def test_pairs_leaked_value_to_token(self) -> None:
         text = "my aws key AKIAIOSFODNN7EXAMPLE and phone 555-123-4567"
-        out = _render_ledger(text, self._findings(text), color=False)
+        res = asyncio.run(build_cli_pipeline().inspect(text))
+        out = _render_ledger(text, res.redacted_text or text, res.findings, color=False)
         assert "redacted 2 secret" in out
         assert "AKIAIOSFODNN7EXAMPLE" in out
         assert "[AWS_ACCESS_KEY_REDACTED]" in out
@@ -64,8 +82,33 @@ class TestLedger:
 
     def test_clean_input_says_nothing_detected(self) -> None:
         text = "just a normal sentence about the weather"
-        out = _render_ledger(text, self._findings(text), color=False)
+        out = _render_ledger(text, text, self._findings(text), color=False)
         assert "nothing sensitive detected" in out
+
+    def test_shows_after_redacted_text(self) -> None:
+        # Bug 1: the interactive prompt path must show the AFTER redacted text,
+        # not only the leaked->token ledger rows.
+        before = "key AKIAIOSFODNN7EXAMPLE"
+        after = "key [AWS_ACCESS_KEY_REDACTED]"
+        findings = [
+            Finding(detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)),
+        ]
+        out = _render_ledger(before, after, findings, color=False)
+        assert "AFTER" in out
+        assert "key [AWS_ACCESS_KEY_REDACTED]" in out  # full redacted text shown
+
+    def test_hides_zero_length_diagnostic_sentinel(self) -> None:
+        # Bug 2: a gliner_not_cached / detector_error zero-length sentinel must
+        # not appear as a redacted "[..._REDACTED]" ledger row.
+        before = "key AKIAIOSFODNN7EXAMPLE"
+        after = "key [AWS_ACCESS_KEY_REDACTED]"
+        findings = [
+            Finding(detector="regex", category="aws_access_key", confidence=0.99, span=Span(4, 24)),
+            Finding(detector="gliner", category="gliner_not_cached", confidence=1.0, span=Span(0, 0)),
+        ]
+        out = _render_ledger(before, after, findings, color=False)
+        assert "redacted 1 secret" in out  # only the real one counted
+        assert "[GLINER_NOT_CACHED_REDACTED]" not in out
 
     def test_truncate_shortens_long_values_with_ellipsis(self) -> None:
         # unit-test _truncate directly — deterministic, no detector dependency
