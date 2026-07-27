@@ -39,6 +39,11 @@ if TYPE_CHECKING:
     from domestique.policy import PolicyEngine
     from domestique.vault.service import TokenService
 
+#: Shown in the ledger's token column when a prompt was blocked: nothing was
+#: tokenized because nothing was sent. (A named constant, not a literal, so
+#: ruff's S105 doesn't read `token = "..."` as a hardcoded credential.)
+_NOT_SENT = "not sent"
+
 _DASHBOARD_URL = "http://127.0.0.1:9876"
 
 _APP_MODULE = "domestique_app"
@@ -754,7 +759,7 @@ def _render_ledger(
         assert f.span is not None
         value = before[f.span.start : f.span.end]
         if blocked:
-            token = "not sent"
+            token = _NOT_SENT
         elif token_service is not None:
             found = token_of.get(value)
             if found is None:
