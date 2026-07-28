@@ -58,6 +58,26 @@ jobs:
       - name: Run app tests
         run: pytest domestique_app/tests -q
 
+  wheel-availability:
+    name: Fresh-install wheel check (${{ matrix.os }}, blocking)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Resolve dependencies without installing (report-only)
+        run: |
+          python -m pip install --upgrade pip
+          pip install --dry-run --report pip-report.json -e ".[dev]"
+      - name: Fail if any dependency has no prebuilt wheel for this platform
+        run: python scripts/check_wheel_only_install.py pip-report.json
+
   test-app:
     name: Test (app, informational)
     runs-on: ubuntu-latest
