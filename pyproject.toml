@@ -27,7 +27,15 @@ classifiers = [
 dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.34,<1",
-    "litellm>=1.80,<1.93",
+    # Capped below 1.92: 1.92.0 switched litellm's build backend to maturin
+    # (a real Rust/PyO3 extension) and PyPI only carries manylinux wheels for
+    # it -- Windows/macOS resolve straight to the sdist, which requires a
+    # Rust toolchain to build. 1.91.4 is the last version with a universal
+    # (py3-none-any) wheel. See CI's "Fresh-install wheel check" job, which
+    # exists specifically to catch this class of regression automatically
+    # for any dependency, not just this one -- raise this cap only once that
+    # job is green with the new litellm range.
+    "litellm>=1.80,<1.92",
     "pydantic>=2.10,<2.14",
     "pydantic-settings>=2.7,<2.15",
     "httpx>=0.28,<1",
@@ -115,7 +123,7 @@ exclude = ["domestique_app.tests*"]
 "domestique.policy" = ["*.yaml"]
 # Dashboard page + icons; without these `python -m domestique_app` from a wheel install
 # would 404 the dashboard and show no tray/menu-bar icon.
-domestique_app = ["assets/*.html", "assets/*.png", "assets/*.icns", "assets/images/*"]
+domestique_app = ["assets/*.html", "assets/*.png", "assets/*.icns", "assets/images/*", "assets/*.js"]
 
 [tool.ruff]
 line-length = 99
