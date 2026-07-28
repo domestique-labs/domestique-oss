@@ -46,15 +46,16 @@ rules:
     action: redact
     categories:
       - us_ssn
-      - social_security_number
-      - "pii:social_security_number"
       - credit_card
-      - "pii:credit_card"
       - email_address
-      - "pii:email"
       - phone_number
-      - "pii:phone_number"
       - address
-      - "pii:address"
-      - "pii:password"
+      - password_literal
+    min_confidence: 0.7
+
+  # ── Redact: anything the LLM tier flags (canonical OR coined term) ──────
+  - name: redact-llm-findings
+    detector: local_llm_classifier
+    action: redact
+    categories: []          # empty = match every category from this detector
     min_confidence: 0.7

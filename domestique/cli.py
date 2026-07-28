@@ -37,6 +37,12 @@ if TYPE_CHECKING:
     from domestique.detectors.registry import Finding
     from domestique.detectors.status import TierStatus
     from domestique.policy import PolicyEngine
+    from domestique.vault.service import TokenService
+
+#: Shown in the ledger's token column when a prompt was blocked: nothing was
+#: tokenized because nothing was sent. (A named constant, not a literal, so
+#: ruff's S105 doesn't read `token = "..."` as a hardcoded credential.)
+_NOT_SENT = "not sent"
 
 _DASHBOARD_URL = "http://127.0.0.1:9876"
 
@@ -613,6 +619,18 @@ def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bo
     )
 
 
+def _is_redaction(f: Finding) -> bool:
+    """True for a finding that maps to a real redacted span.
+
+    Diagnostic sentinels (``gliner_not_cached``, ``detector_error``) are emitted
+    with a zero-length ``Span(0, 0)``: policy uses them to treat a request as
+    suspect, and ``_redact_text`` already excludes them (``end > start``), but
+    they are not redacted secrets — they must not be rendered as detections in
+    the demo Findings list or the interactive ledger.
+    """
+    return f.span is not None and f.span.end > f.span.start
+
+
 def _highlight_secrets(before: str, findings: list[Finding], paint: console.Palette) -> str:
     """Paint each finding's leaked span red, non-overlapping, left to right."""
     spans = sorted({(f.span.start, f.span.end) for f in findings if f.span is not None})
@@ -636,7 +654,32 @@ def _highlight_tokens(after: str, paint: console.Palette) -> str:
     )
 
 
-def _render_canned(before: str, after: str, findings: list[Finding], *, color: bool) -> str:
+def _render_outcome(
+    after: str | None,
+    paint: console.Palette,
+    g: dict[str, str],
+    *,
+    action: Action | None,
+) -> list[str]:
+    """The "what actually left the machine" block.
+
+    On BLOCK the pipeline returns no redacted text, because nothing is sent.
+    Falling back to the original text there printed the raw secret under
+    "sent to the model" — a cleartext echo of the very thing that was blocked.
+    """
+    if action is Action.BLOCK or after is None:
+        return [f"  {paint(g['cross'], 'red')} BLOCKED {g['arrow']} nothing was sent"]
+    return [f"  AFTER {g['arrow']} sent to the model", "    " + _highlight_tokens(after, paint)]
+
+
+def _render_canned(
+    before: str,
+    after: str | None,
+    findings: list[Finding],
+    *,
+    color: bool,
+    action: Action | None = None,
+) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
     rule = "  " + g["rule"] * 60
@@ -647,12 +690,13 @@ def _render_canned(before: str, after: str, findings: list[Finding], *, color: b
         "  BEFORE",
         "    " + _highlight_secrets(before, findings, paint),
         "",
-        f"  AFTER {g['arrow']} sent to the model",
-        "    " + _highlight_tokens(after, paint),
+        *_render_outcome(after, paint, g, action=action),
         rule,
         "  Findings",
     ]
     for f in findings:
+        if not _is_redaction(f):
+            continue
         lines.append(
             f"    {paint(g['check'], 'green')} {_label(f.category):<16} {f.confidence:.0%}"
         )
@@ -667,15 +711,25 @@ def _truncate(value: str, width: int = 22) -> str:
     return value[: keep // 2] + "…" + value[-(keep - keep // 2) :]
 
 
-def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
+def _render_ledger(
+    before: str,
+    after: str | None,
+    findings: list[Finding],
+    *,
+    color: bool,
+    token_service: TokenService | None = None,
+    action: Action | None = None,
+) -> str:
     g = console.glyphs()
     paint = console.Palette(enabled=color)
 
-    # dedupe by span, keep highest confidence per span
+    # dedupe by span, keep highest confidence per span. Zero-length diagnostic
+    # sentinels (gliner_not_cached / detector_error) are not real redactions.
     best: dict[tuple[int, int], Finding] = {}
     for f in findings:
-        if f.span is None:
+        if not _is_redaction(f):
             continue
+        assert f.span is not None
         key = (f.span.start, f.span.end)
         if key not in best or f.confidence > best[key].confidence:
             best[key] = f
@@ -684,22 +738,54 @@ def _render_ledger(before: str, findings: list[Finding], *, color: bool) -> str:
     if not ordered:
         return f"  {g['dot']} nothing sensitive detected"
 
+    # Reverse the session map rather than calling tokenize(): rendering must
+    # never mutate the vault. _redact_text merges overlapping spans into one
+    # token, so a sub-span has no token of its own — minting one here invented a
+    # row citing a token that appears nowhere in AFTER, and left a bogus entry
+    # in the store. A value with no token was folded into an overlapping span
+    # and is already covered by that span's row.
+    token_of: dict[str, str] = {}
+    if token_service is not None:
+        token_of = {value: token for token, value in token_service.session.entries().items()}
+
+    # A blocked prompt is never tokenized — nothing is sent, so nothing is
+    # minted. Findings must still be listed: reporting "nothing sensitive
+    # detected" for a prompt blocked over a private key is the worst possible
+    # lie this view can tell.
+    blocked = action is Action.BLOCK
+
     rows = []
     for f in ordered:
         assert f.span is not None
-        leaked = _truncate(before[f.span.start : f.span.end])
-        token = f"[{f.category.upper()}_REDACTED]"
-        rows.append((_label(f.category), leaked, token, f"{f.confidence:.0%}"))
+        value = before[f.span.start : f.span.end]
+        if blocked:
+            token = _NOT_SENT
+        elif token_service is not None:
+            found = token_of.get(value)
+            if found is None:
+                continue  # merged into an overlapping span; not its own redaction
+            token = found
+        else:
+            token = f"[{f.category.upper()}_REDACTED]"
+        rows.append((_label(f.category), _truncate(value), token, f"{f.confidence:.0%}"))
+
+    if not rows:
+        return f"  {g['dot']} nothing sensitive detected"
 
     lw = max(len(r[0]) for r in rows)
     vw = max(len(r[1]) for r in rows)
-    out = [f"  {paint(g['check'], 'green')} redacted {len(rows)} secret(s)"]
+    if blocked:
+        out = [f"  {paint(g['cross'], 'red')} blocked on {len(rows)} finding(s)"]
+    else:
+        out = [f"  {paint(g['check'], 'green')} redacted {len(rows)} secret(s)"]
     for label, leaked, token, conf in rows:
+        mark = paint(g["cross"], "red") if blocked else paint(g["check"], "green")
         out.append(
-            f"    {paint(g['check'], 'green')} {label:<{lw}}  "
+            f"    {mark} {label:<{lw}}  "
             f"{paint(leaked, 'red'):<{vw}}  {g['arrow']}  "
-            f"{paint(token, 'green')}  {paint(conf, 'dim')}"
+            f"{paint(token, 'red' if blocked else 'green')}  {paint(conf, 'dim')}"
         )
+    out.extend(_render_outcome(after, paint, g, action=action))
     return "\n".join(out)
 
 
@@ -747,18 +833,32 @@ def run_demo(*, interactive: bool | None = None) -> int:
     """
     from domestique.config_loader import settings_from_config
     from domestique.gateway import build_cli_pipeline
+    from domestique.vault import build_default_token_service
 
     _quiet_process_logs()
     color = console.supports_color()
     settings = settings_from_config()
-    pipeline = build_cli_pipeline(settings)
+    # Same reversible numbered tokens the wedge sends ([EMAIL_1], [EMAIL_2]).
+    # Without a service the pipeline falls back to flat [CATEGORY_REDACTED]
+    # placeholders, so two different emails render identically — which reads as
+    # a token collision and hides the taxonomy's compact prefixes. `pinned=False`
+    # keeps this session-only: no keyring access and no ~/.domestique writes.
+    token_service = build_default_token_service(pinned=False)
+    pipeline = build_cli_pipeline(settings, token_service=token_service)
     # Reuse the pipeline's own policy for the header — loading it a second
     # time via from_yaml_default() re-parsed the YAML and double-logged.
     print(_render_config_header(settings, pipeline.policy, color=color))
 
     result = asyncio.run(pipeline.inspect(_DEMO_PROMPT))
-    after = result.redacted_text or _DEMO_PROMPT
-    print(_render_canned(_DEMO_PROMPT, after, result.findings, color=color))
+    print(
+        _render_canned(
+            _DEMO_PROMPT,
+            result.redacted_text,
+            result.findings,
+            color=color,
+            action=result.action,
+        )
+    )
 
     if interactive is None:
         try:
@@ -780,7 +880,16 @@ def run_demo(*, interactive: bool | None = None) -> int:
             if not text:
                 break
             res = asyncio.run(pipeline.inspect(text))
-            print(_render_ledger(text, res.findings, color=color))
+            print(
+                _render_ledger(
+                    text,
+                    res.redacted_text,
+                    res.findings,
+                    color=color,
+                    token_service=token_service,
+                    action=res.action,
+                )
+            )
     return 0
 
 

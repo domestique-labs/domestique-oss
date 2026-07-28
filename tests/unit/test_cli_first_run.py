@@ -161,7 +161,7 @@ class TestInteractiveDemo:
         assert run_demo(interactive=True) == 0
         out = capsys.readouterr().out
         assert "try your own" in out.lower()
-        assert "[US_SSN_REDACTED]" in out
+        assert "[SSN_1]" in out
         assert "redacted" in out.lower()
 
     def test_interactive_loop_eof_exits_cleanly(self, monkeypatch: pytest.MonkeyPatch) -> None:
