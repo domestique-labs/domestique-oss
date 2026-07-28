@@ -123,7 +123,7 @@ exclude = ["domestique_app.tests*"]
 "domestique.policy" = ["*.yaml"]
 # Dashboard page + icons; without these `python -m domestique_app` from a wheel install
 # would 404 the dashboard and show no tray/menu-bar icon.
-domestique_app = ["assets/*.html", "assets/*.png", "assets/*.icns", "assets/images/*"]
+domestique_app = ["assets/*.html", "assets/*.png", "assets/*.icns", "assets/images/*", "assets/*.js"]
 
 [tool.ruff]
 line-length = 99
