@@ -204,13 +204,6 @@ scripts/toggle-quic.ps1 -Browser chrome        # or: brave | edge
 For **Opera** and **Firefox** the script prints the correct manual step (they use
 different mechanisms).
 
-### Detection presets (Tier 3 LLM classifier)
-
-| Preset | Stack | VRAM | Latency | F1 | Notes |
-|---|---|---|---|---|---|
-| `minimal` | Regex only | 0 | <1ms | 14% | Pattern matching, no LLM |
-| `balanced` | Regex + Qwen3 1.7B | 1.8 GB | ~164ms | 92% | Recommended - fits 16GB laptops |
-| `maximum` | Regex + GLiNER + Qwen3 | 1.8 GB | ~209ms | 91% recall | Highest recall, more false positives |
 
 ### Project layout
 
