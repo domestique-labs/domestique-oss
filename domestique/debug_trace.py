@@ -185,7 +185,9 @@ def _json_safe(value: Any) -> Any:
         return value.value
     if isinstance(value, Path):
         return str(value)
-    if is_dataclass(value):
+    # is_dataclass() is also true for the dataclass *class* itself, which
+    # asdict() rejects; only instances can be converted.
+    if is_dataclass(value) and not isinstance(value, type):
         return _json_safe(asdict(value))
     if isinstance(value, dict):
         return {str(k): _json_safe(v) for k, v in value.items()}

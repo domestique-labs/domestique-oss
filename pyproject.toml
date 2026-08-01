@@ -181,7 +181,6 @@ follow_imports = "silent"
 # BASELINE: pre-existing type debt. Ratchet DOWN — never add modules here.
 # Remove a line once its module type-checks clean.
 module = [
-    "domestique.debug_trace",
     "domestique.sdk",
     "domestique.detectors.local_llm",
     "domestique.audit",

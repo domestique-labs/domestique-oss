@@ -138,3 +138,17 @@ def test_env_var_off_values_do_not_enable_raw(monkeypatch) -> None:
     for value in ("1", "true", "TRUE", "yes", "on"):
         monkeypatch.setenv("DOMESTIQUE_LOG_RAW_PROMPTS", value)
         assert raw_prompt_logging_enabled() is True
+
+
+def test_json_safe_handles_dataclass_class_not_just_instances(tmp_path: Path) -> None:
+    """is_dataclass() is true for the class too; asdict() would raise on it."""
+    from dataclasses import dataclass
+
+    @dataclass
+    class Marker:
+        value: int
+
+    path = tmp_path / "debug_trace.jsonl"
+    append_debug_trace({"action": "pass", "detections": [Marker, Marker(1)]}, path=path)
+    entry = json.loads(path.read_text(encoding="utf-8").strip())
+    assert entry["detections"][1] == {"value": 1}
