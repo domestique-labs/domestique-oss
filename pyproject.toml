@@ -35,7 +35,7 @@ dependencies = [
     # exists specifically to catch this class of regression automatically
     # for any dependency, not just this one -- raise this cap only once that
     # job is green with the new litellm range.
-    "litellm>=1.80,<1.92",
+    "litellm>=1.80,<1.95",
     "pydantic>=2.10,<2.14",
     "pydantic-settings>=2.7,<2.15",
     "httpx>=0.28,<1",
@@ -43,7 +43,7 @@ dependencies = [
     "pyyaml>=6,<7",
     "python-dotenv>=1,<2",
     "prometheus-client>=0.21,<1",
-    "cryptography>=42,<47",
+    "cryptography>=42,<50",
     "keyring>=24,<26",
 ]
 
