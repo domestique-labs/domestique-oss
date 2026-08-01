@@ -86,7 +86,7 @@ jobs:
           cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Post sticky PR comment
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
