@@ -24,7 +24,7 @@ jobs:
           # Need base history so we can check out and measure `main` on the
           # same runner (fair, environment-controlled latency comparison).
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
