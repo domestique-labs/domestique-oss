@@ -125,9 +125,9 @@ substantially raised accuracy and cut the false-positive rate — same model,
 same categories, just reordered rules. Worth trying first.
 
 (The specific before/after percentages that used to appear here came from an
-ablation whose dataset is not in this repository, so they could not be checked
-and have been removed. Run your own ablation; the ordering effect is easy to
-reproduce.)
+ablation whose prompt revisions are not in this repository, so the comparison
+could not be re-run and the figures have been removed. The effect itself is
+cheap to confirm: reorder the rules in your own prompt and re-run the scorer.)
 
 ### Key insight: Specificity beats length
 A 150-word prompt with precise decision rules outperforms a 400-word prompt
@@ -150,14 +150,30 @@ need to tell it WHICH code matters and WHICH is safe.
 
 ## Benchmarks to Beat
 
-Run the current production prompt yourself and use whatever it scores as your
-baseline. Previously this section quoted fixed accuracy, precision, recall, F1
-and latency figures for Qwen3 1.7B on a 70-sample dataset — that dataset is not
-in this repository, so the numbers could not be reproduced or checked, and they
-have been removed.
+Measure the current production prompt yourself, then beat what *you* measured:
 
-Scores depend on the model, the sample set and the hardware, so a baseline you
-measured on your own machine is the only one worth comparing against.
+```bash
+python workshop/prompt_competition/run_competition.py
+```
+
+This scores the production prompt from `domestique/detectors/local_llm.py`
+against `dataset.json` (70 labeled samples) and reports accuracy, precision,
+recall, F1 and average latency. It needs Ollama running; the default model is
+`qwen3:1.7b`.
+
+Roughly what to expect on that dataset: accuracy and F1 around 90%, precision a
+little above that, recall a little below, and average latency in the low
+hundreds of milliseconds. Treat those as a sighting shot, not a target —
+latency in particular is hardware-dependent, and scores move with the model.
+
+Two caveats on numbers you may see quoted elsewhere in this file's history:
+
+- The runner only ever loads `dataset.json`. `dataset_combined.json` (262
+  samples) ships alongside it but there is no `--dataset` flag, so any score
+  attributed to the combined set cannot currently be reproduced with this
+  script.
+- The V0-vs-V6 rule-ordering ablation is not reproducible either: those prompt
+  revisions are not in the repository, only the conclusion drawn from them.
 
 ---
 

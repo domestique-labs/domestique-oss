@@ -1,5 +1,12 @@
 # File & Image Scanning — Benchmark Results & Improvement Proposals
 
+> **These figures cannot currently be reproduced.** The dataset is in
+> `dataset/` and the recorded output is in `benchmark_results.json`, but the
+> runner that produced them is not in this repository —
+> `benchmarks/file_scanning/__init__.py` is empty. Until a runner is restored,
+> treat everything below as a historical record of one run, not as a claim
+> about how file scanning performs. Do not quote it externally.
+
 ## Benchmark Summary
 
 **Dataset**: 29 samples (22 positive, 7 negative)  
@@ -7,6 +14,13 @@
 **Categories**: SSN, email, phone, credit_card, api_key, credential, name, address
 
 ### Results (After Improvements)
+
+**Read the headline with care.** These are *file-level* metrics: a file counts
+as a hit if the scanner flagged anything in it. On this dataset that question is
+easy — there are only 7 negatives — which is why the file-level score is perfect
+while the per-category table below shows real misses (API key recall 78%, name
+recall 90%). The per-category numbers describe detection quality; the file-level
+row mostly describes the shape of the dataset.
 
 | Metric | Value |
 |--------|-------|
