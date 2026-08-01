@@ -204,6 +204,12 @@ scripts/toggle-quic.ps1 -Browser chrome        # or: brave | edge
 For **Opera** and **Firefox** the script prints the correct manual step (they use
 different mechanisms).
 
+### Detection quality
+
+Detection quality is regression-gated per PR; see the scorecard in CI. Run
+`python -m benchmarks.eval` to reproduce it locally — that harness is the only
+thing in this repository that measures detection quality, and any figure not
+produced by it should not be trusted.
 
 ### Project layout
 

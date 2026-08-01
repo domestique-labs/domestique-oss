@@ -87,8 +87,8 @@ false positives (from 21% FP to 3% FP in our benchmarks).
 ## Hint Level 4: Advanced Techniques (Expert)
 
 ### NONE-first decision rules (highest impact technique)
-The current production prompt achieves 93% accuracy by putting safe-content
-rules before sensitive-content rules:
+The current production prompt puts safe-content rules before sensitive-content
+rules:
 ```
 Decision rules (apply first match):
 1. Public/open-source code, generic algorithms -> NONE
@@ -109,7 +109,7 @@ Decision rules (apply first match):
 
 ## Hint Level 5: Prompt Architecture (Master)
 
-The production prompt (93% accuracy, 97% precision on 262 samples) follows this structure:
+The production prompt follows this structure:
 
 ```
 [Role: "You are an enterprise DLP scanner"]
@@ -120,10 +120,14 @@ The production prompt (93% accuracy, 97% precision on 262 samples) follows this 
 ```
 
 ### Key insight: NONE-first ordering beats everything else
-Our ablation study showed:
-- Prompt V0 (sensitive-first rules): 73% accuracy, 21% FP rate
-- Prompt V6 (NONE-first rules): 86% accuracy, 3% FP rate
-Same model, same categories, just reordered rules.
+Listing the safe-content rules first, before the sensitive-content rules,
+substantially raised accuracy and cut the false-positive rate — same model,
+same categories, just reordered rules. Worth trying first.
+
+(The specific before/after percentages that used to appear here came from an
+ablation whose dataset is not in this repository, so they could not be checked
+and have been removed. Run your own ablation; the ordering effect is easy to
+reproduce.)
 
 ### Key insight: Specificity beats length
 A 150-word prompt with precise decision rules outperforms a 400-word prompt
@@ -146,12 +150,14 @@ need to tell it WHICH code matters and WHICH is safe.
 
 ## Benchmarks to Beat
 
-Current production prompt on Qwen3 1.7B (70-sample dataset):
-- **Accuracy**: 90%
-- **Precision**: 92%
-- **Recall**: 89%
-- **F1**: 90%
-- **Latency**: ~164ms average
+Run the current production prompt yourself and use whatever it scores as your
+baseline. Previously this section quoted fixed accuracy, precision, recall, F1
+and latency figures for Qwen3 1.7B on a 70-sample dataset — that dataset is not
+in this repository, so the numbers could not be reproduced or checked, and they
+have been removed.
+
+Scores depend on the model, the sample set and the hardware, so a baseline you
+measured on your own machine is the only one worth comparing against.
 
 ---
 
