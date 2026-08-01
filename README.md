@@ -34,9 +34,14 @@
 ## Quick start
 
 ```bash
-pipx install domestique            # or: pip install domestique
+git clone https://github.com/domestique-labs/domestique-oss && cd domestique-oss
+pip install -e .                   # in a virtualenv
 domestique start                   # launches the redacting proxy on http://127.0.0.1:8000
 ```
+
+> **Not on PyPI yet.** `pipx install domestique` does not work today — install from
+> source as above. This note and the PyPI badges go live together with the first
+> published release.
 
 Point your tool at it and keep using your own API key:
 

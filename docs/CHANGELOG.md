@@ -7,7 +7,9 @@ All notable changes to this project are documented here. The format is based on
 ## [Unreleased]
 
 Nothing yet published to a package index — the `0.1.0` items below ship from source
-(`pip install -e .`) while the PyPI package name is finalized.
+(`pip install -e .`). The package name `domestique` is settled; publishing is blocked
+on configuring a PyPI Trusted Publisher and clearing the `pypi` environment's
+approval gate, not on naming.
 
 ### Added — browser interception coverage
 - Qwen-cloud destinations (`chat.qwen.ai`, `dashscope.aliyuncs.com`,
