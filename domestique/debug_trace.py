@@ -1,13 +1,19 @@
-"""Raw decision trace for local debugging.
+"""Decision trace for local debugging.
 
-This module writes a local JSONL trail of the exact prompt content the firewall
-inspected and the action it chose. The trace intentionally contains raw prompt
-text, so it is separate from the compact audit log.
+This module writes a local JSONL trail explaining what the firewall did to a
+request. Explaining a decision needs the metadata — the action, the categories
+detected, the endpoint — not the prompt itself, so prompt content is scrubbed
+before it reaches disk.
+
+Raw capture is available for debugging a detector that missed something, but it
+is opt-in via ``DOMESTIQUE_LOG_RAW_PROMPTS`` and writes cleartext prompts to
+disk. See :func:`scrub_entry` for exactly what survives by default.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from enum import Enum
@@ -17,16 +23,79 @@ from typing import Any
 TRACE_PATH = Path.home() / ".domestique" / "debug_trace.jsonl"
 MAX_TRACE_ENTRIES = 1000
 
+#: Environment variable opting into cleartext prompt logging.
+RAW_PROMPT_ENV = "DOMESTIQUE_LOG_RAW_PROMPTS"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
 
-def append_debug_trace(entry: dict[str, Any], *, path: Path | None = None) -> None:
-    """Append one debug trace entry. Never raises into the request path."""
+#: Keys carrying prompt text. Dropped unless raw logging is opted into.
+_PROMPT_TEXT_KEYS = ("prompt", "prompt_fields")
+
+#: Keys carrying whole request bodies, which have no redacted counterpart.
+_RAW_DUMP_KEYS = ("raw_body", "request_json", "raw_body_preview")
+
+
+def raw_prompt_logging_enabled() -> bool:
+    """True when the operator explicitly opted into cleartext prompt logging."""
+    return os.getenv(RAW_PROMPT_ENV, "").strip().lower() in _TRUTHY
+
+
+def _dump_length(value: Any) -> int:
+    """Size of an omitted payload, so the entry still shows content existed."""
+    if isinstance(value, str):
+        return len(value)
     try:
+        return len(json.dumps(_json_safe(value), ensure_ascii=False))
+    except (TypeError, ValueError):
+        return len(str(value))
+
+
+def scrub_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    """Strip prompt content from a trace entry, keeping decision metadata.
+
+    Prompt text is dropped in every case, whatever the action or detection
+    state; ``redacted_prompt`` is the only channel through which prompt content
+    survives. Two consequences follow, both intended: a clean ``pass`` yields no
+    prompt text, because nothing was masked and a "redacted" copy would be the
+    raw prompt verbatim; and a ``block`` that never computed a redacted variant
+    likewise yields none.
+
+    Whole-body dumps are replaced with a presence marker and a length, so an
+    entry still records that content was there.
+
+    Note the residual limitation: content the detectors *missed* can survive
+    inside ``redacted_prompt``, since only detected spans are masked. Redacting
+    a log with the same engine whose misses you are debugging cannot do better —
+    that is what the opt-in raw mode is for.
+    """
+    scrubbed = dict(entry)
+    for key in _PROMPT_TEXT_KEYS:
+        scrubbed.pop(key, None)
+    for key in _RAW_DUMP_KEYS:
+        if key in scrubbed:
+            value = scrubbed.pop(key)
+            scrubbed[f"{key}_omitted"] = True
+            scrubbed[f"{key}_length"] = _dump_length(value)
+    return scrubbed
+
+
+def append_debug_trace(
+    entry: dict[str, Any], *, path: Path | None = None, log_raw: bool | None = None
+) -> None:
+    """Append one debug trace entry. Never raises into the request path.
+
+    Prompt content is scrubbed unless raw logging is enabled, either explicitly
+    via ``log_raw`` or through the ``DOMESTIQUE_LOG_RAW_PROMPTS`` environment
+    variable. Passing ``log_raw`` bypasses the environment entirely, which is
+    what the tests rely on.
+    """
+    try:
+        raw = raw_prompt_logging_enabled() if log_raw is None else log_raw
         trace_path = path or TRACE_PATH
         trace_path.parent.mkdir(parents=True, exist_ok=True)
         event = {
             "ts": datetime.now(UTC).isoformat(),
-            **entry,
-            "raw_prompt_logged": True,
+            **(entry if raw else scrub_entry(entry)),
+            "raw_prompt_logged": raw,
         }
         with open(trace_path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(_json_safe(event), ensure_ascii=False) + "\n")

@@ -130,7 +130,10 @@ class TestAllowBehavior:
         entries = read_debug_trace(path=trace_path)
         assert r.status_code == 200
         assert entries[0]["action"] == "allowed"
-        assert entries[0]["prompt"] == "What is the capital of France?"
+        # The decision is traced; the prompt is scrubbed unless raw logging is on.
+        assert "prompt" not in entries[0]
+        assert entries[0]["raw_prompt_logged"] is False
+        assert "What is the capital of France?" not in trace_path.read_text(encoding="utf-8")
 
 
 class TestErrorHandling:
