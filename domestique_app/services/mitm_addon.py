@@ -336,10 +336,17 @@ class DomestiqueAddon:
             pass
 
     def _log_request(self, entry: dict) -> None:
-        """Append a request entry to the JSON lines log file."""
+        """Append a request entry to the JSON lines log file.
+
+        Prompt content is scrubbed unless raw logging is explicitly enabled,
+        using the same rules and the same flag as the debug trace.
+        """
+        from domestique.debug_trace import raw_prompt_logging_enabled, scrub_entry
+
+        payload = entry if raw_prompt_logging_enabled() else scrub_entry(entry)
         try:
             with open(self._log_file, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+                f.write(json.dumps(payload) + "\n")
             # Truncate if too large (keep last N entries)
             self._trim_log()
         except OSError:
