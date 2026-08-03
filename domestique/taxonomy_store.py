@@ -21,6 +21,7 @@ from domestique.taxonomy import (
     GENERIC_PREFIX,
     MAX_PREFIX_LEN,
     _derive_prefix,
+    is_label_shaped,
     is_value_like,
     normalize_category,
 )
@@ -92,10 +93,18 @@ class TaxonomyStore:
         store over the same file, and ``self._terms`` was seeded once at
         construction — so writing it wholesale makes the last writer silently
         discard every term the others coined. Re-reading and merging on each
-        write keeps them all. On-disk entries win for keys already present, so
-        a prefix another process already handed out is never reassigned; the
-        merged view is written back into ``self._terms`` so this process agrees
-        with the file it just wrote.
+        write recovers most of them. On-disk entries win for keys already
+        present, so a prefix another process already handed out is never
+        reassigned; the merged view is written back into ``self._terms`` so this
+        process agrees with the file it just wrote.
+
+        This reduces lost updates but does not eliminate them: the read-modify
+        -write is not atomic across processes and takes no file lock, so writes
+        interleaving between the read and the replace are still lost. Measured
+        under 8 concurrent processes coining 320 terms, 88 survived. ``os.replace``
+        is atomic, so the file is never observed corrupt or partial — the failure
+        mode is a missing label, which costs a coined prefix and nothing more.
+        A real fix needs an flock/O_EXCL critical section; tracked separately.
 
         Persistence must never raise into the request path: any failure degrades
         to in-memory only.
@@ -112,6 +121,11 @@ class TaxonomyStore:
             # half-written copy of the other's.
             tmp = _tmp_path_for(self._path)
             tmp.write_text(json.dumps(merged, indent=2, sort_keys=True), encoding="utf-8")
+            # 0600 before the rename, so the file is never briefly world-readable.
+            # Coined terms are derived from prompts; the default 0644 let any
+            # other local user read them. No-op semantics on Windows.
+            with contextlib.suppress(OSError):
+                os.chmod(tmp, 0o600)
             os.replace(tmp, self._path)
         except Exception:
             logger.warning("taxonomy_store_persist_failed", path=str(self._path))
@@ -135,13 +149,21 @@ class TaxonomyStore:
         """Return the prefix for ``raw``; coin + persist it if new, non-canonical,
         and within the length/count bounds.
 
-        Pass ``scanned_text`` (the text the category was derived from) whenever
-        the caller has it. ``raw`` is untrusted model output, and a model that
-        echoes a secret into its category field would otherwise mint a token
-        *containing that secret* — a token that is sent upstream — and persist
-        it as a key in ``~/.domestique/taxonomy.json``. A category that appears
-        in the scanned text is a leaked value, not a label, so it is rejected:
-        ``GENERIC_PREFIX`` is returned and nothing is stored or written.
+        ``raw`` is untrusted model output. A model that echoes a secret into its
+        category field would otherwise mint a token *containing that secret* — a
+        token that is sent upstream — and persist it as a key in
+        ``~/.domestique/taxonomy.json``. Two guards, in order:
+
+        1. **Shape** (:func:`is_label_shaped`), an allowlist: the term must look
+           like an identifier. This is the load-bearing one. Containment alone
+           let ``c = "password_" + t`` through, egressing the whole secret as
+           ``[PASSWORD_TR0UB4DOR_3X_1]``, because a label and a value are not
+           adjacent in the prompt.
+        2. **Containment** (:func:`is_value_like`), for the residue shape cannot
+           see: a label-shaped secret such as ``hunter2`` that appears verbatim
+           in ``scanned_text``. Pass ``scanned_text`` whenever the caller has it.
+
+        Either rejection returns ``GENERIC_PREFIX`` and stores nothing.
 
         An over-long term (untrusted, likely-hallucinated LLM output) or one that
         would exceed ``_MAX_COINED_TERMS`` still gets a bounded derived prefix so
@@ -151,12 +173,15 @@ class TaxonomyStore:
         term = normalize_category(raw)
         if term in CANONICAL:
             return CANONICAL[term]
+        # Both guards must precede the length bound below: that path returns
+        # _derive_prefix(term), which would put the first MAX_PREFIX_LEN
+        # characters of the leaked value straight into the token.
+        # Deliberately no term/text in any payload — logging either would just
+        # move the leak into the log file.
+        if not is_label_shaped(term):
+            logger.warning("taxonomy_category_not_label_shaped")
+            return GENERIC_PREFIX
         if scanned_text is not None and is_value_like(term, scanned_text):
-            # Must precede the length bound below: that path returns
-            # _derive_prefix(term), which would put the first MAX_PREFIX_LEN
-            # characters of the leaked value straight into the token.
-            # Deliberately no term/text in the payload — logging either would
-            # just move the leak into the log file.
             logger.warning("taxonomy_value_like_category_rejected")
             return GENERIC_PREFIX
         if len(term) > _MAX_COINED_TERM_LEN:

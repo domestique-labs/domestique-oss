@@ -1,5 +1,7 @@
 import json
+import stat
 
+import pytest
 import structlog.testing
 
 from domestique.taxonomy import CANONICAL, GENERIC_PREFIX, MAX_PREFIX_LEN, prefix_for
@@ -79,8 +81,11 @@ def test_total_coined_terms_capped(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ts, "_MAX_COINED_TERMS", 3)
     store = TaxonomyStore(path=tmp_path / "t.json")
-    for i in range(3):
-        store.register(f"coined term {i}")
+    # Label-shaped names: "coined term 0" snake-cases to coined_term_0, whose
+    # trailing digit-only word the shape guard rejects. This test is about the
+    # count cap, not the shape guard.
+    for word in ("alpha", "beta", "gamma"):
+        store.register(f"coined term {word}")
     assert len(store.terms()) == 3
     overflow = store.register("one too many")
     assert len(overflow) <= MAX_PREFIX_LEN  # still returns a bounded prefix
@@ -109,19 +114,40 @@ class TestValueLikeCategoryRejected:
         store = TaxonomyStore(path=tmp_path / "t.json")
         with structlog.testing.capture_logs() as logs:
             store.register(self.SECRET, scanned_text=self.TEXT)
-        rejected = [e for e in logs if e.get("event") == "taxonomy_value_like_category_rejected"]
+        # Either guard may fire first; both must stay silent about the value.
+        rejected = [
+            e
+            for e in logs
+            if e.get("event")
+            in ("taxonomy_value_like_category_rejected", "taxonomy_category_not_label_shaped")
+        ]
         assert len(rejected) == 1
-        payload = json.dumps(rejected[0])
         # logging the value would just move the leak into the log file
-        assert self.SECRET.lower() not in payload.lower()
-        assert "deploy password" not in payload.lower()
+        payload = json.dumps(logs).lower()
+        assert self.SECRET.lower() not in payload
+        assert "deploy password" not in payload
 
-    def test_without_scanned_text_behaviour_is_unchanged(self, tmp_path):
+    def test_rejected_without_scanned_text_too(self, tmp_path):
+        """The guard must not depend on the caller remembering to pass the text.
+
+        This replaces an earlier test asserting the opposite — that a value-like
+        category with no ``scanned_text`` coined and persisted "exactly as
+        before". That was the weaker contract: it left every caller that omits
+        the argument unprotected. The shape guard needs no text, so it holds
+        here too.
+        """
         path = tmp_path / "t.json"
         store = TaxonomyStore(path=path)
-        prefix = store.register(self.SECRET)  # back-compat: no scanned_text
-        assert prefix != GENERIC_PREFIX
-        assert store.terms()  # coined and persisted exactly as before
+        assert store.register(self.SECRET) == GENERIC_PREFIX
+        assert store.terms() == {}
+        assert not path.exists()
+
+    def test_label_shaped_terms_still_coin_without_scanned_text(self, tmp_path):
+        """The actual back-compat concern: existing callers pass no text."""
+        path = tmp_path / "t.json"
+        store = TaxonomyStore(path=path)
+        assert store.register("Employee ID") == "EMPLOYEE_ID"
+        assert store.terms()
         assert path.exists()
 
     def test_genuine_label_absent_from_the_text_still_coins_and_persists(self, tmp_path):
@@ -200,3 +226,72 @@ class TestConcurrentPersistence:
         TaxonomyStore(path=path).register("some coined term")
         leftovers = [p.name for p in tmp_path.iterdir() if p.name != "t.json"]
         assert leftovers == []
+
+
+class TestLabelShapeGuard:
+    """Bypasses of the containment-only guard, proven against the first fix.
+
+    Containment keys on the category echoing the prompt, so a model returning
+    ``c = "password_" + t`` egressed the whole secret as
+    ``[PASSWORD_TR0UB4DOR_3X_1]`` — the label and the value are not adjacent in
+    the prompt, so nothing matched. Every case below reached the outbound token
+    and ``taxonomy.json`` before the shape allowlist was added.
+    """
+
+    SECRET = "Tr0ub4dor&3x"
+    TEXT = "my password is Tr0ub4dor&3x please rotate"
+
+    @pytest.mark.parametrize(
+        "coined",
+        [
+            "Tr0ub4dor&3x",  # the original issue #61 shape
+            "password_Tr0ub4dor&3x",  # label-prefixed  -> was [PASSWORD_TR0UB4DOR_3X_1]
+            "Tr0ub4dor&3x_password",  # label-suffixed
+            "the Tr0ub4dor&3x",  # article-prefixed
+            "Tr0ub4dor%263x",  # url-encoded
+            "x3&rod4bu0rT",  # reversed, trivially invertible
+            "547230756234646f72263378",  # hex-encoded
+            "TTrr00uubb44ddoorr&&33xx",  # character-doubled
+            "Txrx0xuxbx4xdxoxrx&x3xx",  # character-interleaved
+            "AKIAIOSFODN7EXAMPLE",  # near-complete AWS key (one char dropped)
+            "pin_4821",  # short numeric value wearing a label
+        ],
+    )
+    def test_value_shaped_category_never_reaches_the_token(self, tmp_path, coined):
+        store = TaxonomyStore(path=tmp_path / "t.json")
+        assert store.register(coined, scanned_text=self.TEXT) == GENERIC_PREFIX
+
+    def test_nothing_value_shaped_is_persisted(self, tmp_path):
+        path = tmp_path / "t.json"
+        store = TaxonomyStore(path=path)
+        for coined in ("password_" + self.SECRET, "x3&rod4bu0rT", "pin_4821"):
+            store.register(coined, scanned_text=self.TEXT)
+        assert not path.exists(), "a value-shaped category was written to disk"
+
+    def test_label_shaped_secret_present_in_the_text_is_still_caught(self, tmp_path):
+        """Shape cannot see this one; containment is what rejects it."""
+        store = TaxonomyStore(path=tmp_path / "t.json")
+        assert store.register("hunter2", scanned_text="my password is hunter2 ok") == GENERIC_PREFIX
+
+    @pytest.mark.parametrize(
+        "label",
+        [
+            "employee_id",
+            "badge_number",
+            "oauth2_token",  # digits are fine when they trail a word
+            "sha256_hash",
+            "ipv4_address",
+            "s3_bucket",
+            "project_codename",
+        ],
+    )
+    def test_genuine_labels_still_coin(self, tmp_path, label):
+        store = TaxonomyStore(path=tmp_path / "t.json")
+        assert store.register(label, scanned_text="an unrelated prompt") == label.upper()
+
+    def test_persisted_file_is_not_world_readable(self, tmp_path):
+        """Coined terms derive from prompts; 0644 let any local user read them."""
+        path = tmp_path / "t.json"
+        TaxonomyStore(path=path).register("employee_badge", scanned_text="unrelated")
+        assert path.exists()
+        assert stat.S_IMODE(path.stat().st_mode) & 0o077 == 0
