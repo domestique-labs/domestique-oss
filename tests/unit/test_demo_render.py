@@ -4,8 +4,16 @@ import asyncio
 import re
 from typing import TYPE_CHECKING
 
-from domestique.cli import _render_canned, _render_config_header, _render_ledger, _truncate
+from domestique import console
+from domestique.cli import (
+    _highlight_tokens,
+    _render_canned,
+    _render_config_header,
+    _render_ledger,
+    _truncate,
+)
 from domestique.config import Settings
+from domestique.detectors import status as st
 from domestique.detectors.registry import Finding
 from domestique.gateway import build_cli_pipeline
 from domestique.models import Action, Span
@@ -28,6 +36,101 @@ class TestConfigHeader:
     def test_disabled_tiers_marked(self) -> None:
         out = _render_config_header(Settings(), PolicyEngine.from_yaml_default(), color=False)
         assert "GLiNER" in out
+
+
+class TestConfigHeaderReportsAvailability:
+    """Issue #60: the header claimed a tier was on because a bool said so.
+
+    `enable_gliner=True` with the `gliner` package absent still printed
+    `✔ GLiNER`, so a clean wheel install advertised PII coverage it could not
+    perform. The header must consume `detector_status`, which actually probes.
+    """
+
+    def _header(self, settings: Settings, *, color: bool = False) -> str:
+        return _render_config_header(settings, PolicyEngine.from_yaml_default(), color=color)
+
+    def test_configured_but_missing_module_is_not_a_checkmark(self, monkeypatch) -> None:
+        monkeypatch.setattr(st, "_module_available", lambda name: False)
+        g = console.glyphs()
+        out = self._header(Settings(enable_gliner=True))
+        assert f"{g['check']} GLiNER" not in out, "claimed available while uninstalled"
+        assert f"{g['cross']} GLiNER" in out
+        assert "domestique[ner]" in out, "install hint missing"
+
+    def test_configured_and_available_is_a_checkmark(self, monkeypatch) -> None:
+        monkeypatch.setattr(st, "_module_available", lambda name: True)
+        g = console.glyphs()
+        out = self._header(Settings(enable_gliner=True))
+        assert f"{g['check']} GLiNER" in out
+        assert f"{g['cross']} GLiNER" not in out
+
+    def test_unconfigured_tier_stays_dim_dot(self, monkeypatch) -> None:
+        monkeypatch.setattr(st, "_module_available", lambda name: True)
+        g = console.glyphs()
+        out = self._header(Settings(enable_gliner=False))
+        assert f"{g['dot']} GLiNER" in out
+
+    def test_no_ansi_when_color_disabled(self, monkeypatch) -> None:
+        monkeypatch.setattr(st, "_module_available", lambda name: False)
+        out = self._header(Settings(enable_gliner=True, enable_pii_detection=True))
+        assert "\033[" not in out
+
+    def test_local_llm_unreachable_daemon_is_not_a_checkmark(self, monkeypatch) -> None:
+        monkeypatch.setattr(st, "_ollama_tags", lambda base, timeout: None)
+        g = console.glyphs()
+        out = self._header(Settings(enable_local_llm=True))
+        assert f"{g['cross']} LLM:" in out
+        assert f"{g['check']} LLM:" not in out
+
+    def test_local_llm_present_model_is_a_checkmark(self, monkeypatch) -> None:
+        settings = Settings(enable_local_llm=True)
+        monkeypatch.setattr(st, "_ollama_tags", lambda base, timeout: {settings.local_llm_model})
+        g = console.glyphs()
+        out = self._header(settings)
+        assert f"{g['check']} LLM:{settings.local_llm_model}" in out
+
+    def test_header_does_not_probe_the_network_when_llm_disabled(self, monkeypatch) -> None:
+        def _boom(base: str, timeout: float) -> set[str]:
+            raise AssertionError("probed the daemon for a tier that is switched off")
+
+        monkeypatch.setattr(st, "_ollama_tags", _boom)
+        assert "Detection stack" in self._header(Settings())
+
+    def test_keeps_the_labels_other_tests_assert_on(self, monkeypatch) -> None:
+        monkeypatch.setattr(st, "_module_available", lambda name: False)
+        out = self._header(Settings())
+        for label in ("Active configuration", "Detection stack", "[balanced]", "Regex", "GLiNER"):
+            assert label in out
+
+
+class TestHighlightTokens:
+    """Issue #61 §3: #59 changed tokens to `[AWSKEY_1]`, the regex still
+    required a literal `_REDACTED]`, so the demo's AFTER line stopped painting
+    the very tokens it exists to show off."""
+
+    def test_numbered_token_is_painted(self) -> None:
+        paint = console.Palette(enabled=True)
+        out = _highlight_tokens("sent [AWSKEY_1] onward", paint)
+        assert "\033[32m[AWSKEY_1]\033[0m" in out
+
+    def test_multiword_numbered_token_is_painted(self) -> None:
+        paint = console.Palette(enabled=True)
+        out = _highlight_tokens("ssn [US_SSN_12] here", paint)
+        assert "\033[32m[US_SSN_12]\033[0m" in out
+
+    def test_legacy_redacted_token_still_painted(self) -> None:
+        paint = console.Palette(enabled=True)
+        out = _highlight_tokens("key [AWS_ACCESS_KEY_REDACTED]", paint)
+        assert "\033[32m[AWS_ACCESS_KEY_REDACTED]\033[0m" in out
+
+    def test_ordinary_bracketed_prose_is_not_painted(self) -> None:
+        paint = console.Palette(enabled=True)
+        for prose in ("[see note 1]", "[TODO]", "[2026-08-03]", "[a_b_1]"):
+            assert _highlight_tokens(prose, paint) == prose, prose
+
+    def test_no_color_leaves_text_untouched(self) -> None:
+        paint = console.Palette(enabled=False)
+        assert _highlight_tokens("sent [AWSKEY_1]", paint) == "sent [AWSKEY_1]"
 
 
 class TestCanned:

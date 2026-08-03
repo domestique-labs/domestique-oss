@@ -15,6 +15,7 @@ from domestique.branding import supports_unicode
 _ANSI = {
     "red": "\033[31m",
     "green": "\033[32m",
+    "yellow": "\033[33m",
     "cyan": "\033[36m",
     "dim": "\033[2m",
     "bold": "\033[1m",

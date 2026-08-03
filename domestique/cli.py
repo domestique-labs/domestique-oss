@@ -595,28 +595,51 @@ def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bo
         paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
     ]
 
-    tiers = [
-        ("Regex", settings.enable_secret_detection),
-        ("Presidio", settings.enable_pii_detection),
-        ("GLiNER", settings.enable_gliner),
-        ("Semantic", settings.enable_semantic_detection),
-        (f"LLM:{settings.local_llm_model}", settings.enable_local_llm),
-    ]
-    stack_cells = [
-        (paint(f"{g['check']} {name}", "green") if on else paint(f"{g['dot']} {name}", "dim"))
-        for name, on in tiers
+    # Issue #60: the glyph used to come from the Settings boolean alone, so
+    # `enable_gliner=True` on a machine with no `gliner` package printed
+    # "✔ GLiNER" — the header advertised coverage the stack could not perform.
+    # `detector_status` is the probe `domestique start` already trusts; the
+    # demo header simply never asked it. Regex is not in the table: it has no
+    # optional dependency, so "configured" is the whole truth for it.
+    statuses = {s.key: s for s in detector_status(settings)}
+    tiers: list[tuple[str, TierStatus | None, bool]] = [
+        ("Regex", None, bool(settings.enable_secret_detection)),
+        ("Presidio", statuses.get("pii"), bool(settings.enable_pii_detection)),
+        ("GLiNER", statuses.get("gliner"), bool(settings.enable_gliner)),
+        ("Semantic", statuses.get("semantic"), bool(settings.enable_semantic_detection)),
+        (
+            f"LLM:{settings.local_llm_model}",
+            statuses.get("local_llm"),
+            bool(settings.enable_local_llm),
+        ),
     ]
 
+    stack_cells: list[str] = []
+    broken: list[tuple[str, TierStatus]] = []
+    for name, status, configured in tiers:
+        if not configured:
+            stack_cells.append(paint(f"{g['dot']} {name}", "dim"))
+        elif status is None or status.available:
+            stack_cells.append(paint(f"{g['check']} {name}", "green"))
+        else:
+            stack_cells.append(paint(f"{g['cross']} {name}", "yellow"))
+            broken.append((name, status))
+
     rule = "  " + g["rule"] * 58
-    return "\n".join(
-        [
-            "  " + paint("Active configuration", "bold"),
-            rule,
-            f"    Policy           redact {redact}   {g['dot']}   block {block}",
-            "    Hardware preset  " + "  ".join(preset_cells),
-            "    Detection stack  " + "   ".join(stack_cells),
-        ]
-    )
+    lines = [
+        "  " + paint("Active configuration", "bold"),
+        rule,
+        f"    Policy           redact {redact}   {g['dot']}   block {block}",
+        "    Hardware preset  " + "  ".join(preset_cells),
+        "    Detection stack  " + "   ".join(stack_cells),
+    ]
+    for name, status in broken:
+        detail = status.detail or "not available"
+        lines.append(
+            f"    {paint(g['cross'], 'yellow')} {name}: {detail}"
+            f"  {g['arrow']} {status.install_hint}"
+        )
+    return "\n".join(lines)
 
 
 def _is_redaction(f: Finding) -> bool:
@@ -646,12 +669,18 @@ def _highlight_secrets(before: str, findings: list[Finding], paint: console.Pale
     return "".join(out)
 
 
+#: The minted token grammar, per ``vault/session.py:render_token`` — an
+#: upper-case prefix (``taxonomy._derive_prefix`` bounds it to ``[A-Z0-9_]``)
+#: followed by ``_<index>``. #59 moved tokens to this numbered form; the
+#: pattern here still required a literal ``_REDACTED]``, so nothing matched and
+#: the demo's AFTER line stopped highlighting the tokens it exists to show.
+#: The legacy flat placeholder stays as an alternation: the pipeline still
+#: mints it whenever no TokenService is supplied.
+_TOKEN_RE = re.compile(r"\[[A-Z0-9]+(?:_[A-Z0-9]+)*_(?:\d+|REDACTED)\]")
+
+
 def _highlight_tokens(after: str, paint: console.Palette) -> str:
-    return re.sub(
-        r"\[[A-Z0-9_]+_REDACTED\]",
-        lambda m: paint(m.group(0), "green"),
-        after,
-    )
+    return _TOKEN_RE.sub(lambda m: paint(m.group(0), "green"), after)
 
 
 def _render_outcome(
