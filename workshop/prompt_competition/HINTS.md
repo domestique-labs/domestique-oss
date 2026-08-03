@@ -87,8 +87,8 @@ false positives (from 21% FP to 3% FP in our benchmarks).
 ## Hint Level 4: Advanced Techniques (Expert)
 
 ### NONE-first decision rules (highest impact technique)
-The current production prompt achieves 93% accuracy by putting safe-content
-rules before sensitive-content rules:
+The current production prompt puts safe-content rules before sensitive-content
+rules:
 ```
 Decision rules (apply first match):
 1. Public/open-source code, generic algorithms -> NONE
@@ -109,7 +109,7 @@ Decision rules (apply first match):
 
 ## Hint Level 5: Prompt Architecture (Master)
 
-The production prompt (93% accuracy, 97% precision on 262 samples) follows this structure:
+The production prompt follows this structure:
 
 ```
 [Role: "You are an enterprise DLP scanner"]
@@ -120,10 +120,14 @@ The production prompt (93% accuracy, 97% precision on 262 samples) follows this 
 ```
 
 ### Key insight: NONE-first ordering beats everything else
-Our ablation study showed:
-- Prompt V0 (sensitive-first rules): 73% accuracy, 21% FP rate
-- Prompt V6 (NONE-first rules): 86% accuracy, 3% FP rate
-Same model, same categories, just reordered rules.
+Listing the safe-content rules first, before the sensitive-content rules,
+substantially raised accuracy and cut the false-positive rate — same model,
+same categories, just reordered rules. Worth trying first.
+
+(The specific before/after percentages that used to appear here came from an
+ablation whose prompt revisions are not in this repository, so the comparison
+could not be re-run and the figures have been removed. The effect itself is
+cheap to confirm: reorder the rules in your own prompt and re-run the scorer.)
 
 ### Key insight: Specificity beats length
 A 150-word prompt with precise decision rules outperforms a 400-word prompt
@@ -146,12 +150,30 @@ need to tell it WHICH code matters and WHICH is safe.
 
 ## Benchmarks to Beat
 
-Current production prompt on Qwen3 1.7B (70-sample dataset):
-- **Accuracy**: 90%
-- **Precision**: 92%
-- **Recall**: 89%
-- **F1**: 90%
-- **Latency**: ~164ms average
+Measure the current production prompt yourself, then beat what *you* measured:
+
+```bash
+python workshop/prompt_competition/run_competition.py
+```
+
+This scores the production prompt from `domestique/detectors/local_llm.py`
+against `dataset.json` (70 labeled samples) and reports accuracy, precision,
+recall, F1 and average latency. It needs Ollama running; the default model is
+`qwen3:1.7b`.
+
+Roughly what to expect on that dataset: accuracy and F1 around 90%, precision a
+little above that, recall a little below, and average latency in the low
+hundreds of milliseconds. Treat those as a sighting shot, not a target —
+latency in particular is hardware-dependent, and scores move with the model.
+
+Two caveats on numbers you may see quoted elsewhere in this file's history:
+
+- The runner only ever loads `dataset.json`. `dataset_combined.json` (262
+  samples) ships alongside it but there is no `--dataset` flag, so any score
+  attributed to the combined set cannot currently be reproduced with this
+  script.
+- The V0-vs-V6 rule-ordering ablation is not reproducible either: those prompt
+  revisions are not in the repository, only the conclusion drawn from them.
 
 ---
 

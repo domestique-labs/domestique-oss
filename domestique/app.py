@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse
 from domestique.audit import AuditLogger
 from domestique.config import Settings
 from domestique.debug_trace import (
+    RAW_PROMPT_ENV,
     append_debug_trace,
     detection_fields,
     join_prompts,
@@ -79,8 +80,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.proxy = LLMProxy(settings)
     app.state.audit = AuditLogger(settings.audit_log_path)
 
+    _warn_if_raw_prompt_logging(settings)
+
     _register_routes(app)
     return app
+
+
+def _warn_if_raw_prompt_logging(settings: Settings) -> None:
+    """Say plainly that cleartext prompts are about to be written to disk."""
+    if not settings.log_raw_prompts:
+        return
+    logger.warning(
+        "raw_prompt_logging_enabled",
+        detail=(
+            "Cleartext prompt content will be written to "
+            "~/.domestique/debug_trace.jsonl and ~/.domestique/request_log.jsonl. "
+            f"Unset {RAW_PROMPT_ENV} to turn this off."
+        ),
+    )
 
 
 # --- Route Handlers ---------------------------------------------------------

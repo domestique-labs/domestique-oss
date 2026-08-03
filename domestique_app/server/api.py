@@ -879,7 +879,11 @@ class APIHandler(BaseHTTPRequestHandler):
         self._send_json({"entries": entries, "total": len(entries)})
 
     def _handle_debug_trace(self) -> None:
-        """Serve the raw prompt decision trace with optional filtering."""
+        """Serve the decision trace with optional filtering.
+
+        Entries are scrubbed of prompt content at write time unless raw logging
+        was opted into, so keys such as ``prompt`` may be absent.
+        """
         from urllib.parse import parse_qs, urlparse
 
         from domestique.debug_trace import read_debug_trace

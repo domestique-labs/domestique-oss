@@ -25,9 +25,15 @@
 
 ---
 
-## Current Quality: Where We Stand
+## Published Figures for the Underlying Techniques
 
-| Detector Layer | Approach | F1 Score (est.) | Catches | Misses |
+> **These are third-party published figures for the general techniques, measured
+> by other people on other corpora. They are not domestique measurements and say
+> nothing about how domestique scores.** Domestique's own detection quality is
+> whatever `python -m benchmarks.eval` reports on the corpus in this repository;
+> no other number in this document describes it.
+
+| Detector Layer | Approach | Published F1 (third-party) | Catches | Misses |
 |----------------|----------|-----------------|---------|--------|
 | **Secret scanner** (regex) | Compiled regex patterns | ~46% precision, ~88% recall* | Known patterns: AWS keys, GH tokens, JWTs | Obfuscated, encoded, split secrets |
 | **PII detector** (Presidio) | spaCy NER + regex | ~85-92% F1 | Structured PII: emails, SSNs, phones | Contextual PII: "her manager Sarah" |
@@ -37,16 +43,19 @@
 
 ---
 
-## Can Local LLMs Improve Quality? YES.
+## Can Local LLMs Improve Quality? The Literature Says Yes.
 
-### The Evidence
+### The published evidence
 
-| Approach | F1 Score | Improvement Over Baseline |
-|----------|----------|--------------------------|
-| Presidio (regex + spaCy) | 85-92% | Baseline |
-| LLM-based NER (fine-tuned 1-3B) | 94-98% | +5-10 F1 points |
-| LLM classifier (phi-3/llama3 3B) | 93-97% | +8-12 F1 on contextual PII |
-| Combined (regex + LLM second-pass) | 96-99% | Best of both worlds |
+> Again: third-party figures for the general techniques, not domestique
+> measurements. Whether domestique realises any of this is an open question that
+> only the eval harness can answer.
+
+| Approach | Published F1 (third-party) |
+|----------|----------|
+| Presidio (regex + spaCy) | 85-92% |
+| LLM-based NER (fine-tuned 1-3B) | 94-98% |
+| LLM classifier (phi-3/llama3 3B) | 93-97% |
 
 ### What Local LLMs Catch That Regex/NER Cannot
 
@@ -60,37 +69,21 @@
 
 ## The Tradeoff: Quality vs. Latency
 
-```
-                    HIGH QUALITY
-                         │
-    Local LLM (3B)  ●    │
-         95-98% F1       │    ← Sweet spot: LLM as second-pass only
-                         │
-    Embeddings      ●    │
-         85-90% F1       │
-                         │
-    Presidio NER    ●    │
-         85-92% F1       │
-                         │
-    Regex only      ●    │
-         46-88% P/R      │
-                         │
-    ─────────────────────┼──────────────────── LATENCY
-    0.1ms   1ms   10ms  │  50ms   100ms   500ms
-                         │
-                    LOW QUALITY
-```
+### Latency budget per strategy
 
-### Detailed Tradeoff Matrix
+Latency figures below are design *targets* for choosing an architecture, not
+measured results. The quality-gain column that used to sit here has been
+removed: it projected F1 improvements for domestique's own stack that nothing
+in this repository measures.
 
-| Strategy | Latency Added | Quality Gain | When to Use |
-|----------|--------------|--------------|-------------|
-| Regex only | ~0.1 ms | Baseline | Always (first pass) |
-| + Presidio NER | ~5-10 ms | +5-10% F1 on PII | Always (parallel with regex) |
-| + Embeddings (MiniLM) | ~5-15 ms (GPU) | +10% on topic detection | When topics configured |
-| + Local LLM (1B) | ~10-50 ms (GPU) | +10-15% on ambiguous content | **Second-pass only** |
-| + Local LLM (3B) | ~20-100 ms (GPU) | +12-18% on nuanced cases | **Second-pass only** |
-| + Local LLM (3B, CPU) | ~100-300 ms | Same as above | Dev/test environments |
+| Strategy | Latency Added (target) | When to Use |
+|----------|--------------|-------------|
+| Regex only | ~0.1 ms | Always (first pass) |
+| + Presidio NER | ~5-10 ms | Always (parallel with regex) |
+| + Embeddings (MiniLM) | ~5-15 ms (GPU) | When topics configured |
+| + Local LLM (1B) | ~10-50 ms (GPU) | **Second-pass only** |
+| + Local LLM (3B) | ~20-100 ms (GPU) | **Second-pass only** |
+| + Local LLM (3B, CPU) | ~100-300 ms | Dev/test environments |
 
 ### Recommended Architecture: Tiered Detection
 
@@ -100,7 +93,7 @@ Request arrives
      ▼
 ┌─────────────────────────────┐
 │ TIER 1: Fast Path (< 1 ms)  │  ← Regex secrets, pattern matching
-│ Runs on EVERY request        │     Catches 70-80% of violations
+│ Runs on EVERY request        │     Known credential patterns
 └──────────────┬──────────────┘
                │ Clean? → Forward immediately (zero added latency)
                │ Suspicious? ↓
@@ -118,52 +111,68 @@ Request arrives
          Final Decision
 ```
 
-### Why This Architecture Achieves Near-Zero Latency
+### The assumption this architecture rests on
 
-- **95%+ of requests are clean** → Tier 1 only → **< 1 ms overhead**
-- **~4% have regex hits** → blocked immediately → **< 1 ms overhead**
-- **~0.8% need NLP** → Tier 2 → **~10 ms overhead** (still negligible vs. LLM RTT)
-- **~0.2% are ambiguous** → Tier 3 → **~50-100 ms overhead** (rare, worth it)
-- **Weighted average overhead: < 2 ms p95, < 15 ms p99**
+The tiering only pays off if the overwhelming majority of traffic clears Tier 1.
+The traffic mix below is the **design assumption**, not a measurement — no
+traffic study in this repository establishes it, and it is worth testing before
+relying on it.
+
+- Most requests clean → Tier 1 only → sub-millisecond overhead
+- A small fraction have regex hits → decided immediately
+- A smaller fraction need NLP → Tier 2
+- A rare remainder is ambiguous → Tier 3, the expensive path
+
+Report latency as a distribution rather than a single number: p50 is dominated
+by Tier 1, while p99 is whatever the classifier costs on the tail.
 
 ---
 
-## Recommended Benchmarking Plan for Our Solution
+## Benchmarking Plan
 
-### Phase 1: Baseline (Use Existing Datasets)
+### What exists today
+
 ```bash
-# Secret detection quality
-python bench/eval_secrets.py --dataset basak-esem2023 --tool ours
-
-# PII detection quality
-python bench/eval_pii.py --dataset pii-scope --tool ours
-
-# Prompt injection resistance
-python bench/eval_injection.py --dataset pint-benchmark
+python -m benchmarks.eval          # detection-quality eval + PR scorecard
+python benchmarks/redaction_bench.py   # redaction-engine latency (M6-M9)
 ```
 
-### Phase 2: Latency Profiling
-```bash
-# Per-component latency
-pytest tests/bench/ --benchmark-only
+`python -m benchmarks.eval` is the only apparatus that measures domestique's own
+detection quality, and it is the gate CI enforces per PR.
 
-# End-to-end under load
-k6 run bench/load_test.js --vus 100 --duration 60s
-```
+### What does not exist yet
 
-### Phase 3: Quality vs. Latency Sweep
-```bash
-# Test with/without each tier
-python bench/tier_sweep.py --tiers "regex,presidio,embeddings,local_llm" \
-    --dataset guardbench --report results/
-```
+Everything below is **planned, not implemented**. This section previously listed
+these as runnable commands (`bench/eval_secrets.py`, `bench/eval_pii.py`,
+`bench/tier_sweep.py`, `tests/bench/`, `bench/load_test.js`); none of those
+paths were ever in the repository.
+
+- Scoring against the external datasets listed at the top of this document
+- Per-tier sweeps, so each detection preset can be scored separately
+- End-to-end load profiling
+
+The corpus is also far too small to support strong claims. Growing it —
+weighted toward benign-but-trigger-dense text, where guardrails are known to
+collapse — is the prerequisite for publishing any detection number at all.
 
 ---
 
 ## Key Takeaways
 
-1. **Local LLMs absolutely improve quality** — from ~88% to ~96% F1 on mixed DLP tasks.
-2. **The latency cost is manageable** — 10-100 ms on GPU, only on ambiguous cases.
-3. **Tiered architecture is the answer** — fast regex catches most violations at < 1 ms; local LLM is the backstop for the hard 0.2%.
-4. **The real comparison**: LLM API RTT is 200-5000 ms. Even our worst-case Tier 3 adds < 100 ms. Users won't notice.
-5. **False positive reduction**: Local LLMs can also *reduce* false positives by confirming whether a regex match is actually a secret in context.
+1. **The literature suggests local LLMs improve detection quality.** Whether
+   they improve *ours* is unmeasured; treat it as a hypothesis to test, not a
+   result to cite.
+2. **The latency cost looks affordable** — tens of milliseconds on GPU, and only
+   on the cases the cheaper tiers could not settle.
+3. **Tiering is a cost strategy, not a quality strategy.** It makes the
+   expensive detector affordable; it does not make it more accurate.
+4. **Latency has headroom.** LLM API round-trips run hundreds to thousands of
+   milliseconds, so a tail-path classifier is unlikely to be what a user
+   notices.
+5. **Precision is the number that matters.** Recall is the easy metric every
+   competitor claims. Precision on benign, trigger-word-dense developer traffic
+   is the defensible one — and the one to publish, once the corpus can support
+   it.
+
+> Nothing in this document is a measurement of domestique. The only reproducible
+> figures come from `python -m benchmarks.eval`.

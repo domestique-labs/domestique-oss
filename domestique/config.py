@@ -6,6 +6,8 @@ Defaults are safe for development; override for production.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -111,7 +113,20 @@ class Settings(BaseSettings):
     upstream_timeout_s: int = 120
 
     # --- Audit ---
-    audit_log_path: str = "logs/audit.jsonl"
+    audit_log_path: str = Field(
+        default_factory=lambda: str(Path.home() / ".domestique" / "audit.jsonl"),
+        description=(
+            "Where structured audit events are written. Metadata only — action, "
+            "detection categories, counts and latency, never prompt text."
+        ),
+    )
+    log_raw_prompts: bool = Field(
+        default=False,
+        description=(
+            "Write cleartext prompt content to ~/.domestique/debug_trace.jsonl "
+            "and request_log.jsonl. Off by default; local debugging only."
+        ),
+    )
 
     # --- Domains intercepted (used by infra tooling, not at runtime) ---
     intercepted_domains: list[str] = Field(
