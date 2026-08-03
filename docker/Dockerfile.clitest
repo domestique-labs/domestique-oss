@@ -1,0 +1,42 @@
+# Clean-room CLI / package smoke test for domestique (Linux).
+#
+# Why this exists: validate that a from-scratch install of the *built wheel*
+# works — real packaging, declared runtime deps, the bundled `domestique_app`
+# portable dashboard, the CLI wedge, and the redaction demo — in a pristine
+# image with an empty $HOME (first-run realism). Browser MITM (CA trust,
+# system proxy, mitmproxy) is intentionally OUT OF SCOPE here; that is the
+# macOS-validated path and is tested locally on the Mac.
+#
+# Usage (from repo root):
+#   docker build -f docker/Dockerfile.clitest -t domestique-clitest .
+#   docker run --rm domestique-clitest
+# Add optional detection extras at build time (heavier):
+#   docker build -f docker/Dockerfile.clitest --build-arg EXTRAS='[pii]' -t domestique-clitest .
+
+# ---- stage 1: build the wheel from source ----
+FROM python:3.12-slim AS build
+WORKDIR /src
+RUN pip install --no-cache-dir build
+COPY . .
+RUN python -m build --wheel --outdir /dist
+
+# ---- stage 2: pristine install of ONLY the wheel ----
+FROM python:3.12-slim AS test
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+# curl for the dashboard/wedge health checks
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+# no source tree in this stage — install the artifact, pulling deps from PyPI
+ARG EXTRAS=""
+COPY --from=build /dist/*.whl /tmp/
+RUN WHL="$(ls /tmp/*.whl)" && pip install --no-cache-dir "${WHL}${EXTRAS}"
+COPY docker/cli_smoke.sh /usr/local/bin/cli_smoke.sh
+RUN chmod +x /usr/local/bin/cli_smoke.sh
+# unprivileged user with an empty home so ~/.domestique starts fresh
+RUN useradd --create-home tester
+USER tester
+ENV HOME=/home/tester
+ENTRYPOINT ["/usr/local/bin/cli_smoke.sh"]

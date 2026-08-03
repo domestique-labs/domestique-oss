@@ -1,0 +1,15 @@
+# keep the build context small + hermetic (source only)
+.git
+.venv
+venv
+.claude
+dist
+build
+*.egg-info
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.DS_Store
