@@ -7,13 +7,18 @@ so it needs its own gate on the same flag.
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
+from typing import TYPE_CHECKING
 
 from domestique_app.services.mitm_addon import DomestiqueAddon
 
-SECRET = "sk-live-51H8xQqRtVwXyZ0123456789"
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pytest
+
+# A fabricated key in a fixed-string test, never a real credential. The whole
+# point of this file is to assert it does NOT reach disk.
+SECRET = "sk-live-51H8xQqRtVwXyZ0123456789"  # noqa: S105
 
 
 def _addon(tmp_path: Path) -> DomestiqueAddon:

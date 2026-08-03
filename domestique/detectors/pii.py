@@ -10,13 +10,26 @@ short-circuits on text shorter than 4 characters.
 from __future__ import annotations
 
 import threading
+from typing import Any, Protocol
 
 import structlog
 
 from domestique.detectors._offload import offload
 from domestique.models import Detection, Span
+from domestique.taxonomy import normalize_category
 
 logger = structlog.get_logger()
+
+
+class _Analyzer(Protocol):
+    """The one method this module uses from ``presidio_analyzer.AnalyzerEngine``.
+
+    Presidio is an optional extra and ships no stubs, so the concrete engine is
+    ``Any`` here. Naming the surface we depend on keeps the call site checked.
+    """
+
+    def analyze(self, **kwargs: Any) -> list[Any]: ...
+
 
 # Entities worth detecting for DLP purposes.
 _ENTITIES = [
@@ -46,7 +59,7 @@ class PIIDetector:
     ) -> None:
         self._threshold = confidence_threshold
         self._spacy_model = spacy_model
-        self._analyzer: object | None = None
+        self._analyzer: _Analyzer | None = None
         self._available: bool | None = None  # tri-state: None = untried
         self._init_lock = threading.Lock()
 
@@ -88,14 +101,20 @@ class PIIDetector:
         return [
             Detection(
                 detector=self.name,
-                category=r.entity_type.lower(),
+                # Every tier canonicalizes through the shared taxonomy so the
+                # same entity mints the same token whichever tier caught it.
+                # The ten names in _ENTITIES already lowercase into CANONICAL
+                # keys, so this is currently a no-op -- but AnalyzerEngine
+                # returns whatever its registry holds, and an added recognizer
+                # would otherwise coin a duplicate category behind our back.
+                category=normalize_category(r.entity_type),
                 confidence=r.score,
                 span=Span(start=r.start, end=r.end),
             )
             for r in results
         ]
 
-    def _get_analyzer(self) -> object | None:
+    def _get_analyzer(self) -> _Analyzer | None:
         """Lazy-load Presidio analyzer. Returns None if unavailable.
 
         Guarded by a lock: ``scan`` now runs on worker threads, so concurrent
@@ -108,20 +127,29 @@ class PIIDetector:
             return self._analyzer
 
         with self._init_lock:
-            # Re-check: another thread may have finished while we waited.
-            if self._available is False:
-                return None
-            if self._analyzer is not None:
-                return self._analyzer
+            return self._load_analyzer_locked()
 
-            try:
-                from presidio_analyzer import AnalyzerEngine  # type: ignore[import-untyped]
+    def _load_analyzer_locked(self) -> _Analyzer | None:
+        """Construct the engine. Caller must hold ``_init_lock``.
 
-                self._analyzer = AnalyzerEngine()
-                self._available = True
-                logger.info("pii_detector_ready", model=self._spacy_model)
-                return self._analyzer
-            except (ImportError, OSError) as exc:
-                self._available = False
-                logger.warning("pii_detector_unavailable", reason=str(exc))
-                return None
+        Split out of :meth:`_get_analyzer` so the post-lock re-check -- another
+        thread may have finished, or failed, while we waited -- is a fresh read
+        of the tri-state rather than one the type checker has already narrowed
+        from the fast path above.
+        """
+        if self._available is False:
+            return None
+        if self._analyzer is not None:
+            return self._analyzer
+
+        try:
+            from presidio_analyzer import AnalyzerEngine
+
+            self._analyzer = AnalyzerEngine()
+            self._available = True
+            logger.info("pii_detector_ready", model=self._spacy_model)
+            return self._analyzer
+        except (ImportError, OSError) as exc:
+            self._available = False
+            logger.warning("pii_detector_unavailable", reason=str(exc))
+            return None

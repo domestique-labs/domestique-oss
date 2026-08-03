@@ -1,11 +1,12 @@
 import asyncio
+import json
 
 from domestique.detectors.local_llm import LocalLLMClassifier
 
 
-def _clf(monkeypatch, items):
+def _clf(monkeypatch, items, threshold=0.7):
     """A classifier whose network call returns a fixed parsed list."""
-    clf = LocalLLMClassifier(confidence_threshold=0.7)
+    clf = LocalLLMClassifier(confidence_threshold=threshold)
 
     async def fake_classify(text):
         return items
@@ -35,10 +36,108 @@ def test_drops_hallucinated_substring_not_in_text(monkeypatch):
 
 
 def test_below_threshold_dropped(monkeypatch):
+    """A threshold raised above the verbatim floor still drops a weak item.
+
+    This test previously used the default 0.7 threshold and asserted that
+    ``v: 0.5`` yielded nothing — but its ``t`` appears verbatim in ``text``,
+    so it was asserting exactly the behaviour issue #61 §1 reports: a span we
+    had confirmed ourselves, dropped on the model's own say-so, sent upstream
+    in cleartext. The gate is still real above ``_VERBATIM_FLOOR``, which is
+    what it covers now. An unverified low-confidence item is dropped by the
+    hallucination guard (test_drops_hallucinated_substring_not_in_text).
+    """
     text = "maybe a name Jane Doe here"
     items = [{"t": "Jane Doe", "c": "person", "v": 0.5}]
-    clf = _clf(monkeypatch, items)
+    clf = _clf(monkeypatch, items, threshold=0.9)
     assert asyncio.run(clf.scan(text)) == []
+
+
+class TestVerificationBeatsSelfReportedConfidence:
+    """We verify the span ourselves; the model's opinion of it cannot veto that.
+
+    The gate used to run on the model's own ``v`` *before* the verbatim check,
+    and a missing ``v`` defaults to 0.0 — so a real model returning ``v: 0.0``
+    for a genuine secret dropped it silently and the secret went upstream in
+    cleartext. An item whose ``t`` appears exactly in the text has been
+    confirmed by us, not merely asserted by the model.
+    """
+
+    def test_zero_confidence_verbatim_secret_is_still_detected(self, monkeypatch):
+        text = "aws key AKIAIOSFODNN7EXAMPLE is in the config file"
+        items = [{"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key", "v": 0.0}]
+        dets = asyncio.run(_clf(monkeypatch, items).scan(text))
+        assert len(dets) == 1, "a verified secret was dropped on the model's say-so"
+        assert text[dets[0].span.start : dets[0].span.end] == "AKIAIOSFODNN7EXAMPLE"
+
+    def test_missing_confidence_field_verbatim_secret_is_still_detected(self, monkeypatch):
+        text = "aws key AKIAIOSFODNN7EXAMPLE is in the config file"
+        items = [{"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key"}]  # no "v" at all
+        assert len(asyncio.run(_clf(monkeypatch, items).scan(text))) == 1
+
+    def test_hallucination_guard_survives_the_reorder(self, monkeypatch):
+        text = "nothing sensitive here at all really"
+        items = [{"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key", "v": 0.0}]
+        assert asyncio.run(_clf(monkeypatch, items).scan(text)) == []
+
+    def test_floored_confidence_clears_the_default_threshold(self, monkeypatch):
+        text = "aws key AKIAIOSFODNN7EXAMPLE is in the config file"
+        items = [{"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key", "v": 0.0}]
+        dets = asyncio.run(_clf(monkeypatch, items).scan(text))
+        assert dets[0].confidence >= 0.7
+
+    def test_a_high_self_reported_confidence_is_not_lowered(self, monkeypatch):
+        text = "aws key AKIAIOSFODNN7EXAMPLE is in the config file"
+        items = [{"t": "AKIAIOSFODNN7EXAMPLE", "c": "aws_access_key", "v": 0.95}]
+        assert asyncio.run(_clf(monkeypatch, items).scan(text))[0].confidence == 0.95
+
+
+class TestValueLikeCategoryNeverReachesTheToken:
+    """Regression for issue #61 §2.
+
+    ``c`` is untrusted model output. A model that answers with the secret in
+    the category field used to have it upper-cased into the token prefix — a
+    token that is sent upstream — and persisted verbatim as a key in
+    ~/.domestique/taxonomy.json.
+    """
+
+    SECRET = "Tr0ub4dor3xKlm9zQvBn7Yt2"
+
+    def _scan(self, monkeypatch, tmp_path):
+        import domestique.taxonomy_store as ts
+
+        self.path = tmp_path / "taxonomy.json"
+        monkeypatch.setattr(ts, "_DEFAULT", ts.TaxonomyStore(path=self.path))
+        text = f"the deploy password is {self.SECRET} rotate it monthly"
+        items = [{"t": self.SECRET, "c": self.SECRET, "v": 0.9}]
+        return text, asyncio.run(_clf(monkeypatch, items).scan(text))
+
+    def _runs_of_eight(self, secret):
+        return {secret[i : i + 8].upper() for i in range(len(secret) - 7)}
+
+    def test_minted_token_contains_no_run_of_the_secret(self, monkeypatch, tmp_path):
+        from domestique.vault.session import SessionStore
+
+        text, dets = self._scan(monkeypatch, tmp_path)
+        assert dets, "the span itself must still be detected and redacted"
+        token = SessionStore().tokenize(self.SECRET, dets[0].category)
+        for run in self._runs_of_eight(self.SECRET):
+            assert run not in token.upper(), f"token {token} leaks the secret"
+
+    def test_nothing_containing_the_secret_is_written_to_disk(self, monkeypatch, tmp_path):
+        self._scan(monkeypatch, tmp_path)
+        if not self.path.exists():
+            return  # nothing persisted at all is the best outcome
+        raw = self.path.read_text(encoding="utf-8").upper()
+        for run in self._runs_of_eight(self.SECRET):
+            assert run not in raw, "the secret reached ~/.domestique/taxonomy.json"
+        assert not [k for k in json.loads(self.path.read_text(encoding="utf-8"))]
+
+    def test_the_span_is_still_redacted_under_the_generic_category(self, monkeypatch, tmp_path):
+        from domestique.taxonomy import GENERIC_CATEGORY
+
+        text, dets = self._scan(monkeypatch, tmp_path)
+        assert [d.category for d in dets] == [GENERIC_CATEGORY]
+        assert text[dets[0].span.start : dets[0].span.end] == self.SECRET
 
 
 def test_coins_and_persists_new_term(monkeypatch, tmp_path):

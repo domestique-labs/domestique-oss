@@ -185,7 +185,6 @@ module = [
     "domestique.detectors.local_llm",
     "domestique.audit",
     "domestique.transport",
-    "domestique.detectors.pii",
     "domestique.detectors.registry",
 ]
 ignore_errors = true

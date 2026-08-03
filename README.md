@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/domestique-oss-logo.png" alt="Domestique — a local AI firewall for developers" width="420" />
+  <img src="https://raw.githubusercontent.com/domestique-labs/domestique-oss/main/.github/assets/domestique-oss-logo.png" alt="Domestique — a local AI firewall for developers" width="420" />
 </p>
 
 <p align="center">
@@ -14,22 +14,26 @@
   <a href="#browser-mode-optional">browser mode</a>, a heavier path.) Cross-platform.
 </p>
 
-<!-- Badges are added in the README-badges change (#23); when merged they slot in here, centered. -->
+<!--
+  This file is also the PyPI project description, which is rendered standalone at
+  https://pypi.org/project/domestique/ — relative URLs there resolve against pypi.org
+  and 404. Every link and image below must stay absolute. Same-page anchors are fine.
+-->
 
 **Contents** · [Quick start](#quick-start) · [How it works](#how-it-works) · [Browser mode](#browser-mode-optional) · [License](#license)
 
 [![CI](https://img.shields.io/github/actions/workflow/status/domestique-labs/domestique-oss/ci.yml?branch=main&label=CI)](https://github.com/domestique-labs/domestique-oss/actions/workflows/ci.yml)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](./LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/domestique-labs/domestique-oss/blob/main/LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![GitHub stars](https://img.shields.io/github/stars/domestique-labs/domestique-oss?style=flat)](https://github.com/domestique-labs/domestique-oss/stargazers)
-<!-- Enable once the package is published to PyPI (blocked on the final package name — see CHANGELOG):
+<!-- Uncomment together with the quick-start swap, in the release commit that publishes to PyPI:
 [![PyPI version](https://img.shields.io/pypi/v/domestique)](https://pypi.org/project/domestique/)
 [![PyPI downloads](https://static.pepy.tech/badge/domestique)](https://pepy.tech/project/domestique)
 [![Downloads/month](https://static.pepy.tech/badge/domestique/month)](https://pepy.tech/project/domestique)
 -->
 
-📖 [Docs](./docs/) · [Changelog](./docs/CHANGELOG.md) · [Recipes](./docs/recipes/) · [Contributing](./CONTRIBUTING.md)
+📖 [Docs](https://github.com/domestique-labs/domestique-oss/tree/main/docs) · [Changelog](https://github.com/domestique-labs/domestique-oss/blob/main/docs/CHANGELOG.md) · [Recipes](https://github.com/domestique-labs/domestique-oss/tree/main/docs/recipes) · [Contributing](https://github.com/domestique-labs/domestique-oss/blob/main/CONTRIBUTING.md)
 
 ## Quick start
 
@@ -52,7 +56,7 @@ export ANTHROPIC_BASE_URL=http://127.0.0.1:8000
 # secrets get redacted, the response streams back, nothing else changes.
 ```
 
-Per-tool setup guides live in [`docs/recipes/`](./docs/recipes/) (Claude Code, Codex,
+Per-tool setup guides live in [`docs/recipes/`](https://github.com/domestique-labs/domestique-oss/tree/main/docs/recipes) (Claude Code, Codex,
 Cursor, aider, and any OpenAI/Anthropic SDK).
 
 Want to see it work first, with no API key and nothing to configure?
@@ -66,7 +70,7 @@ before/after:
 
 ```
 BEFORE:  Here is my AWS key AKIAIOSFODNN7EXAMPLE and email jane.doe@corp.com, SSN 123-45-6789. ...
-AFTER:   Here is my AWS key [AWS_ACCESS_KEY_REDACTED] and email [EMAIL_ADDRESS_REDACTED], SSN [US_SSN_REDACTED]. ...
+AFTER:   Here is my AWS key [AWSKEY_1] and email [EMAIL_1], SSN [SSN_1]. ...
 ```
 
 ## How it works
@@ -156,7 +160,7 @@ them straight through to the provider.
 
 Detection settings (which tiers are on, thresholds) are written by `domestique setup` to
 `~/.domestique/config.json`; every field is also settable via a `DOMESTIQUE_`-prefixed env
-var — see [`domestique/config.py`](./domestique/config.py).
+var — see [`domestique/config.py`](https://github.com/domestique-labs/domestique-oss/blob/main/domestique/config.py).
 
 ---
 
@@ -239,7 +243,7 @@ domestique_app/                  # Browser mode + native desktop app + dashboard
 
 ## License
 
-**[Apache License 2.0](./LICENSE)** — open source. Use it, modify it, ship it, contribute
-back. See [`NOTICE`](./NOTICE).
+**[Apache License 2.0](https://github.com/domestique-labs/domestique-oss/blob/main/LICENSE)** — open source. Use it, modify it, ship it, contribute
+back. See [`NOTICE`](https://github.com/domestique-labs/domestique-oss/blob/main/NOTICE).
 
 The full single-device LLM firewall is free and open under Apache-2.0.

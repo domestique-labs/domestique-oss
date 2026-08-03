@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """Domestique Prompt Engineering Competition Runner.
 
-Evaluates a custom classifier prompt against the labeled dataset.
-Scores based on classification accuracy, latency, and prompt efficiency.
+Evaluates a custom **classifier** prompt against the labeled dataset: one of
+the six labels in ``dataset.json`` per sample, returned as a single JSON object
+``{"c": "<CATEGORY>", "v": <confidence>}``. Scores accuracy, latency and prompt
+efficiency.
+
+This harness does **not** measure the shipped detector. Domestique's production
+prompt (``domestique.detectors.local_llm.default_system_prompt``) is a span
+extractor: it returns a JSON *array* of ``{"t","c","v"}`` objects naming
+extracted substrings and canonical taxonomy categories (``us_ssn``,
+``person``), not one of these six labels. Point ``--prompt`` at it and every
+sample comes back ``PARSE_ERROR``. Any accuracy figure attributed to the
+production prompt via this script is measuring nothing.
 
 Usage:
     python run_competition.py                    # Uses default prompt
@@ -94,6 +104,28 @@ def classify_with_prompt(text: str, system_prompt: str, ollama_url: str, model: 
                 "latency_ms": round(latency, 1), "raw": str(e)}
 
 
+# Sentinels classify_with_prompt returns when it got no usable answer at all:
+# the response did not parse as JSON, or the HTTP call itself failed. They are
+# NOT category predictions. The binary metrics used to test `predicted !=
+# "NONE"`, which counted every one of these as a true positive -- so a prompt
+# whose every response failed to parse scored 0% accuracy and a ~90% F1 in the
+# same table. Treat them as "nothing was detected": the operational truth is
+# that such a run would have blocked nothing.
+NO_ANSWER = ("PARSE_ERROR", "ERROR")
+
+
+def _detected(predicted: str) -> bool:
+    """True when the model actually named a sensitive category."""
+    return predicted != "NONE" and predicted not in NO_ANSWER
+
+
+def max_possible_score(samples: list[dict]) -> float:
+    """Ceiling for a perfect run over *samples*, derived from their labels."""
+    sensitive = sum(1 for s in samples if s["expected"] != "NONE")
+    clean = len(samples) - sensitive
+    return sensitive * 2 + clean * 1 + 5 + 5  # + latency bonus + prompt bonus
+
+
 def score_results(results: list[dict], metadata: dict) -> dict:
     """Calculate competition score from results."""
     total_score = 0
@@ -101,12 +133,21 @@ def score_results(results: list[dict], metadata: dict) -> dict:
     wrong = 0
     false_positives = 0
     false_negatives = 0
+    errors = 0
     latencies = []
 
     for r in results:
         predicted = r["predicted"]
         expected = r["expected"]
         latencies.append(r["latency_ms"])
+
+        if predicted in NO_ANSWER:
+            # No usable classification. Never "correct", never a detection.
+            errors += 1
+            if expected != "NONE":
+                false_negatives += 1
+                total_score -= 2
+            continue
 
         if predicted == expected:
             correct += 1
@@ -130,11 +171,11 @@ def score_results(results: list[dict], metadata: dict) -> dict:
     elif avg_latency < 300:
         total_score += 3
 
-    # Precision / Recall (binary: sensitive vs NONE)
-    tp = sum(1 for r in results if r["expected"] != "NONE" and r["predicted"] != "NONE")
-    fp = sum(1 for r in results if r["expected"] == "NONE" and r["predicted"] != "NONE")
-    fn = sum(1 for r in results if r["expected"] != "NONE" and r["predicted"] == "NONE")
-    tn = sum(1 for r in results if r["expected"] == "NONE" and r["predicted"] == "NONE")
+    # Precision / Recall (binary: sensitive vs nothing-detected)
+    tp = sum(1 for r in results if r["expected"] != "NONE" and _detected(r["predicted"]))
+    fp = sum(1 for r in results if r["expected"] == "NONE" and _detected(r["predicted"]))
+    fn = sum(1 for r in results if r["expected"] != "NONE" and not _detected(r["predicted"]))
+    tn = sum(1 for r in results if r["expected"] == "NONE" and not _detected(r["predicted"]))
     precision = round(tp / (tp + fp) * 100, 1) if (tp + fp) > 0 else 0
     recall = round(tp / (tp + fn) * 100, 1) if (tp + fn) > 0 else 0
     f1 = round(2 * precision * recall / (precision + recall), 1) if (precision + recall) > 0 else 0
@@ -146,6 +187,7 @@ def score_results(results: list[dict], metadata: dict) -> dict:
         "wrong_category": wrong,
         "false_positives": false_positives,
         "false_negatives": false_negatives,
+        "errors": errors,
         "precision": precision,
         "recall": recall,
         "f1": f1,
@@ -199,8 +241,9 @@ def main():
     elif args.prompt:
         system_prompt = Path(args.prompt).read_text()
     else:
-        # Naive baseline prompt (~60-70% accuracy). Participants should improve it.
-        # The production prompt in domestique/detectors/local_llm.py scores ~90%.
+        # Naive baseline prompt. Participants should improve it. Run it once to
+        # get your own starting number -- it moves with the model, so a figure
+        # written here would be stale for most people reading it.
         system_prompt = """\
 You are a DLP classifier. Classify if text contains sensitive enterprise data.
 
@@ -274,10 +317,21 @@ Respond with JSON: {"c":"<CATEGORY>","v":<0.0-1.0>}"""
     print(f"  Wrong category:    {scores['wrong_category']}")
     print(f"  False positives:   {scores['false_positives']} (flagged clean as sensitive)")
     print(f"  False negatives:   {scores['false_negatives']} (missed sensitive content)")
+    print(f"  Unparseable:       {scores['errors']} (no usable answer; scored as no detection)")
     print(f"  Avg latency:       {scores['avg_latency_ms']}ms (bonus: +{scores['latency_bonus']})")
     print(f"  Prompt efficiency: {prompt_tokens} words (bonus: +{prompt_bonus})")
     print(f"{'─' * 50}")
-    print(f"  MAX POSSIBLE:      ~153 (37 sensitive×2 + 33 NONE×1 + latency 5 + prompt 5)")
+    n_sensitive = sum(1 for s in samples if s["expected"] != "NONE")
+    n_clean = len(samples) - n_sensitive
+    print(
+        f"  MAX POSSIBLE:      {max_possible_score(samples):g} "
+        f"({n_sensitive} sensitive×2 + {n_clean} NONE×1 + latency 5 + prompt 5)"
+    )
+    if scores["errors"]:
+        print(
+            f"\n  ⚠ {scores['errors']}/{scores['total_samples']} responses did not parse. "
+            "Is this a classifier prompt returning {\"c\":...,\"v\":...}?"
+        )
     print()
 
 
