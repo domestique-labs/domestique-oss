@@ -1,5 +1,6 @@
 import json
 import stat
+import sys
 
 import pytest
 import structlog.testing
@@ -289,6 +290,12 @@ class TestLabelShapeGuard:
         store = TaxonomyStore(path=tmp_path / "t.json")
         assert store.register(label, scanned_text="an unrelated prompt") == label.upper()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="POSIX mode bits: os.chmod on Windows only toggles the read-only flag, "
+        "so st_mode stays 0o666. Access control there is ACL-based and not what "
+        "this asserts.",
+    )
     def test_persisted_file_is_not_world_readable(self, tmp_path):
         """Coined terms derive from prompts; 0644 let any local user read them."""
         path = tmp_path / "t.json"
