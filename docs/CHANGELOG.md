@@ -11,6 +11,33 @@ Nothing yet published to a package index — the `0.1.0` items below ship from s
 on configuring a PyPI Trusted Publisher and clearing the `pypi` environment's
 approval gate, not on naming.
 
+### Fixed — pre-release correctness pass
+- **Untrusted model output no longer reaches the outbound token or disk** (#61). The
+  Tier-3 extractor's category field is model-supplied and was carried into the redaction
+  token that is *sent upstream* (a 25-character password egressed as
+  `[CORRECTHORSEBATTERYSTAP_1]`) and persisted into `~/.domestique/taxonomy.json`. A
+  category that echoes the scanned text is now treated as a leaked value, not a label:
+  it falls back to a generic `SENSITIVE` prefix and is never written to disk.
+- **A secret is no longer dropped on the model's say-so** (#61). The Tier-3 confidence
+  gate used the model's self-reported score, so `v: 0.0` on a genuine secret silently
+  allowed it through in cleartext. Spans are now verified verbatim against the text
+  *before* the gate, and a verified span's confidence is floored.
+- **The config header reports what can actually run** (#60). Detection tiers were
+  ticked from configuration alone, so a machine with GLiNER enabled but not installed
+  printed `✔ GLiNER`. The header now probes availability and distinguishes
+  "unavailable" from "off", with an install hint.
+- The demo's redaction tokens are highlighted again — the pattern still required the
+  pre-0.1.0 `_REDACTED` suffix and matched nothing after the switch to numbered tokens.
+- Coined redaction categories survive concurrent processes; the wedge, browser proxy
+  and demo previously clobbered each other's taxonomy writes.
+- The workshop competition scorer counted an unparseable response as a detection,
+  reporting ~90% F1 for a run that scored 0% accuracy. It now reports non-answers as
+  such. Related unreproducible figures have been removed from `HINTS.md`.
+- `docker-compose.yml` pointed `DOMESTIQUE_POLICY_PATH` at a file that does not ship,
+  silently falling back to built-in rules instead of the configured policy.
+- `README.md` renders correctly as the PyPI project page (it is the long description,
+  and its relative links and logo would all 404 there).
+
 ### Added — browser interception coverage
 - Qwen-cloud destinations (`chat.qwen.ai`, `dashscope.aliyuncs.com`,
   `dashscope-intl.aliyuncs.com`) added to the intercepted-domain list. DashScope's
