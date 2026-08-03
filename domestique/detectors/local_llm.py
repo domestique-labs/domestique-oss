@@ -31,10 +31,20 @@ from typing import Any
 import structlog
 
 from domestique.models import Detection, Span
-from domestique.taxonomy import CANONICAL, normalize_category
+from domestique.taxonomy import CANONICAL, GENERIC_CATEGORY, GENERIC_PREFIX, normalize_category
 from domestique.taxonomy_store import default_store
 
 logger = structlog.get_logger()
+
+#: Confidence floor for an item whose substring appears verbatim in the scanned
+#: text. Such a span has been confirmed *by us*, not merely asserted by the
+#: model, so the model's opinion of its own confidence must not be able to veto
+#: our verification — real models return ``v: 0.0`` (or omit ``v``) for genuine
+#: secrets, which used to drop them silently and send them upstream in
+#: cleartext. 0.7 matches the default ``confidence_threshold`` so a verified
+#: span always clears its own gate; an operator who deliberately raises the
+#: threshold above 0.7 still gets the stricter behaviour they asked for.
+_VERBATIM_FLOOR = 0.7
 
 
 def _is_apple_silicon() -> bool:
@@ -220,15 +230,26 @@ class LocalLLMClassifier:
                 confidence = float(item.get("v", item.get("confidence", 0.0)))
             except (TypeError, ValueError):
                 continue
-            if confidence < self._threshold:
-                continue
             if substring not in text:
                 continue  # hallucinated / reformatted → drop (guardrail)
+            # Verification first, then the gate: the span is confirmed present,
+            # so floor the model's self-reported confidence (see _VERBATIM_FLOOR).
+            confidence = max(confidence, _VERBATIM_FLOOR)
+            if confidence < self._threshold:
+                continue
             emitted.add(substring)
-            raw_cat = str(item.get("c", item.get("category", "sensitive")))
+            raw_cat = str(item.get("c", item.get("category", GENERIC_CATEGORY)))
             term = normalize_category(raw_cat)
-            if term not in CANONICAL:
-                default_store().register(raw_cat)  # persist the coined term
+            # ``c`` is untrusted: a model that echoes the scanned text into it
+            # is handing us a leaked value, not a label. register() refuses to
+            # coin or persist those and answers GENERIC_PREFIX; fall back to the
+            # generic category so the secret never reaches the outbound token
+            # either (prefix_for would otherwise derive the prefix from `term`).
+            if (
+                term not in CANONICAL
+                and default_store().register(raw_cat, scanned_text=text) == GENERIC_PREFIX
+            ):
+                term = GENERIC_CATEGORY
             category = term
             # Redact EVERY occurrence, not just the one the model happened to
             # point at. The model reports an entity once even when it repeats,

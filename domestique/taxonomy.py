@@ -78,6 +78,41 @@ _SOURCE_PREFIXES = ("pii:", "llm_classified:")
 _NON_TOKEN_CHARS = re.compile(r"[^A-Z0-9_]+")
 _NON_SNAKE_CHARS = re.compile(r"[^a-z0-9]+")
 
+#: Category used when a model-coined category is rejected as a leaked value.
+GENERIC_CATEGORY = "sensitive"
+#: Token prefix that category mints. Kept literal (rather than derived) because
+#: it is part of the interface callers compare against; a test pins the two
+#: together so they cannot drift.
+GENERIC_PREFIX = "SENSITIVE"
+
+
+def is_value_like(term: str, text: str) -> bool:
+    """True when a model-coined category looks like content lifted from *text*.
+
+    A legitimate coined category is a *label* (``employee_id``, ``badge_number``)
+    and does not appear in the text being scanned; a leaked value *is* that text.
+    So case-insensitive containment is the discriminator, and it is cheap.
+
+    Comparison also runs with every non-alphanumeric character stripped from
+    both sides, because ``normalize_category`` snake-cases the raw category
+    (``Tr0ub4dor&3x`` -> ``tr0ub4dor_3x``): without that pass, any value
+    containing punctuation would slip through. This subsumes the underscore-free
+    form of the term.
+
+    Erring towards True is the safe direction: a false positive only costs the
+    coined label (the span is still redacted, under the generic prefix).
+    """
+    if not term or not text:
+        return False
+    lowered_term = term.lower()
+    lowered_text = text.lower()
+    if lowered_term in lowered_text:
+        return True
+    squashed_term = _NON_SNAKE_CHARS.sub("", lowered_term)
+    if not squashed_term:
+        return False
+    return squashed_term in _NON_SNAKE_CHARS.sub("", lowered_text)
+
 
 def normalize_category(raw: str) -> str:
     """Any tier's category spelling -> canonical name, or a snake_case coined term."""
