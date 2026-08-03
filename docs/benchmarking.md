@@ -30,8 +30,8 @@
 > **These are third-party published figures for the general techniques, measured
 > by other people on other corpora. They are not domestique measurements and say
 > nothing about how domestique scores.** Domestique's own detection quality is
-> whatever `python -m benchmarks.eval` reports on the corpus in this repository;
-> no other number in this document describes it.
+> whatever the harnesses in `benchmarks/` report on the corpora in this
+> repository; no other number in this document describes it.
 
 | Detector Layer | Approach | Published F1 (third-party) | Catches | Misses |
 |----------------|----------|-----------------|---------|--------|
@@ -133,12 +133,20 @@ by Tier 1, while p99 is whatever the classifier costs on the tail.
 ### What exists today
 
 ```bash
-python -m benchmarks.eval          # detection-quality eval + PR scorecard
+# detection-quality eval + PR scorecard (the gate CI enforces per PR)
+python -m benchmarks.eval run \
+  --corpus benchmarks/eval/data/corpus.jsonl --out /tmp/results.json
+
+# attachment scanning against its own labeled corpus (needs OCR installed --
+# see benchmarks/file_scanning/RESULTS.md)
+python -m benchmarks.file_scanning.run_benchmark
+
 python benchmarks/redaction_bench.py   # redaction-engine latency (M6-M9)
 ```
 
-`python -m benchmarks.eval` is the only apparatus that measures domestique's own
-detection quality, and it is the gate CI enforces per PR.
+`benchmarks.eval` is the prompt-detection gate CI enforces per PR;
+`benchmarks.file_scanning` covers attachments. Those two are what measure
+domestique's own detection quality.
 
 ### What does not exist yet
 
@@ -174,5 +182,6 @@ collapse — is the prerequisite for publishing any detection number at all.
    is the defensible one — and the one to publish, once the corpus can support
    it.
 
-> Nothing in this document is a measurement of domestique. The only reproducible
-> figures come from `python -m benchmarks.eval`.
+> Nothing in this document is a measurement of domestique. The reproducible
+> figures come from the harnesses in `benchmarks/` — `benchmarks.eval` for
+> prompt detection and `benchmarks.file_scanning` for attachments.
