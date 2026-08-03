@@ -9,12 +9,14 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from domestique_app.services.mitm_addon import DomestiqueAddon
+import pytest
+
+pytest.importorskip("mitmproxy")  # requires the [browser-proxy] extra; skip cleanly when absent
+
+from domestique_app.services.mitm_addon import DomestiqueAddon  # noqa: E402
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 # A fabricated key in a fixed-string test, never a real credential. The whole
 # point of this file is to assert it does NOT reach disk.
