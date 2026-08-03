@@ -158,9 +158,12 @@ this guide showed `types:` and `severity_min:` against a
 existed, so the example could not load.
 
 > **Check your policy path resolves.** A missing policy file does *not* fail
-> loudly: it logs a `policy_file_missing` warning and loads a **zero-rule**
-> policy, which means enforcement is silently off. Confirm the startup log says
-> `policy_loaded` with a non-zero `rule_count`.
+> loudly. It logs a `policy_file_missing` warning and falls back to five built-in
+> rules (`_DEFAULT_RULES` in `domestique/policy/__init__.py`) that do block secrets
+> and redact PII — so enforcement is not off, but it is **not the policy you
+> configured**, and edits to your YAML will have no effect. Confirm the startup log
+> says `policy_loaded`, and that `rule_count` matches your file: 8 for
+> `browser-rules.yaml`, 5 for `cli-rules.yaml`.
 
 ---
 
