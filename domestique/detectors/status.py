@@ -12,8 +12,14 @@ verifies the tier can construct/load, catching "installed but model uncached".
 
 The local-LLM tier is the exception: it has no importable module, so the cheap
 probe is a short, proxy-bypassing HTTP call to the configured Ollama daemon.
-It runs only when the tier is explicitly enabled (off by default) and is
-bounded by ``_PROBE_TIMEOUT_S``; every failure degrades to "unavailable".
+It runs only when the tier is explicitly enabled (off by default). The response
+read is bounded by ``_PROBE_TIMEOUT_S`` as a wall-clock deadline and by
+``_MAX_TAGS_BYTES`` in size; every failure degrades to "unavailable".
+
+One caveat that the deadline does not cover: hostname resolution happens before
+the socket timeout applies, so a ``local_llm_url`` pointing at a name served by
+an unresponsive resolver can still block for the OS resolver timeout. The
+default ``localhost`` is unaffected.
 """
 
 from __future__ import annotations
@@ -21,9 +27,10 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import time
 import urllib.request
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from domestique.config import Settings
@@ -106,11 +113,37 @@ def _ollama_tags(base_url: str, timeout: float) -> set[str] | None:
         req = urllib.request.Request(  # noqa: S310  # scheme checked above
             f"{base_url.rstrip('/')}/api/tags"
         )
+        deadline = time.monotonic() + timeout
         with opener.open(req, timeout=timeout) as resp:
-            data = json.loads(resp.read())
+            # `timeout` is a per-socket-operation deadline, not an end-to-end
+            # one: every byte received resets it, so a server that accepts and
+            # then trickles the body blocks for as long as it keeps dripping.
+            # Measured 15s against a 1s timeout, on the `domestique demo` path.
+            # Cap the read and enforce our own wall-clock deadline. Also bounds
+            # size: a wrong service on :11434 could otherwise return gigabytes.
+            data = json.loads(_read_bounded(resp, deadline))
         return {str(m.get("name", "")) for m in data.get("models", [])}
     except Exception:
         return None
+
+
+#: Ollama's /api/tags is a short model list; anything larger is not it.
+_MAX_TAGS_BYTES = 1 << 20
+
+
+def _read_bounded(resp: Any, deadline: float) -> bytes:
+    """Read at most ``_MAX_TAGS_BYTES``, giving up once ``deadline`` passes."""
+    chunks: list[bytes] = []
+    total = 0
+    while total < _MAX_TAGS_BYTES:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("ollama probe exceeded its deadline")
+        chunk = resp.read(min(65536, _MAX_TAGS_BYTES - total))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+    return b"".join(chunks)
 
 
 def _model_present(model: str, names: set[str]) -> bool:

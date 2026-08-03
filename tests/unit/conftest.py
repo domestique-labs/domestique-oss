@@ -46,7 +46,17 @@ class MockProvider:
 
 @pytest.fixture(autouse=True)
 def _isolate_audit_log(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point the wedge audit log at a temp file so tests never touch ~/.domestique."""
+    """Point the wedge audit log at a temp file so tests never touch ~/.domestique.
+
+    Both names are needed and they are not interchangeable:
+    ``DOMESTIQUE_AUDIT_LOG_PATH`` is the Settings field ``audit_log_path``
+    (env_prefix + field name) and controls where the proxy *writes*;
+    ``DOMESTIQUE_AUDIT_LOG`` is read by ``domestique/report.py`` and controls
+    where ``report`` *reads*. Setting only the latter — as this fixture did —
+    left writes going to the real ``~/.domestique/audit.jsonl`` once the default
+    moved there, so running the suite appended to the developer's own audit log.
+    """
+    monkeypatch.setenv("DOMESTIQUE_AUDIT_LOG_PATH", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("DOMESTIQUE_AUDIT_LOG", str(tmp_path / "audit.jsonl"))
 
 

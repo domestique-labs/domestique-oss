@@ -152,3 +152,26 @@ def test_json_safe_handles_dataclass_class_not_just_instances(tmp_path: Path) ->
     append_debug_trace({"action": "pass", "detections": [Marker, Marker(1)]}, path=path)
     entry = json.loads(path.read_text(encoding="utf-8").strip())
     assert entry["detections"][1] == {"value": 1}
+
+
+def test_browser_path_content_keys_are_scrubbed():
+    """content_preview and raw_snippet carry prompt text on the MITM path.
+
+    domestique_app/services/mitm_addon.py writes content_preview on every
+    action and raw_snippet on the redact path. Both were missing from
+    _RAW_DUMP_KEYS, so request_log.jsonl kept cleartext prompts on disk while
+    the module advertised redact-by-default.
+    """
+    secret = "sk-live-51H8xQqRtVwXyZ0123456789"
+    entry = {
+        "action": "blocked",
+        "host": "api.openai.com",
+        "content_preview": f"my key is {secret}",
+        "raw_snippet": f'{{"messages":[{{"content":"{secret}"}}]}}',
+    }
+    scrubbed = scrub_entry(entry)
+    assert secret not in json.dumps(scrubbed)
+    assert scrubbed["content_preview_omitted"] is True
+    assert scrubbed["raw_snippet_omitted"] is True
+    assert scrubbed["content_preview_length"] > 0
+    assert scrubbed["action"] == "blocked"  # decision metadata survives

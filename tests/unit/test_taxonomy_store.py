@@ -302,3 +302,21 @@ class TestLabelShapeGuard:
         TaxonomyStore(path=path).register("employee_badge", scanned_text="unrelated")
         assert path.exists()
         assert stat.S_IMODE(path.stat().st_mode) & 0o077 == 0
+
+
+def test_merge_never_creates_a_duplicate_prefix(tmp_path):
+    """Two stores coining terms that truncate to the same prefix must not collide.
+
+    taxonomy.py requires prefixes to be unique because a collision merges two
+    categories' token counters — the reversible vault could then substitute the
+    wrong original value back into a response. _unique_prefix_locked chose
+    against local state only, and the on-disk map was folded in afterwards,
+    which could reintroduce the duplicate.
+    """
+    path = tmp_path / "t.json"
+    a, b = TaxonomyStore(path=path), TaxonomyStore(path=path)
+    a.register("customer account reference number alpha")
+    b.register("customer account reference number bravo")
+    on_disk = json.loads(path.read_text(encoding="utf-8"))
+    assert len(on_disk) == 2, on_disk
+    assert len(set(on_disk.values())) == 2, f"prefix collision on disk: {on_disk}"

@@ -114,7 +114,7 @@ class TaxonomyStore:
         tmp: Path | None = None
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-            merged = {**self._terms, **self._read_disk()}
+            merged = self._merge_preserving_uniqueness(self._read_disk())
             self._terms = merged
             # Unique per write: a fixed temp name is a second race — two
             # processes would write the same file and one would replace a
@@ -197,6 +197,44 @@ class TaxonomyStore:
             self._terms[term] = prefix
             self._persist_locked()  # may adopt another process's prefix for `term`
             return self._terms.get(term, prefix)
+
+    def _merge_preserving_uniqueness(self, on_disk: dict[str, str]) -> dict[str, str]:
+        """Fold *on_disk* over local terms without creating a duplicate prefix.
+
+        ``_unique_prefix_locked`` picks a free prefix against the terms this
+        process knows about, but the disk map is read *after* that choice. A
+        plain ``{**local, **disk}`` merge can therefore reintroduce exactly the
+        collision the uniqueness rule exists to prevent: two categories whose
+        derived prefixes truncate to the same MAX_PREFIX_LEN string end up
+        sharing one prefix on disk.
+
+        That is not cosmetic. ``taxonomy.py`` states prefixes must be unique
+        because a collision merges two categories' token counters — so the
+        reversible vault can substitute the wrong original value back when it
+        rewrites a response.
+
+        Disk wins for keys already present (a prefix another process handed out
+        is never reassigned); any *local* term left colliding is re-keyed.
+        """
+        merged = dict(on_disk)
+        seen = set(merged.values())
+        for term, prefix in self._terms.items():
+            if term in merged:
+                continue  # disk already assigned this term a prefix
+            if prefix in seen:
+                prefix = self._free_prefix(prefix, seen)
+            merged[term] = prefix
+            seen.add(prefix)
+        return merged
+
+    @staticmethod
+    def _free_prefix(base: str, taken: set[str]) -> str:
+        for n in range(2, 1000):
+            suffix = f"_{n}"
+            candidate = base[: MAX_PREFIX_LEN - len(suffix)].rstrip("_") + suffix
+            if candidate not in taken:
+                return candidate
+        return base  # pathological; accept collision over an infinite loop
 
     def _unique_prefix_locked(self, base: str) -> str:
         taken = _CANONICAL_PREFIXES | set(self._terms.values())
