@@ -96,7 +96,9 @@ class TestBug2CategorySanitize:
     def test_gliner_category_round_trips(self) -> None:
         svc = _service()
         token = svc.tokenize("Jane Doe", "pii:person")
-        assert token == "[PII_PERSON_1]"          # ':' -> '_', matches TOKEN_RE
+        # "pii:" prefix normalizes to the canonical "person" category, which
+        # now shares its token with plain "person" (GLiNER) — see taxonomy.py.
+        assert token == "[PERSON_1]"
         restored, unknown = svc.detokenize_text(f"Contact {token}.")
         assert restored == "Contact Jane Doe."
         assert unknown == []

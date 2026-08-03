@@ -8,34 +8,13 @@ apart. Nothing here ever touches disk.
 
 from __future__ import annotations
 
-import re
 import threading
 import time
 from dataclasses import dataclass, field
 
-#: Short semantic prefixes for verbose detector categories. Redaction
-#: markers ride along on every conversation turn, so their BPE cost
-#: matters; ``[SSN_1]`` reads as clearly to a model as ``[US_SSN_1]`` at
-#: roughly half the tokens. Aliases must stay unique (collision would
-#: merge two categories' counters) and fit the ``[A-Z0-9_]+`` grammar.
-_PREFIX_ALIASES: dict[str, str] = {
-    "us_ssn": "SSN",
-    "email_address": "EMAIL",
-    "phone_number": "PHONE",
-    "credit_card": "CARD",
-    "aws_access_key": "AWSKEY",
-    "aws_secret_key": "AWSSECRET",
-    "private_key": "PRIVKEY",
-    "connection_string": "CONNSTR",
-    "github_token": "GHTOKEN",
-    "github_fine_grained": "GHPAT",
-    "anthropic_key": "ANTKEY",
-    "openai_key": "OAIKEY",
-    "slack_token": "SLACKKEY",
-    "jwt": "JWT",
-    "generic_api_key": "APIKEY",
-    "password_literal": "PASSWORD",
-}
+from domestique.taxonomy import CANONICAL as _PREFIX_ALIASES  # noqa: F401  (back-compat re-export)
+from domestique.taxonomy import normalize_category
+from domestique.taxonomy import prefix_for as _prefix_for
 
 #: Longest rendered token we will ever mint, e.g. ``[PREFIX_123]``. The
 #: streaming detokenizer relies on this bound to hold back a token split
@@ -52,35 +31,15 @@ _INDEX_DIGITS = 6
 #: ``"[" + prefix + "_" + index + "]"``.
 MAX_PREFIX_LEN = MAX_TOKEN_LEN - 3 - _INDEX_DIGITS
 
-#: Characters not permitted by the token grammar (``TOKEN_RE`` in
-#: ``service.py``: ``[A-Z0-9_]``). Runs of them collapse to a single ``_``.
-_NON_TOKEN_CHARS = re.compile(r"[^A-Z0-9_]+")
-
 
 def category_prefix(category: str) -> str:
-    """Token prefix for a detector category: short alias when known
-    (``email_address`` → ``EMAIL``), else the uppercased category sanitized
-    to the ``[A-Z0-9_]`` token grammar and length-bounded.
+    """Token prefix for a detector category, via the canonical taxonomy.
 
-    Sanitizing is mandatory, not cosmetic: categories like ``pii:person``
-    (GLiNER) or ``llm_classified:customer data`` (LLM classifier) would
-    otherwise mint tokens such as ``[PII:PERSON_1]`` whose ``:``/space
-    ``TOKEN_RE`` cannot match, silently breaking detokenization for the
-    whole NER/LLM path. Bounding the prefix keeps every rendered token
-    within ``MAX_TOKEN_LEN`` so the streaming rewriter can never split an
-    over-length token un-held across a chunk boundary.
+    Normalizes the raw category first (``pii:person`` → ``person``) so every
+    tier that flags the same entity mints the same token, then maps it to a
+    compact, token-grammar-safe prefix (canonical, store-learned, or derived).
     """
-    alias = _PREFIX_ALIASES.get(category.lower())
-    if alias is not None:
-        return alias
-    prefix = _NON_TOKEN_CHARS.sub("_", category.upper()).strip("_")
-    # Strip the trailing "_" AFTER truncation too: truncating at a "_"
-    # boundary would otherwise leave one, making category_prefix
-    # non-idempotent — and sync_counter_floors re-derives the prefix from a
-    # minted token, so a mismatched key silently defeats the pinned/session
-    # counter floor and re-opens the cross-conversation collision.
-    prefix = prefix[:MAX_PREFIX_LEN].rstrip("_")
-    return prefix or "REDACTED"
+    return _prefix_for(normalize_category(category))
 
 
 def render_token(prefix: str, index: int) -> str:

@@ -143,11 +143,17 @@ class TestAPIEndpoints:
         handler._send_json({"ok": True})
 
     def test_get_debug_trace(self, api_server, tmp_path: Path):
+        """Scrubbed entries serve without error; the decision still renders."""
         from domestique.debug_trace import append_debug_trace
 
         trace_path = tmp_path / "debug_trace.jsonl"
         append_debug_trace(
-            {"source": "browser_proxy", "action": "blocked", "prompt": "secret"},
+            {
+                "source": "browser_proxy",
+                "action": "blocked",
+                "prompt": "secret",
+                "reason": "aws_key",
+            },
             path=trace_path,
         )
 
@@ -155,5 +161,45 @@ class TestAPIEndpoints:
             data = self._get(api_server, "/api/debug-trace?limit=10")
 
         assert data["total"] == 1
-        assert data["entries"][0]["action"] == "blocked"
+        entry = data["entries"][0]
+        assert entry["action"] == "blocked"
+        assert entry["reason"] == "aws_key"
+        assert entry["raw_prompt_logged"] is False
+        assert "prompt" not in entry
+
+    def test_get_debug_trace_raw_opt_in(self, api_server, tmp_path: Path):
+        from domestique.debug_trace import append_debug_trace
+
+        trace_path = tmp_path / "debug_trace.jsonl"
+        append_debug_trace(
+            {"source": "browser_proxy", "action": "blocked", "prompt": "secret"},
+            path=trace_path,
+            log_raw=True,
+        )
+
+        with patch("domestique.debug_trace.TRACE_PATH", trace_path):
+            data = self._get(api_server, "/api/debug-trace?limit=10")
+
         assert data["entries"][0]["prompt"] == "secret"
+
+
+class TestClassifierPromptDefault:
+    """The dashboard's "reset prompt to default" endpoint.
+
+    It reached into a private name in the detector module, so renaming that
+    symbol broke the endpoint with an ImportError and nothing caught it - the
+    root suite does not import domestique_app, and no test hit this path.
+    """
+
+    def _get(self, base_url: str, path: str) -> dict:
+        res = urllib.request.urlopen(f"{base_url}{path}")  # noqa: S310
+        return json.loads(res.read())
+
+    def test_serves_the_real_rendered_default(self, api_server):
+        from domestique.detectors.local_llm import default_system_prompt
+
+        data = self._get(api_server, "/api/classifier-prompt/default")
+        assert data["prompt"] == default_system_prompt()
+        # the served text must be usable as-is, not a raw template
+        assert "%(categories)s" not in data["prompt"]
+        assert "us_ssn" in data["prompt"]  # canonical vocabulary interpolated

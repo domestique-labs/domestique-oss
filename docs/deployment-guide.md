@@ -104,17 +104,12 @@ cp .env.example .env
 docker compose up -d
 ```
 
-### Kubernetes (production)
-```bash
-# Using Helm
-helm install domestique ./infra/kubernetes/helm-chart \
-    --set proxy.replicas=3 \
-    --set openaiApiKey=$OPENAI_API_KEY \
-    --set anthropicApiKey=$ANTHROPIC_API_KEY
-
-# Or using Kustomize
-kubectl apply -k infra/kubernetes/kustomize/
-```
+> **No Kubernetes deployment ships with this repository.** This section used to
+> give `helm install ./infra/kubernetes/helm-chart` and
+> `kubectl apply -k infra/kubernetes/kustomize/` as if they were runnable;
+> `infra/kubernetes/` has never existed. Multi-node and fleet deployment is not
+> part of the Community Edition — use Docker Compose above, or run the proxy
+> directly.
 
 ---
 
@@ -138,25 +133,37 @@ Also consider:
 
 ## Step 6: Configure Policies
 
-Edit `proxy/policy/default_policy.yaml`:
+Two policy files ship, and you pick one with `DOMESTIQUE_POLICY_PATH`:
+
+- `domestique/policy/cli-rules.yaml` — **redact-first**, used by the CLI wedge
+- `domestique/policy/browser-rules.yaml` — **block-first**, used by the browser
+  and app-managed proxy
+
+A rule looks like this (from `cli-rules.yaml`):
 
 ```yaml
 rules:
-  - name: block-secrets
+  - name: block-crown-jewels
     detector: secret_scanner
-    types: [aws_access_key, private_key, connection_string]
     action: block
-
-  - name: redact-pii
-    detector: pii_detector
-    types: [us_ssn, credit_card, email_address]
-    action: redact
-
-  - name: block-internal-code
-    detector: code_classifier
-    action: block
-    severity_min: 0.9
+    categories:
+      - aws_access_key
+      - private_key
+    min_confidence: 0.9
 ```
+
+Note the field names: `categories` and `min_confidence`. An earlier version of
+this guide showed `types:` and `severity_min:` against a
+`proxy/policy/default_policy.yaml` path — neither the field names nor the file
+existed, so the example could not load.
+
+> **Check your policy path resolves.** A missing policy file does *not* fail
+> loudly. It logs a `policy_file_missing` warning and falls back to five built-in
+> rules (`_DEFAULT_RULES` in `domestique/policy/__init__.py`) that do block secrets
+> and redact PII — so enforcement is not off, but it is **not the policy you
+> configured**, and edits to your YAML will have no effect. Confirm the startup log
+> says `policy_loaded`, and that `rule_count` matches your file: 8 for
+> `browser-rules.yaml`, 5 for `cli-rules.yaml`.
 
 ---
 

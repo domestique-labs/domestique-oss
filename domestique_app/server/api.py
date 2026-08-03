@@ -25,12 +25,83 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import structlog
+
+from domestique.taxonomy import CANONICAL, normalize_category
 from domestique_app.config.store import ConfigStore
 from domestique_app.services.benchmark import BenchmarkService
 from domestique_app.services.proxy import BrowserProxyService, ProxyService
 
 if TYPE_CHECKING:
     from app.services.approval import PendingApproval
+
+logger = structlog.get_logger()
+
+# --- Workshop benchmark label mapping ------------------------------------
+#
+# Detectors emit the fine-grained canonical taxonomy; the workshop datasets are
+# labelled with six coarse categories. Every canonical category names a value
+# that is either an access credential or data about a person, so the split is
+# exhaustive over CANONICAL -- and it is written as a split *of CANONICAL*, not
+# as an independent list, so a category added to the taxonomy shows up here as
+# a test failure instead of silently landing in the fallback.
+_CREDENTIAL_CATEGORIES = frozenset(
+    {
+        "aws_access_key",
+        "aws_secret_key",
+        "private_key",
+        "connection_string",
+        "github_token",
+        "github_fine_grained",
+        "anthropic_key",
+        "openai_key",
+        "slack_token",
+        "jwt",
+        "generic_api_key",
+        "password_literal",
+    }
+)
+_CUSTOMER_DATA_CATEGORIES = frozenset(
+    {
+        "us_ssn",
+        "email_address",
+        "phone_number",
+        "credit_card",
+        "person",
+        "address",
+        "ip_address",
+        "iban_code",
+        "us_passport",
+        "us_driver_license",
+        "medical_license",
+        "date_of_birth",
+    }
+)
+
+#: Canonical categories neither set above claims. Must stay empty: the workshop
+#: test asserts it, so adding a category to the taxonomy fails there rather than
+#: silently skewing the per-category benchmark numbers.
+_UNCLASSIFIED_CANONICAL = frozenset(CANONICAL) - _CREDENTIAL_CATEGORIES - _CUSTOMER_DATA_CATEGORIES
+
+#: Categories the semantic tier emits that are not part of CANONICAL.
+_SEMANTIC_CATEGORIES = {
+    "encoded_content_base64": "CREDENTIALS",
+    "encoded_content_hex": "CREDENTIALS",
+    "high_entropy_string": "CREDENTIALS",
+    "obfuscated_unicode": "CREDENTIALS",
+}
+
+#: The dataset's own label vocabulary, passed through untouched.
+_STANDARD_LABELS = frozenset(
+    {
+        "PROPRIETARY_CODE",
+        "BUSINESS_STRATEGY",
+        "CUSTOMER_DATA",
+        "INTERNAL_COMMS",
+        "CREDENTIALS",
+        "NONE",
+    }
+)
 
 # Singleton services (shared across all requests)
 _proxy_service = ProxyService()
@@ -633,10 +704,11 @@ class APIHandler(BaseHTTPRequestHandler):
             self._send_json({"token": mgr.csrf_token})
 
         elif self.path == "/api/classifier-prompt/default":
-            # Serve the built-in default classifier prompt
-            from domestique.detectors.local_llm import _CLASSIFIER_SYSTEM_PROMPT
+            # Serve the built-in default extractor prompt, rendered exactly as
+            # the detector uses it (public accessor - not the raw template).
+            from domestique.detectors.local_llm import default_system_prompt
 
-            self._send_json({"prompt": _CLASSIFIER_SYSTEM_PROMPT})
+            self._send_json({"prompt": default_system_prompt()})
 
         elif self.path == "/api/builtin-patterns":
             from domestique.detectors.secrets import _PATTERNS
@@ -878,7 +950,11 @@ class APIHandler(BaseHTTPRequestHandler):
         self._send_json({"entries": entries, "total": len(entries)})
 
     def _handle_debug_trace(self) -> None:
-        """Serve the raw prompt decision trace with optional filtering."""
+        """Serve the decision trace with optional filtering.
+
+        Entries are scrubbed of prompt content at write time unless raw logging
+        was opted into, so keys such as ``prompt`` may be absent.
+        """
         from urllib.parse import parse_qs, urlparse
 
         from domestique.debug_trace import read_debug_trace
@@ -1537,73 +1613,43 @@ class APIHandler(BaseHTTPRequestHandler):
             {"ok": True, "message": "benchmark started", "total_samples": len(samples)}
         )
 
+    #: Canonical (and semantic-tier) category -> dataset label. Keys are the
+    #: spellings ``normalize_category`` actually produces; a key carrying a
+    #: ``pii:`` or ``llm_classified:`` prefix would be unreachable, because
+    #: those prefixes are stripped before any Detection is constructed.
     _CATEGORY_MAP = {
-        # LLM classifier prefixed categories
-        "llm_classified:proprietary_code": "PROPRIETARY_CODE",
-        "llm_classified:business_strategy": "BUSINESS_STRATEGY",
-        "llm_classified:customer_data": "CUSTOMER_DATA",
-        "llm_classified:internal_comms": "INTERNAL_COMMS",
-        "llm_classified:credentials": "CREDENTIALS",
-        "llm_classified:none": "NONE",
-        # Regex detector categories
-        "us_ssn": "CUSTOMER_DATA",
-        "credit_card": "CUSTOMER_DATA",
-        "email_address": "CUSTOMER_DATA",
-        "phone_number": "CUSTOMER_DATA",
-        "private_key": "CREDENTIALS",
-        "aws_access_key": "CREDENTIALS",
-        "aws_secret_key": "CREDENTIALS",
-        "connection_string": "CREDENTIALS",
-        "github_token": "CREDENTIALS",
-        "github_fine_grained": "CREDENTIALS",
-        "anthropic_key": "CREDENTIALS",
-        "openai_key": "CREDENTIALS",
-        "slack_token": "CREDENTIALS",
-        "jwt": "CREDENTIALS",
-        "generic_api_key": "CREDENTIALS",
-        "password_literal": "CREDENTIALS",
-        # Semantic detector categories
-        "encoded_content_base64": "CREDENTIALS",
-        "encoded_content_hex": "CREDENTIALS",
-        "high_entropy_string": "CREDENTIALS",
-        # GLiNER PII categories
-        "pii:person": "CUSTOMER_DATA",
-        "pii:email": "CUSTOMER_DATA",
-        "pii:phone_number": "CUSTOMER_DATA",
-        "pii:social_security_number": "CUSTOMER_DATA",
-        "pii:credit_card": "CUSTOMER_DATA",
-        "pii:date_of_birth": "CUSTOMER_DATA",
-        "pii:address": "CUSTOMER_DATA",
-        "pii:ip_address": "CUSTOMER_DATA",
-        "pii:password": "CREDENTIALS",
-        # Presidio categories
-        "person": "CUSTOMER_DATA",
+        **{c: "CREDENTIALS" for c in _CREDENTIAL_CATEGORIES},
+        **{c: "CUSTOMER_DATA" for c in _CUSTOMER_DATA_CATEGORIES},
+        **_SEMANTIC_CATEGORIES,
     }
 
     def _normalize_category(self, raw: str) -> str:
-        """Map detector-specific category names to dataset-level labels."""
-        if raw in self._CATEGORY_MAP:
-            return self._CATEGORY_MAP[raw]
-        # Try lowercase match
-        lower = raw.lower()
-        for key, val in self._CATEGORY_MAP.items():
-            if key == lower:
-                return val
-        # If it's already a standard label, keep it
-        standard = {
-            "PROPRIETARY_CODE",
-            "BUSINESS_STRATEGY",
-            "CUSTOMER_DATA",
-            "INTERNAL_COMMS",
-            "CREDENTIALS",
-            "NONE",
-        }
-        if raw in standard:
+        """Map a detector's category name to the dataset's label vocabulary."""
+        if raw in _STANDARD_LABELS:
             return raw
-        # Any detection that isn't NONE means something was found
-        if raw != "NONE":
-            return "CREDENTIALS"  # conservative fallback
-        return "NONE"
+        upper = raw.strip().upper()
+        if upper in _STANDARD_LABELS:
+            return upper
+
+        # Fold aliases and any residual source prefix exactly the way the
+        # detectors did on the way out, so lookup sees the same spelling.
+        canonical = normalize_category(raw)
+        mapped = self._CATEGORY_MAP.get(canonical)
+        if mapped is not None:
+            return mapped
+
+        # A coined term from the LLM tier, or a taxonomy category nobody
+        # mapped. Scoring it as CREDENTIALS is a guess; say so out loud rather
+        # than quietly biasing the per-category numbers. Logging the term is
+        # safe here specifically because this method is only ever called on
+        # workshop dataset samples -- keep it that way.
+        logger.warning(
+            "workshop_benchmark_unmapped_category",
+            raw=raw,
+            normalized=canonical,
+            scored_as="CREDENTIALS",
+        )
+        return "CREDENTIALS"
 
     def _compute_metrics(self, results: list) -> dict:
         """Compute precision, recall, F1, accuracy from benchmark results."""

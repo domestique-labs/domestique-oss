@@ -336,10 +336,17 @@ class DomestiqueAddon:
             pass
 
     def _log_request(self, entry: dict) -> None:
-        """Append a request entry to the JSON lines log file."""
+        """Append a request entry to the JSON lines log file.
+
+        Prompt content is scrubbed unless raw logging is explicitly enabled,
+        using the same rules and the same flag as the debug trace.
+        """
+        from domestique.debug_trace import raw_prompt_logging_enabled, scrub_entry
+
+        payload = entry if raw_prompt_logging_enabled() else scrub_entry(entry)
         try:
             with open(self._log_file, "a") as f:
-                f.write(json.dumps(entry) + "\n")
+                f.write(json.dumps(payload) + "\n")
             # Truncate if too large (keep last N entries)
             self._trim_log()
         except OSError:
@@ -834,7 +841,7 @@ class DomestiqueAddon:
             try:
                 from domestique_app.services.notifications import notify_block
 
-                notify_block(host)
+                notify_block(host, detail=self._format_block_detail(reasons))
             except Exception:
                 logger.debug("Desktop notification failed", exc_info=True)
 
@@ -953,6 +960,32 @@ class DomestiqueAddon:
             get_audit_store().record(event)
         except Exception:  # noqa: S110
             pass  # Never let audit failure affect request path
+
+    def _format_block_detail(self, reasons: list[str] | None) -> str | None:
+        """Turn the first block reason into a short "Category (NN%)" string.
+
+        Feeds the opt-in enriched desktop toast (see
+        domestique_app.services.notifications.notify_block's `detail` kwarg);
+        the toast only shows this when the user has enabled that setting.
+        `reasons` entries come from _DetectorPipeline.inspect's
+        `description` ("detector: category (NN%)") - this is purely
+        cosmetic and defensive, so any unexpected shape falls back to the
+        raw first reason (or None) rather than raising.
+        """
+        if not reasons:
+            return None
+        try:
+            first = reasons[0]
+            if not isinstance(first, str) or not first.strip():
+                return None
+            # Drop a leading "detector: " prefix if present, e.g.
+            # "secrets: us_ssn (92%)" -> "us_ssn (92%)".
+            category_part = first.split(": ", 1)[-1] if ": " in first else first
+            label = category_part.replace("_", " ").strip()
+            return label or first
+        except Exception:
+            logger.debug("Failed to format block detail", exc_info=True)
+            return None
 
     # --- Approval flow -----------------------------------------------
 
@@ -1477,6 +1510,45 @@ class DomestiqueAddon:
 
         flow.response.stream = _tee
 
+    def _maybe_inject_block_widget(self, flow: http.HTTPFlow) -> None:
+        """Inject the in-page block-feedback widget into a top-level HTML page.
+
+        Presentation-only and fail-open: fires only for an intercepted LLM
+        host serving a 2xx text/html document to a GET; on ANY error it
+        leaves the response untouched. Never affects the 403 block path.
+        """
+        try:
+            resp = flow.response
+            if resp is None:
+                return
+            if not self._is_llm_endpoint(flow.request.pretty_host):
+                return
+            if flow.request.method != "GET":
+                return
+            if not (200 <= resp.status_code < 300):
+                return
+            content_type = resp.headers.get("content-type", "")
+            if "text/html" not in content_type.lower():
+                return
+
+            from domestique_app.services import inpage_feedback as fb
+
+            injected = fb.inject_widget(resp.text)
+            if injected is None:
+                return
+            resp.text = injected
+
+            csp_key = next(
+                (k for k in resp.headers if k.lower() == "content-security-policy"), None
+            )
+            if csp_key is not None:
+                script_hash = fb.compute_script_hash(fb.load_widget_js())
+                resp.headers[csp_key] = fb.relax_csp_for_injection(
+                    resp.headers[csp_key], script_hash
+                )
+        except Exception:
+            logger.debug("in-page widget injection skipped", exc_info=True)
+
     async def response(self, flow: http.HTTPFlow) -> None:
         """Handle a completed response.
 
@@ -1500,6 +1572,9 @@ class DomestiqueAddon:
         host = flow.request.pretty_host
         if not self._is_llm_endpoint(host):
             return
+
+        # Presentation-only: surface blocks in-page. Never blocks/raises.
+        self._maybe_inject_block_widget(flow)
 
         metadata = getattr(flow, "metadata", None)
         if isinstance(metadata, dict) and metadata.get("domestique_streamed") is True:
