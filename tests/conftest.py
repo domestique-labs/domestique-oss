@@ -20,7 +20,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # dismiss it, which is the "hang" reported in issue #74. With the real HOME it
 # is worse in a different way: the suite writes a key into the developer's
 # actual login keychain.
-os.environ.setdefault("PYTHON_KEYRING_BACKEND", "keyring.backends.null.Keyring")
+#
+# NOT on Windows. tests/unit/vault/test_keyring_windows_integration.py exists to
+# validate the real DPAPI-backed Credential Manager, and asserts loudly that the
+# active backend is `keyring.backends.Windows` precisely so a null backend cannot
+# make it pass vacuously. Forcing null there would break the one job that tests
+# the real thing.
+if sys.platform != "win32":
+    os.environ.setdefault("PYTHON_KEYRING_BACKEND", "keyring.backends.null.Keyring")
 
 
 @pytest.fixture(autouse=True)
