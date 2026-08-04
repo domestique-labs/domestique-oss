@@ -1,5 +1,6 @@
 """Pytest configuration."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,6 +8,26 @@ import pytest
 
 # Ensure the project root is importable.
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# No test may touch the real OS keyring. Set before anything imports `keyring`,
+# because the backend is chosen at import time.
+#
+# On macOS this is not merely hygiene. `keyring.set_password` reaches the
+# Security framework, which looks for `$HOME/Library/Keychains/login.keychain-db`.
+# Run the suite with HOME pointed anywhere else — a scratch dir, a sandbox, CI —
+# and it fails with `A keychain cannot be found to store "vault-key"`, surfaced
+# as a *system dialog*. pytest then blocks indefinitely waiting for a human to
+# dismiss it, which is the "hang" reported in issue #74. With the real HOME it
+# is worse in a different way: the suite writes a key into the developer's
+# actual login keychain.
+#
+# NOT on Windows. tests/unit/vault/test_keyring_windows_integration.py exists to
+# validate the real DPAPI-backed Credential Manager, and asserts loudly that the
+# active backend is `keyring.backends.Windows` precisely so a null backend cannot
+# make it pass vacuously. Forcing null there would break the one job that tests
+# the real thing.
+if sys.platform != "win32":
+    os.environ.setdefault("PYTHON_KEYRING_BACKEND", "keyring.backends.null.Keyring")
 
 
 @pytest.fixture(autouse=True)
