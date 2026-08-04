@@ -1,5 +1,6 @@
 """Pytest configuration."""
 
+import os
 import sys
 from pathlib import Path
 
@@ -7,6 +8,19 @@ import pytest
 
 # Ensure the project root is importable.
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# No test may touch the real OS keyring. Set before anything imports `keyring`,
+# because the backend is chosen at import time.
+#
+# On macOS this is not merely hygiene. `keyring.set_password` reaches the
+# Security framework, which looks for `$HOME/Library/Keychains/login.keychain-db`.
+# Run the suite with HOME pointed anywhere else — a scratch dir, a sandbox, CI —
+# and it fails with `A keychain cannot be found to store "vault-key"`, surfaced
+# as a *system dialog*. pytest then blocks indefinitely waiting for a human to
+# dismiss it, which is the "hang" reported in issue #74. With the real HOME it
+# is worse in a different way: the suite writes a key into the developer's
+# actual login keychain.
+os.environ.setdefault("PYTHON_KEYRING_BACKEND", "keyring.backends.null.Keyring")
 
 
 @pytest.fixture(autouse=True)

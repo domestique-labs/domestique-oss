@@ -17,16 +17,15 @@ import contextlib
 import json
 import logging
 import os
+import sys
 import tempfile
 import threading
 import time
-from typing import TYPE_CHECKING, Protocol
+from pathlib import Path
+from typing import Protocol
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from domestique.vault.session import category_prefix, render_token
 
@@ -34,6 +33,33 @@ logger = logging.getLogger(__name__)
 
 _KEYRING_SERVICE = "domestique-vault"
 _KEYRING_USER = "vault-key"
+
+#: Opt out of the OS keyring entirely (headless boxes, CI, sandboxes).
+DISABLE_KEYRING_ENV = "DOMESTIQUE_DISABLE_KEYRING"
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def _keyring_reachable() -> bool:
+    """Cheap, non-interactive check that the OS keyring can be used at all.
+
+    ``keyring.set_password`` is not safely callable on macOS when ``$HOME`` has
+    no login keychain: the Security framework fails with ``A keychain cannot be
+    found to store "vault-key"`` and presents it as a **blocking system dialog**.
+    A ``try/except`` cannot help, because the block happens before any exception
+    is raised — the process simply waits for a human. That is what made pytest
+    appear to hang (#74), and it hits any run under a scratch or sandboxed HOME.
+
+    So detect the condition instead of catching it. Cheap and never interactive.
+    """
+    if os.getenv(DISABLE_KEYRING_ENV, "").strip().lower() in _TRUTHY:
+        return False
+    if sys.platform == "darwin":
+        keychains = Path.home() / "Library" / "Keychains"
+        try:
+            return keychains.is_dir() and any(keychains.glob("*.keychain-db"))
+        except OSError:
+            return False
+    return True
 
 
 class KeyProvider(Protocol):
@@ -46,6 +72,12 @@ class KeyringKeyProvider:
     """Stores a random AES-256 key in the OS keyring (DPAPI/Keychain/SecretService)."""
 
     def get_or_create_key(self) -> bytes | None:
+        if not _keyring_reachable():
+            logger.warning(
+                "vault_keyring_unavailable — no usable OS keyring "
+                "(pinned vault disabled; session redaction unaffected)"
+            )
+            return None
         try:
             import keyring
 
