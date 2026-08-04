@@ -1,11 +1,26 @@
 # File & Image Scanning — Benchmark Results & Improvement Proposals
 
-> **These figures cannot currently be reproduced.** The dataset is in
-> `dataset/` and the recorded output is in `benchmark_results.json`, but the
-> runner that produced them is not in this repository —
-> `benchmarks/file_scanning/__init__.py` is empty. Until a runner is restored,
-> treat everything below as a historical record of one run, not as a claim
-> about how file scanning performs. Do not quote it externally.
+> **Reproduce with:**
+> ```bash
+> python -m benchmarks.file_scanning.run_benchmark
+> ```
+>
+> **The quality figures below reproduce exactly — but only with OCR installed.**
+> 18 of the 29 samples are images. Text extraction needs Apple Vision (the
+> `[macos-native]` extra, macOS only) or Tesseract (`[file-scanning]`). Without
+> one of those, every image silently extracts no text, and the file-level score
+> collapses from 100% F1 to roughly 48% — the scanner is not failing, it simply
+> has nothing to read. Check which path you are on before quoting any number.
+>
+> **The latency table is *not* reproducible** and should not be quoted. It
+> records one warm run on one machine; a cold run measures several times the
+> figures shown, dominated by first-call model load.
+>
+> An earlier version of this note claimed the runner "is not in this repository"
+> and that the figures could not be reproduced at all. Both statements were
+> false — `run_benchmark.py` has been here since the initial commit, and the
+> quality numbers match to the digit. The claim was inferred from an empty
+> `__init__.py`, which is just a package marker and evidence of nothing.
 
 ## Benchmark Summary
 

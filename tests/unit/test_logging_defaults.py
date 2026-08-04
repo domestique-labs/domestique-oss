@@ -14,13 +14,17 @@ import pytest
 from domestique.config import Settings
 
 
-def test_audit_path_defaults_under_home() -> None:
+def test_audit_path_defaults_under_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The autouse _isolate_audit_log fixture sets this so the suite never writes
+    # to the real ~/.domestique; drop it to observe the actual default.
+    monkeypatch.delenv("DOMESTIQUE_AUDIT_LOG_PATH", raising=False)
     expected = str(Path.home() / ".domestique" / "audit.jsonl")
     assert Settings().audit_log_path == expected
 
 
-def test_audit_path_is_absolute() -> None:
+def test_audit_path_is_absolute(monkeypatch: pytest.MonkeyPatch) -> None:
     """A relative default wrote ./logs/audit.jsonl into whatever cwd was."""
+    monkeypatch.delenv("DOMESTIQUE_AUDIT_LOG_PATH", raising=False)
     assert Path(Settings().audit_log_path).is_absolute()
 
 

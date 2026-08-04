@@ -108,8 +108,20 @@ class TestOllamaTagsProbe:
         seen: dict[str, object] = {}
 
         class _Resp:
-            def read(self) -> bytes:
-                return payload
+            """Behaves like a real stream: honours a size arg, then EOFs.
+
+            The previous version ignored the argument and returned the whole
+            payload on every call, so it could not model a bounded read.
+            """
+
+            _remaining = payload
+
+            def read(self, size: int | None = None) -> bytes:
+                if size is None:
+                    chunk, self._remaining = self._remaining, b""
+                    return chunk
+                chunk, self._remaining = self._remaining[:size], self._remaining[size:]
+                return chunk
 
             def __enter__(self) -> _Resp:
                 return self
@@ -151,5 +163,21 @@ class TestOllamaTagsProbe:
         monkeypatch.setattr(urllib.request, "build_opener", _build_opener)
         assert st._ollama_tags("http://127.0.0.1:9999", 1.0) is None
 
-    def test_non_http_url_is_refused(self) -> None:
-        assert st._ollama_tags("file:///etc/passwd", 1.0) is None
+    def test_non_http_url_is_refused(self, monkeypatch) -> None:  # noqa: ANN001
+        """The URL must be rejected before any opener runs.
+
+        Asserting only ``is None`` did not test the guard: without it,
+        ``file://`` is opened and read, and the call still returns None simply
+        because /etc/passwd is not JSON. A file:// directory serving
+        Ollama-shaped JSON at api/tags was read straight off disk. So assert the
+        opener is never built.
+        """
+
+        import urllib.request
+
+        def _must_not_run(*_a: object, **_k: object) -> object:
+            raise AssertionError("a non-http URL reached the opener")
+
+        monkeypatch.setattr(urllib.request, "build_opener", _must_not_run)
+        for url in ("file:///etc/passwd", "ftp://x/y", "gopher://x", "", "localhost:11434"):
+            assert st._ollama_tags(url, 1.0) is None

@@ -215,10 +215,20 @@ different mechanisms).
 
 ### Detection quality
 
-Detection quality is regression-gated per PR; see the scorecard in CI. Run
-`python -m benchmarks.eval` to reproduce it locally — that harness is the only
-thing in this repository that measures detection quality, and any figure not
-produced by it should not be trusted.
+Detection quality is regression-gated per PR; see the scorecard in CI. Reproduce
+it locally with:
+
+```bash
+python -m benchmarks.eval run \
+  --corpus benchmarks/eval/data/corpus.jsonl \
+  --out /tmp/results.json
+```
+
+That is the harness the PR gate uses. A second one,
+`python -m benchmarks.file_scanning.run_benchmark`, scores attachment scanning
+against its own labeled corpus (it needs OCR installed to be meaningful — see
+`benchmarks/file_scanning/RESULTS.md`). Any detection-quality figure that did not
+come out of one of these two should not be trusted.
 
 ### Project layout
 

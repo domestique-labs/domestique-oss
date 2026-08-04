@@ -139,7 +139,8 @@ Two policy files ship, and you pick one with `DOMESTIQUE_POLICY_PATH`:
 - `domestique/policy/browser-rules.yaml` — **block-first**, used by the browser
   and app-managed proxy
 
-A rule looks like this (from `cli-rules.yaml`):
+A rule looks like this — quoted verbatim from `cli-rules.yaml`, so it stays
+checkable against the file:
 
 ```yaml
 rules:
@@ -147,12 +148,20 @@ rules:
     detector: secret_scanner
     action: block
     categories:
-      - aws_access_key
       - private_key
+      - aws_secret_key
+      - connection_string
     min_confidence: 0.9
 ```
 
-Note the field names: `categories` and `min_confidence`. An earlier version of
+**Read the category list carefully before assuming what is blocked.** Under the
+redact-first CLI policy an AWS *access key* (`aws_access_key`) is **redacted**,
+not blocked — only the AWS *secret* key is a crown jewel. An earlier version of
+this section listed `aws_access_key` here, which told operators the opposite of
+what the shipped policy does. Use `browser-rules.yaml` if you want access keys
+blocked outright.
+
+Note the field names: `categories` and `min_confidence`. An older version of
 this guide showed `types:` and `severity_min:` against a
 `proxy/policy/default_policy.yaml` path — neither the field names nor the file
 existed, so the example could not load.
@@ -185,17 +194,27 @@ curl -X POST https://api.openai.com/v1/chat/completions \
 
 ### Check audit logs:
 ```bash
-tail -f logs/audit.jsonl | jq .
+tail -f ~/.domestique/audit.jsonl | jq .
 ```
+
+Set `DOMESTIQUE_AUDIT_LOG_PATH` to write somewhere else — e.g. `/app/logs/audit.jsonl`
+to land inside the `./logs` volume `docker-compose.yml` already mounts. Without
+that variable the compose deployment writes to the container user's home, not to
+the mounted volume, and the file will look missing.
 
 ---
 
 ## Monitoring
 
-- **Health**: `GET http://firewall-proxy:8000/health`
-- **Metrics**: Prometheus endpoint at `:9090/metrics`
-- **Audit logs**: JSONL format in `logs/audit.jsonl`, forward to SIEM
-- **Dashboard**: Grafana dashboards for request volume, block rate, latency
+- **Health**: `GET http://firewall-proxy:8000/health` — returns `200 {"status":"healthy"}`
+- **Audit logs**: JSONL, metadata only (categories and actions, never prompt text).
+  Default `~/.domestique/audit.jsonl`; forward to your SIEM.
+
+**There is no metrics endpoint and no dashboard.** This section previously
+advertised a Prometheus endpoint on `:9090/metrics` and Grafana dashboards.
+Neither exists: no `/metrics` route is served, nothing imports
+`prometheus_client`, port 9090 is not exposed, and the repository contains no
+Grafana assets.
 
 ---
 
@@ -206,7 +225,7 @@ tail -f logs/audit.jsonl | jq .
 | Certificate errors in apps | Verify CA is in trusted root store; check app doesn't use cert pinning |
 | DNS not resolving to proxy | Verify DNS records; check client isn't using DoH |
 | High latency | Scale proxy replicas; check network path; review detection pipeline |
-| False positives | Adjust `severity_min` thresholds; add allowlist patterns |
+| False positives | Raise `min_confidence` on the offending rule in your policy YAML |
 | App bypasses proxy | Implement network firewall rules (Step 5); deploy local agent |
 
 ---

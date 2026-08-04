@@ -30,8 +30,18 @@ _TRUTHY = frozenset({"1", "true", "yes", "on"})
 #: Keys carrying prompt text. Dropped unless raw logging is opted into.
 _PROMPT_TEXT_KEYS = ("prompt", "prompt_fields")
 
-#: Keys carrying whole request bodies, which have no redacted counterpart.
-_RAW_DUMP_KEYS = ("raw_body", "request_json", "raw_body_preview")
+#: Keys carrying whole request bodies or excerpts of them, none of which have a
+#: redacted counterpart. ``content_preview`` and ``raw_snippet`` are written by
+#: the browser MITM path (domestique_app/services/mitm_addon.py) on every
+#: action; they were omitted when this scrubber was written, so request_log.jsonl
+#: kept cleartext prompt text on disk despite the redact-by-default claim.
+_RAW_DUMP_KEYS = (
+    "raw_body",
+    "request_json",
+    "raw_body_preview",
+    "content_preview",
+    "raw_snippet",
+)
 
 
 def raw_prompt_logging_enabled() -> bool:

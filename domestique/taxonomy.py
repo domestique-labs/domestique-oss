@@ -86,12 +86,51 @@ GENERIC_CATEGORY = "sensitive"
 GENERIC_PREFIX = "SENSITIVE"
 
 
+#: A coined category must look like an identifier: lowercase words, each of
+#: which is letters optionally followed by digits (``oauth2``, ``sha256``,
+#: ``ipv4``, ``s3``, ``x509`` all qualify). Digits interleaved among letters
+#: (``tr0ub4dor``), digit-led words (``4821``) and mixed runs (``7abc123``) are
+#: what values look like, and are rejected.
+_LABEL_WORD = re.compile(r"^[a-z]+[0-9]*$")
+#: Bounds a label: long or many-word "categories" are values, not labels.
+_MAX_LABEL_WORD_LEN = 20
+_MAX_LABEL_WORDS = 5
+
+
+def is_label_shaped(term: str) -> bool:
+    """True when a coined category has the shape of a label rather than a value.
+
+    This is the primary guard, and it is an allowlist: a term is accepted only
+    if every underscore-separated word matches :data:`_LABEL_WORD`.
+
+    Shape has to carry the weight because containment cannot. ``is_value_like``
+    only fires when the category echoes the prompt, so a model that returns
+    ``c = "password_" + t`` — the single likeliest way a small model embellishes
+    the field — produced ``[PASSWORD_TR0UB4DOR_3X_1]`` and egressed the secret
+    whole, because the label and the value are not adjacent in the prompt. That
+    is issue #61 again, one prefix wider. Reversed, hex-encoded, interleaved and
+    partial values all defeated containment the same way.
+
+    An allowlist inverts the failure mode: instead of leaking unless the term
+    happens to echo the prompt, a term can only survive if it looks like an
+    English-ish identifier. ``is_value_like`` is still applied afterwards, to
+    catch the residue this cannot see — a short dictionary-word password such as
+    ``hunter2`` is label-shaped, so containment is what rejects it.
+    """
+    if not term:
+        return False
+    words = term.split("_")
+    if not words or len(words) > _MAX_LABEL_WORDS:
+        return False
+    return all(w and len(w) <= _MAX_LABEL_WORD_LEN and _LABEL_WORD.match(w) for w in words)
+
+
 def is_value_like(term: str, text: str) -> bool:
     """True when a model-coined category looks like content lifted from *text*.
 
-    A legitimate coined category is a *label* (``employee_id``, ``badge_number``)
-    and does not appear in the text being scanned; a leaked value *is* that text.
-    So case-insensitive containment is the discriminator, and it is cheap.
+    Secondary to :func:`is_label_shaped`. It catches the case shape cannot: a
+    genuine secret that is itself label-shaped (``hunter2``, ``swordfish``)
+    still appears verbatim in the prompt, and containment sees that.
 
     Comparison also runs with every non-alphanumeric character stripped from
     both sides, because ``normalize_category`` snake-cases the raw category
@@ -138,7 +177,14 @@ def _derive_prefix(category: str) -> str:
 
 
 def prefix_for(category: str, store: TaxonomyStore | None = None) -> str:
-    """Token prefix for a category: canonical, else store-learned, else derived."""
+    """Token prefix for a category: canonical, else store-learned, else derived.
+
+    This is the choke point every minted token passes through, so the shape
+    guard is enforced here as well as at registration. Deriving a prefix from an
+    unvetted category is what put a secret into an outbound token in #61; any
+    caller reaching this with a category that never went through ``register``
+    would otherwise reopen that hole.
+    """
     canonical = CANONICAL.get(category)
     if canonical is not None:
         return canonical
@@ -149,4 +195,6 @@ def prefix_for(category: str, store: TaxonomyStore | None = None) -> str:
     learned = store.prefix_of(category)
     if learned is not None:
         return learned
+    if not is_label_shaped(category):
+        return GENERIC_PREFIX
     return _derive_prefix(category)
