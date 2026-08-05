@@ -78,6 +78,29 @@ jobs:
       - name: Fail if any dependency has no prebuilt wheel for this platform
         run: python scripts/check_wheel_only_install.py pip-report.json
 
+  setup-extras:
+    name: Setup extras install (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build pipx
+      - name: Build the wheel
+        run: python -m build
+      # `domestique setup` shipped a broken installer: it ran
+      # `pipx inject domestique domestique[ner]`, injecting the app into
+      # itself, which older pipx refuses and then no-ops. The wizard reported
+      # success and died on ModuleNotFoundError. Unit tests asserted the argv
+      # but nothing ever RAN it, so "reported success, installed nothing" was
+      # invisible. This executes the product's own argv and then checks the
+      # module actually imports.
+      - name: pipx extras injection really installs
+        run: python scripts/check_pipx_extras_install.py
+
   test-app:
     name: Test (app, informational)
     runs-on: ubuntu-latest
