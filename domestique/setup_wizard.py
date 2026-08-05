@@ -426,7 +426,15 @@ def extras_install_argv(
     spec = f"domestique[{','.join(sorted(extras))}]"
     kind = detect_install_env() if env_kind is None else env_kind
     if kind == "pipx":
-        return ["pipx", "inject", "domestique", spec]
+        # --force is required, not optional. `pipx inject <app> <pkg>` is meant
+        # for adding *other* packages, and here the package being injected IS
+        # the app. Older pipx refuses outright —
+        #   "domestique already seems to be injected ... Pass '--force'"
+        # — and then no-ops, so the extras never install and the very next step
+        # (warming the GLiNER model) dies on ModuleNotFoundError. Newer pipx
+        # happens to accept it, which is why this survived: it works on the
+        # maintainer's machine and fails on a user's.
+        return ["pipx", "inject", "--force", "domestique", spec]
     if kind == "uv-tool":
         return ["uv", "tool", "install", "--force", spec]
     return [sys.executable, "-m", "pip", "install", spec]

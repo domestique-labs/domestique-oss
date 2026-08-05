@@ -66,7 +66,7 @@ class TestDetectInstallContext:
         monkeypatch.setattr(cli.shutil, "which", lambda name: "/usr/bin/pipx")
         kind, cmd = cli._detect_install_context()
         assert kind == "pipx"
-        assert cmd == ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
+        assert cmd == ["pipx", "inject", "--force", "domestique", "domestique[browser-proxy]"]
 
     def test_pip_fallback_when_not_pipx(self, monkeypatch):
         monkeypatch.delenv("PIPX_HOME", raising=False)
@@ -85,7 +85,7 @@ class TestDetectInstallContext:
         monkeypatch.setattr(cli.shutil, "which", lambda name: r"C:\pipx.exe")
         kind, cmd = cli._detect_install_context()
         assert kind == "pipx"
-        assert cmd == ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
+        assert cmd == ["pipx", "inject", "--force", "domestique", "domestique[browser-proxy]"]
 
     def test_pipx_via_metadata_marker_custom_home(self, monkeypatch, tmp_path):
         # Custom PIPX_HOME (dir not literally named "pipx") — the substring check
