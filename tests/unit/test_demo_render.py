@@ -269,7 +269,10 @@ class TestDemoEnumeratesTokens:
 
         monkeypatch.setattr(
             "builtins.input",
-            MagicMock(side_effect=["mail a@corp.com and also b@corp.com", ""]),
+            # blank #1 submits the block, blank #2 exits the loop: the
+            # interactive prompt now accumulates until a blank line, so a
+            # single "" no longer both scans and quits.
+            MagicMock(side_effect=["mail a@corp.com and also b@corp.com", "", ""]),
         )
         run_demo(interactive=True)
         out = capsys.readouterr().out
@@ -283,7 +286,7 @@ class TestDemoEnumeratesTokens:
 
         from domestique.cli import run_demo
 
-        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", ""]))
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", "", ""]))
         run_demo(interactive=True)
         out = capsys.readouterr().out
         assert "[SSN_1]" in out
@@ -427,3 +430,76 @@ class TestPresetHonesty:
         )
         assert "[balanced]" in out
         assert "none chosen" not in out
+
+
+class TestInteractiveMultilinePaste:
+    """A pasted block is one prompt, not one prompt per line.
+
+    Reading a single line per iteration turned a pasted block into N separate
+    prompts — contradicting the banner's own "Enter on a blank line to finish".
+    Ledger output interleaved with the still-buffered paste, and a line
+    straddling the boundary had its secret reported under the *next* prompt.
+    """
+
+    def _run(self, monkeypatch, tmp_path, keys: list[str]) -> str:
+        import builtins
+
+        from domestique.cli import run_demo
+
+        home = tmp_path / "home" / ".domestique"
+        home.mkdir(parents=True)
+        monkeypatch.setattr("domestique.config_loader.DOMESTIQUE_HOME", home)
+        supplied = iter(keys)
+
+        def _fake_input(prompt: str = "") -> str:
+            try:
+                return next(supplied)
+            except StopIteration:
+                raise EOFError from None
+
+        monkeypatch.setattr(builtins, "input", _fake_input)
+        import io
+        import contextlib as _c
+
+        buf = io.StringIO()
+        with _c.redirect_stdout(buf):
+            run_demo(interactive=True)
+        return buf.getvalue()
+
+    def test_pasted_block_is_scanned_as_one_prompt(self, monkeypatch, tmp_path) -> None:
+        out = self._run(
+            monkeypatch,
+            tmp_path,
+            [
+                "Robert Aragon 489-36-8350",
+                "Ashley Borden 514-14-8905",
+                "",  # submit
+                "",  # exit
+            ],
+        )
+        # One ledger for the block, not one per line.
+        assert out.count("AFTER") == 2, "expected the canned demo + exactly one user ledger"
+        # Both SSNs found in the same scan.
+        assert "489-36-8350" in out and "514-14-8905" in out
+        # Line structure survives into what would be sent.
+        assert "Robert Aragon [SSN_" in out and "Ashley Borden [SSN_" in out
+
+    def test_blank_line_with_nothing_pending_exits(self, monkeypatch, tmp_path) -> None:
+        out = self._run(monkeypatch, tmp_path, ["", "unreached 489-36-8350"])
+        assert "489-36-8350" not in out
+
+    def test_ctrl_d_submits_the_pending_block(self, monkeypatch, tmp_path) -> None:
+        """EOF must not silently discard a paste the user already typed."""
+        out = self._run(monkeypatch, tmp_path, ["Robert Aragon 489-36-8350"])
+        assert "489-36-8350" in out
+
+    def test_after_block_indents_every_line(self, monkeypatch, tmp_path) -> None:
+        out = self._run(
+            monkeypatch, tmp_path, ["a 489-36-8350", "b 514-14-8905", "", ""]
+        )
+        # Drop the remainder of the "AFTER -> sent to the model" header line
+        # itself; assert on the body lines that follow it.
+        body = out.split("AFTER")[-1].splitlines()[1:]
+        rendered = [ln for ln in body if ln.strip()][:2]
+        assert len(rendered) == 2, rendered
+        assert all(ln.startswith("    ") for ln in rendered), rendered

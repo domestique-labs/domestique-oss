@@ -157,7 +157,10 @@ class TestInteractiveDemo:
     ) -> None:
         from domestique.cli import run_demo
 
-        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["ssn 123-45-6789", ""]))
+        # blank #1 submits the block, blank #2 exits the loop
+        monkeypatch.setattr(
+            "builtins.input", MagicMock(side_effect=["ssn 123-45-6789", "", ""])
+        )
         assert run_demo(interactive=True) == 0
         out = capsys.readouterr().out
         assert "try your own" in out.lower()
