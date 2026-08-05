@@ -583,17 +583,31 @@ def _cmd_browser_launch(
 
 
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
+    from domestique.config_loader import load_config_dict
+
     g = console.glyphs()
     paint = console.Palette(enabled=color)
     actions = policy.actions
     redact = "on" if Action.REDACT in actions else "off"
     block = "on (crown-jewels)" if Action.BLOCK in actions else "off"
 
+    # A preset is only "active" if the user actually chose one. Settings
+    # defaults local_llm_preset to "balanced", so a bare install used to
+    # highlight [balanced] while the stack below showed regex and nothing else
+    # — the header announced a provisioned profile that did not exist. Same
+    # dishonesty as #60, one row up. With no ~/.domestique/config.json, say so
+    # and point at the command that fixes it.
     presets = ["minimal", "balanced", "quality", "legacy-cpu"]
-    active = settings.local_llm_preset
-    preset_cells = [
-        paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
-    ]
+    provisioned = bool(load_config_dict())
+    if provisioned:
+        active = settings.local_llm_preset
+        preset_row = "  ".join(
+            paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
+        )
+    else:
+        preset_row = "  ".join(paint(f" {p} ", "dim") for p in presets) + paint(
+            f"   {g['dot']} none chosen — run `domestique setup`", "yellow"
+        )
 
     # Issue #60: the glyph used to come from the Settings boolean alone, so
     # `enable_gliner=True` on a machine with no `gliner` package printed
@@ -630,7 +644,7 @@ def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bo
         "  " + paint("Active configuration", "bold"),
         rule,
         f"    Policy           redact {redact}   {g['dot']}   block {block}",
-        "    Hardware preset  " + "  ".join(preset_cells),
+        "    Hardware preset  " + preset_row,
         "    Detection stack  " + "   ".join(stack_cells),
     ]
     for name, status in broken:
