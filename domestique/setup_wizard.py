@@ -218,9 +218,29 @@ def detect_gpu() -> tuple[str | None, float]:
 
     if platform.system() == "Darwin" and platform.machine() == "arm64":
         ram = detect_total_ram_gb()
-        return f"Apple Silicon (unified memory ≈ {ram} GB)", ram
+        usable = apple_usable_vram_gb(ram)
+        return f"Apple Silicon (unified memory {ram} GB, ~{usable} GB usable)", usable
 
     return None, 0.0
+
+
+#: Share of unified memory a model can realistically use on Apple Silicon.
+#: Metal caps a process's working set well below the installed total (its
+#: recommendedMaxWorkingSetSize is roughly two thirds to three quarters), and
+#: macOS itself plus the caller's own workload take a further slice.
+_APPLE_USABLE_VRAM_FRACTION = 0.7
+
+
+def apple_usable_vram_gb(total_ram_gb: float) -> float:
+    """Usable model memory on Apple Silicon, not the installed total.
+
+    Reporting unified memory as VRAM overstates what a model can have. On an
+    8 GB Mac it cleared the `quality` threshold (6 GB) and the wizard promised
+    gemma4:e4b — a 3.3 GB download — "fits without swapping". It does not:
+    macOS and Metal's working-set cap leave nowhere near 8 GB free, so the user
+    downloads 3.3 GB and then swaps. Scale it down instead of claiming the lot.
+    """
+    return round(total_ram_gb * _APPLE_USABLE_VRAM_FRACTION, 1)
 
 
 def detect_gpu_free_vram_gb() -> float | None:
@@ -406,7 +426,15 @@ def extras_install_argv(
     spec = f"domestique[{','.join(sorted(extras))}]"
     kind = detect_install_env() if env_kind is None else env_kind
     if kind == "pipx":
-        return ["pipx", "inject", "domestique", spec]
+        # --force is required, not optional. `pipx inject <app> <pkg>` is meant
+        # for adding *other* packages, and here the package being injected IS
+        # the app. Older pipx refuses outright —
+        #   "domestique already seems to be injected ... Pass '--force'"
+        # — and then no-ops, so the extras never install and the very next step
+        # (warming the GLiNER model) dies on ModuleNotFoundError. Newer pipx
+        # happens to accept it, which is why this survived: it works on the
+        # maintainer's machine and fails on a user's.
+        return ["pipx", "inject", "--force", "domestique", spec]
     if kind == "uv-tool":
         return ["uv", "tool", "install", "--force", spec]
     return [sys.executable, "-m", "pip", "install", spec]

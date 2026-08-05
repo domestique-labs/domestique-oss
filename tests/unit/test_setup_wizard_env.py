@@ -59,7 +59,8 @@ class TestDetectInstallEnv:
 class TestExtrasInstallArgv:
     def test_pipx_argv(self):
         argv = extras_install_argv(["ner"], env_kind="pipx")
-        assert argv == ["pipx", "inject", "domestique", "domestique[ner]"]
+        # --force or pipx no-ops on injecting the app into itself
+        assert argv == ["pipx", "inject", "--force", "domestique", "domestique[ner]"]
 
     def test_uv_tool_argv(self):
         argv = extras_install_argv(["browser-proxy"], env_kind="uv-tool")
@@ -116,3 +117,16 @@ class TestPipxSegmentMatch:
             detect_install_env(prefix="/home/bob/.local/pipx/venvs/domestique", environ={})
             == "pipx"
         )
+
+
+def test_pipx_injection_is_forced() -> None:
+    """Regression: `pipx inject <app> <app>[extras]` is a self-injection.
+
+    Older pipx answers "domestique already seems to be injected ... Pass
+    '--force'" and installs nothing, so `domestique setup` reported success
+    and then died on `ModuleNotFoundError: No module named 'gliner'` while
+    warming the model. Newer pipx accepts it, which is why it survived review.
+    """
+    argv = extras_install_argv(["ner", "browser-proxy"], env_kind="pipx")
+    assert "--force" in argv, argv
+    assert argv.index("--force") < argv.index("domestique"), "must precede the app name"

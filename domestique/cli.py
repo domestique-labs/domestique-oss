@@ -393,7 +393,10 @@ def _detect_install_context() -> tuple[str, list[str]]:
         or (Path(sys.prefix) / "pipx_metadata.json").is_file()
     )
     if under_pipx and shutil.which("pipx"):
-        return "pipx", ["pipx", "inject", "domestique", "domestique[browser-proxy]"]
+        # --force: the package being injected IS the pipx app, and older pipx
+        # refuses that as already-injected, silently installing nothing. Same
+        # bug as extras_install_argv in setup_wizard.py.
+        return "pipx", ["pipx", "inject", "--force", "domestique", "domestique[browser-proxy]"]
     return "pip", [sys.executable, "-m", "pip", "install", "domestique[browser-proxy]"]
 
 
