@@ -100,7 +100,7 @@ nuanced content, install the optional detectors:
 | Component | Install extra | Size | Description |
 |---|---|---|---|
 | Regex scanner | (always on) | 0 | API keys, JWTs, SSNs, credit cards, emails, phones |
-| GLiNER PII | `[ner]` | ~300 MB | Zero-shot NER for names, addresses, DOBs |
+| GLiNER PII | `[ner]` | ~1.9 GB | Zero-shot NER for names, addresses, DOBs |
 | Presidio PII | `[pii]` | ~500 MB | spaCy-based PII with en_core_web_lg model |
 | LLM classifier | Ollama + model | 1-4 GB | Nuanced classification via a local LLM |
 

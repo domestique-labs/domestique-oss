@@ -31,6 +31,9 @@ def mocked_machine(monkeypatch, tmp_path):
     monkeypatch.setattr(wizard, "detect_hardware", lambda: hw)
     monkeypatch.setattr(wizard, "detect_ollama", lambda: (True, "ollama version 0.5.0"))
     monkeypatch.setattr(wizard, "detect_existing_ollama_models", set)
+    # The daemon probe is pinned False suite-wide (tests/conftest.py);
+    # this test exercises the pull, so opt in explicitly.
+    monkeypatch.setattr(wizard, "ensure_ollama_running", lambda **_k: True)
     run = MagicMock(return_value=0)
     monkeypatch.setattr(wizard, "run", run)
     return tmp_path, run
@@ -81,6 +84,9 @@ class TestWizardYes:
         monkeypatch.setattr(wizard, "detect_hardware", lambda: hw)
         monkeypatch.setattr(wizard, "detect_ollama", lambda: (True, "0.5.0"))
         monkeypatch.setattr(wizard, "detect_existing_ollama_models", set)
+        # The daemon probe is pinned False suite-wide (tests/conftest.py);
+        # this test exercises the pull, so opt in explicitly.
+        monkeypatch.setattr(wizard, "ensure_ollama_running", lambda **_k: True)
         monkeypatch.setattr(wizard, "run", MagicMock(return_value=0))
 
         wizard.run_wizard(yes=True, demo=False)

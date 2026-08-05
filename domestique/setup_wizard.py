@@ -15,6 +15,7 @@ Entry points:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import importlib.util
 import json
 import os
@@ -68,8 +69,13 @@ FEATURE_EXTRAS: dict[str, FeatureInfo] = {
     },
     "ner": {
         "label": "GLiNER zero-shot PII (Tier 2b)",
+        # Measured, not estimated: a clean install downloads 1.87 GB of model
+        # weights for knowledgator/gliner-pii-base-v1.0 (13 files), on top of
+        # the `ner` extra itself pulling torch. The old "~300 MB" understated
+        # it more than sixfold, which matters when the wizard asks the user to
+        # approve the download on a metered or slow connection.
         "extra": "ner",
-        "extra_download_mb": 300,
+        "extra_download_mb": 1900,
         "hf_model": "knowledgator/gliner-pii-base-v1.0",
         "default": True,
     },
@@ -162,6 +168,11 @@ def _console_safe(text: str) -> str:
 
 def _print(text: str = "") -> None:
     print(_console_safe(text))
+
+
+def _fmt_download(mb: int) -> str:
+    """Human-sized download figure. Multi-GB pulls read badly in megabytes."""
+    return f"~{mb / 1000:.1f} GB" if mb >= 1000 else f"~{mb} MB"
 
 
 # ──────────────────────────────── detection ────────────────────────────────
@@ -539,12 +550,83 @@ def cache_sentence_transformer_model(model: str) -> None:
     run([sys.executable, "-c", code], env={"HF_HUB_OFFLINE": "0"})
 
 
+def ollama_server_reachable(timeout: float = 2.0) -> bool:
+    """True when the Ollama daemon answers. Never raises."""
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(  # noqa: S310  # fixed loopback URL
+            "http://localhost:11434/api/tags", timeout=timeout
+        ) as resp:
+            return bool(200 <= resp.status < 300)
+    except Exception:
+        return False
+
+
+def ensure_ollama_running(*, wait_s: float = 20.0) -> bool:
+    """Start the Ollama daemon if it isn't already answering.
+
+    Installing Ollama does not start it. Homebrew says so in its own caveats
+    ("To start ollama now and restart at login: brew services start ollama"),
+    but the wizard went straight from `brew install` to `ollama pull` and died:
+
+        Error: could not connect to ollama server, run 'ollama serve' to start it
+
+    So the wizard installed a 31 MB package, downloaded nothing, and aborted —
+    after the user had already waited through the extras and model downloads.
+    """
+    if ollama_server_reachable():
+        return True
+
+    brew = shutil.which("brew")
+    if platform.system() == "Darwin" and brew:
+        _print("  starting Ollama (brew services start ollama)…")
+        with contextlib.suppress(Exception):
+            subprocess.run(  # noqa: S603
+                [brew, "services", "start", "ollama"], capture_output=True, timeout=60
+            )
+    if not ollama_server_reachable() and shutil.which("ollama"):
+        # No service manager (or it failed): run the daemon ourselves. Detached
+        # so it outlives the wizard, and output discarded so it cannot block on
+        # a full pipe.
+        _print("  starting Ollama (ollama serve)…")
+        serve_argv = ["ollama", "serve"]  # noqa: S607  # user-installed binary via PATH
+        with contextlib.suppress(Exception):
+            subprocess.Popen(  # noqa: S603
+                serve_argv,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+
+    deadline = time.monotonic() + wait_s
+    while time.monotonic() < deadline:
+        if ollama_server_reachable():
+            _print("  ✓ Ollama server is up")
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def pull_ollama_model(model: str, already_pulled: set[str]) -> None:
     if model in already_pulled:
         _print(f"  ✓ ollama model already present: {model}")
         return
+    if not ensure_ollama_running():
+        # Not fatal. Everything else — extras, GLiNER cache, config — is already
+        # done, and regex + GLiNER protect the user today. Killing the wizard
+        # here would throw all of that away over a daemon that isn't up.
+        _print(
+            "  ⚠ Ollama is installed but its server isn't reachable, so "
+            f"'{model}' was not pulled.\n"
+            "    Start it and pull the model when convenient:\n"
+            "      brew services start ollama     # or: ollama serve\n"
+            f"      ollama pull {model}\n"
+            "    Tier 3 stays off until then; regex and GLiNER are unaffected."
+        )
+        return
     _print(f"\n▶ pulling Ollama model: {model}")
-    run(["ollama", "pull", model])  # noqa: S607  # user-installed binary, resolved via PATH
+    run(["ollama", "pull", model], check=False)  # noqa: S607  # user binary via PATH
 
 
 def align_dashboard_config(preset: str) -> tuple[bool, str]:
@@ -740,7 +822,7 @@ def pick_features(args: argparse.Namespace) -> set[str]:
     _print("        uninstall anything already installed for that feature.")
     chosen = set()
     for key, info in FEATURE_EXTRAS.items():
-        size = f" (~{info['extra_download_mb']} MB)"
+        size = f" ({_fmt_download(info['extra_download_mb'])})"
         if prompt_yes_no(
             f"  install {info['label']}{size}?", default=info["default"], eof_default=False
         ):
@@ -798,12 +880,12 @@ def confirm_plan(extras: set[str], preset: str | None) -> bool:
     if extras:
         _print("  pip extras:")
         for k in sorted(extras):
-            _print(f"    - {k} (~{FEATURE_EXTRAS[k]['extra_download_mb']} MB)")
+            _print(f"    - {k} ({_fmt_download(FEATURE_EXTRAS[k]['extra_download_mb'])})")
             total_mb += FEATURE_EXTRAS[k]["extra_download_mb"]
     if "pii" in extras:
         _print("    + spaCy model en_core_web_lg (~750 MB)")
     if "ner" in extras:
-        _print("    + HuggingFace model knowledgator/gliner-pii-base-v1.0 (~300 MB)")
+        _print("    + HuggingFace model knowledgator/gliner-pii-base-v1.0 (~1.9 GB)")
     if preset:
         info = LLM_PRESETS[preset]
         _print(f"  Ollama model: {info['model']} (~{info['size_gb']} GB)")
@@ -1042,11 +1124,11 @@ def _gliner_why(hw: HardwareProfile) -> str:
     if 0 < hw.ram_gb < 8:
         return (
             f"why: catches names/addresses/emails that regex can't, but on your "
-            f"{hw.ram_gb:g} GB RAM the 300 MB model may load slowly."
+            f"{hw.ram_gb:g} GB RAM the 1.9 GB model may load slowly."
         )
     return (
         f"why: catches names/addresses/emails that regex can't; with your "
-        f"{hw.ram_gb:g} GB RAM the 300 MB model runs comfortably (~20 ms/prompt)."
+        f"{hw.ram_gb:g} GB RAM the 1.9 GB model runs comfortably (~20 ms/prompt)."
     )
 
 
@@ -1103,9 +1185,9 @@ def _wizard_walkthrough(hw: HardwareProfile, *, yes: bool) -> WizardChoices:
     _print("  Zero download, ~0.03 ms per prompt. Nothing to decide here.")
 
     # Tier 2 is on by default -- lowest-friction setup enables PII detection
-    # without a prompt. Still hardware-gated: on a <8 GB machine the 300 MB
+    # without a prompt. Still hardware-gated: on a <8 GB machine the 1.9 GB
     # model loads slowly, so we skip it rather than force a heavy download.
-    section("Tier 2 - GLiNER PII detection (~300 MB) [ner]")
+    section("Tier 2 - GLiNER PII detection (~1.9 GB) [ner]")
     _print(f"  {_gliner_why(hw)}")
     gliner = hw.ram_gb >= 8
     if gliner:
@@ -1166,7 +1248,7 @@ def _choices_to_extras(choices: WizardChoices) -> list[str]:
 def _confirm_wizard_plan(choices: WizardChoices, extras: list[str]) -> bool:
     section("plan")
     _print("  Tier 1 regex        always on")
-    _print(f"  GLiNER PII          {'yes (~300 MB)' if choices.gliner else 'no'}")
+    _print(f"  GLiNER PII          {'yes (~1.9 GB)' if choices.gliner else 'no'}")
     if choices.preset:
         info = LLM_PRESETS[choices.preset]
         _print(f"  Tier 3 LLM          {choices.preset} ({info['model']}, ~{info['size_gb']} GB)")

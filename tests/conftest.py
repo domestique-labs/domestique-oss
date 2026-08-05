@@ -31,6 +31,24 @@ if sys.platform != "win32":
 
 
 @pytest.fixture(autouse=True)
+def _no_ambient_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test may depend on a live Ollama daemon on the developer's machine.
+
+    ``pull_ollama_model`` now probes the daemon first, so a machine running
+    Ollama takes a different branch from one that isn't. That is exactly how
+    ``test_installs_ner_and_pulls_recommended_model`` passed locally and failed
+    in CI: the maintainer had Ollama on :11434 and the runner did not.
+
+    Pin it False here. A test that wants the pull to proceed must say so, by
+    stubbing ``ensure_ollama_running`` — which makes the dependency visible in
+    the test rather than in the environment.
+    """
+    from domestique import setup_wizard
+
+    monkeypatch.setattr(setup_wizard, "ollama_server_reachable", lambda timeout=2.0: False)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_user_state(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep every test out of the developer's real ``~/.domestique``.
 
