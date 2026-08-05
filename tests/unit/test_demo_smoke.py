@@ -72,7 +72,9 @@ class TestDemoFormatting:
 
         from domestique.cli import run_demo
 
-        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["ssn 123-45-6789", ""]))
+        # blank #1 submits, blank #2 exits (the prompt accumulates
+        # until a blank line rather than scanning line-by-line)
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["ssn 123-45-6789", "", ""]))
         run_demo(interactive=True)
         out = capsys.readouterr().out
         assert "redacted" in out

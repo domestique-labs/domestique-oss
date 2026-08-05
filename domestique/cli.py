@@ -583,17 +583,31 @@ def _cmd_browser_launch(
 
 
 def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bool) -> str:
+    from domestique.config_loader import load_config_dict
+
     g = console.glyphs()
     paint = console.Palette(enabled=color)
     actions = policy.actions
     redact = "on" if Action.REDACT in actions else "off"
     block = "on (crown-jewels)" if Action.BLOCK in actions else "off"
 
+    # A preset is only "active" if the user actually chose one. Settings
+    # defaults local_llm_preset to "balanced", so a bare install used to
+    # highlight [balanced] while the stack below showed regex and nothing else
+    # — the header announced a provisioned profile that did not exist. Same
+    # dishonesty as #60, one row up. With no ~/.domestique/config.json, say so
+    # and point at the command that fixes it.
     presets = ["minimal", "balanced", "quality", "legacy-cpu"]
-    active = settings.local_llm_preset
-    preset_cells = [
-        paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
-    ]
+    provisioned = bool(load_config_dict())
+    if provisioned:
+        active = settings.local_llm_preset
+        preset_row = "  ".join(
+            paint(f"[{p}]", "cyan") if p == active else paint(f" {p} ", "dim") for p in presets
+        )
+    else:
+        preset_row = "  ".join(paint(f" {p} ", "dim") for p in presets) + paint(
+            f"   {g['dot']} none chosen — run `domestique setup`", "yellow"
+        )
 
     # Issue #60: the glyph used to come from the Settings boolean alone, so
     # `enable_gliner=True` on a machine with no `gliner` package printed
@@ -630,7 +644,7 @@ def _render_config_header(settings: Settings, policy: PolicyEngine, *, color: bo
         "  " + paint("Active configuration", "bold"),
         rule,
         f"    Policy           redact {redact}   {g['dot']}   block {block}",
-        "    Hardware preset  " + "  ".join(preset_cells),
+        "    Hardware preset  " + preset_row,
         "    Detection stack  " + "   ".join(stack_cells),
     ]
     for name, status in broken:
@@ -698,7 +712,11 @@ def _render_outcome(
     """
     if action is Action.BLOCK or after is None:
         return [f"  {paint(g['cross'], 'red')} BLOCKED {g['arrow']} nothing was sent"]
-    return [f"  AFTER {g['arrow']} sent to the model", "    " + _highlight_tokens(after, paint)]
+    # Indent every line, not just the first: prompts are routinely multi-line
+    # now that the interactive loop accepts a pasted block, and indenting only
+    # line one left the rest hanging at column 0, reading as broken output.
+    body = "\n".join("    " + line for line in _highlight_tokens(after, paint).split("\n"))
+    return [f"  AFTER {g['arrow']} sent to the model", body]
 
 
 def _render_canned(
@@ -900,14 +918,33 @@ def run_demo(*, interactive: bool | None = None) -> int:
             f"\n  Now try your own {g['arrow']} paste anything with secrets — real or "
             "fake, it never leaves your machine ;)  Enter on a blank line to finish."
         )
+        # Accumulate until a blank line, which is what the banner above has
+        # always promised. Reading one line per prompt turned a pasted block
+        # into N separate prompts: each line was scanned in isolation, the
+        # ledger output interleaved with the still-buffered paste, and a line
+        # split across the boundary had its secret reported under the *next*
+        # prompt. Real prompts are multi-line, so this was the first thing a
+        # new user hit.
+        buffer: list[str] = []
         while True:
+            last = False
             try:
-                text = input("\n  prompt> ").strip()
-            except (EOFError, KeyboardInterrupt):
+                line = input("\n  prompt> " if not buffer else "  ...     ")
+            except KeyboardInterrupt:
                 print()
-                break
+                break  # Ctrl-C abandons whatever was pending
+            except EOFError:
+                print()
+                line, last = "", True  # Ctrl-D submits the pending block, then stops
+
+            if line.strip():
+                buffer.append(line)
+                continue
+
+            text = "\n".join(buffer).strip()
+            buffer = []
             if not text:
-                break
+                break  # blank line with nothing pending = done
             res = asyncio.run(pipeline.inspect(text))
             print(
                 _render_ledger(
@@ -919,6 +956,8 @@ def run_demo(*, interactive: bool | None = None) -> int:
                     action=res.action,
                 )
             )
+            if last:
+                break
     return 0
 
 

@@ -23,8 +23,22 @@ if TYPE_CHECKING:
     from domestique.detectors.registry import InspectionResult
 
 
+def _provision(tmp_path, monkeypatch) -> None:
+    """Give the header a config.json so a preset counts as chosen.
+
+    Without this the header correctly reports "none chosen", and these tests
+    only passed because they read the *developer's* real ~/.domestique (see
+    issue #70) — on a scratch HOME they failed.
+    """
+    home = tmp_path / "home" / ".domestique"
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.json").write_text('{"detection_stack": {"regex": true}}')
+    monkeypatch.setattr("domestique.config_loader.DOMESTIQUE_HOME", home)
+
+
 class TestConfigHeader:
-    def test_shows_active_preset_and_regex_on(self) -> None:
+    def test_shows_active_preset_and_regex_on(self, tmp_path, monkeypatch) -> None:
+        _provision(tmp_path, monkeypatch)
         settings = Settings()  # regex on, preset default "balanced"
         out = _render_config_header(settings, PolicyEngine.from_yaml_default(), color=False)
         assert "Regex" in out
@@ -96,7 +110,8 @@ class TestConfigHeaderReportsAvailability:
         monkeypatch.setattr(st, "_ollama_tags", _boom)
         assert "Detection stack" in self._header(Settings())
 
-    def test_keeps_the_labels_other_tests_assert_on(self, monkeypatch) -> None:
+    def test_keeps_the_labels_other_tests_assert_on(self, tmp_path, monkeypatch) -> None:
+        _provision(tmp_path, monkeypatch)  # else the preset row reads "none chosen"
         monkeypatch.setattr(st, "_module_available", lambda name: False)
         out = self._header(Settings())
         for label in ("Active configuration", "Detection stack", "[balanced]", "Regex", "GLiNER"):
@@ -254,7 +269,10 @@ class TestDemoEnumeratesTokens:
 
         monkeypatch.setattr(
             "builtins.input",
-            MagicMock(side_effect=["mail a@corp.com and also b@corp.com", ""]),
+            # blank #1 submits the block, blank #2 exits the loop: the
+            # interactive prompt now accumulates until a blank line, so a
+            # single "" no longer both scans and quits.
+            MagicMock(side_effect=["mail a@corp.com and also b@corp.com", "", ""]),
         )
         run_demo(interactive=True)
         out = capsys.readouterr().out
@@ -268,7 +286,7 @@ class TestDemoEnumeratesTokens:
 
         from domestique.cli import run_demo
 
-        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", ""]))
+        monkeypatch.setattr("builtins.input", MagicMock(side_effect=["my ssn is 123-45-6789", "", ""]))
         run_demo(interactive=True)
         out = capsys.readouterr().out
         assert "[SSN_1]" in out
@@ -373,3 +391,115 @@ class TestBlockedLedgerStillListsFindings:
         assert "nothing sensitive detected" not in out
         assert "Private key" in out
         assert "blocked" in out.lower()
+
+
+class TestPresetHonesty:
+    """A preset is only 'active' when the user actually chose one.
+
+    Settings defaults local_llm_preset to "balanced", so a bare install
+    highlighted [balanced] while the stack below showed regex and nothing
+    else — announcing a provisioned profile that did not exist. Same class of
+    defect as #60, one row up.
+    """
+
+    def _header(self, tmp_path, monkeypatch, *, config: dict | None) -> str:
+        import json as _json
+
+        from domestique.cli import _render_config_header
+        from domestique.config import Settings
+        from domestique.policy import PolicyEngine
+
+        home = tmp_path / "home"
+        (home / ".domestique").mkdir(parents=True)
+        if config is not None:
+            (home / ".domestique" / "config.json").write_text(_json.dumps(config))
+        monkeypatch.setattr("domestique.config_loader.DOMESTIQUE_HOME", home / ".domestique")
+        return _render_config_header(
+            Settings(), PolicyEngine.from_yaml_default(), color=False
+        )
+
+    def test_bare_install_claims_no_preset(self, tmp_path, monkeypatch):
+        out = self._header(tmp_path, monkeypatch, config=None)
+        assert "none chosen" in out
+        assert "domestique setup" in out
+        assert "[balanced]" not in out, "a bare install must not claim a provisioned preset"
+
+    def test_provisioned_install_highlights_the_chosen_preset(self, tmp_path, monkeypatch):
+        out = self._header(
+            tmp_path, monkeypatch, config={"detection_stack": {"regex": True}}
+        )
+        assert "[balanced]" in out
+        assert "none chosen" not in out
+
+
+class TestInteractiveMultilinePaste:
+    """A pasted block is one prompt, not one prompt per line.
+
+    Reading a single line per iteration turned a pasted block into N separate
+    prompts — contradicting the banner's own "Enter on a blank line to finish".
+    Ledger output interleaved with the still-buffered paste, and a line
+    straddling the boundary had its secret reported under the *next* prompt.
+    """
+
+    def _run(self, monkeypatch, tmp_path, keys: list[str]) -> str:
+        import builtins
+
+        from domestique.cli import run_demo
+
+        home = tmp_path / "home" / ".domestique"
+        home.mkdir(parents=True)
+        monkeypatch.setattr("domestique.config_loader.DOMESTIQUE_HOME", home)
+        supplied = iter(keys)
+
+        def _fake_input(prompt: str = "") -> str:
+            try:
+                return next(supplied)
+            except StopIteration:
+                raise EOFError from None
+
+        monkeypatch.setattr(builtins, "input", _fake_input)
+        import io
+        import contextlib as _c
+
+        buf = io.StringIO()
+        with _c.redirect_stdout(buf):
+            run_demo(interactive=True)
+        return buf.getvalue()
+
+    def test_pasted_block_is_scanned_as_one_prompt(self, monkeypatch, tmp_path) -> None:
+        out = self._run(
+            monkeypatch,
+            tmp_path,
+            [
+                "Robert Aragon 489-36-8350",
+                "Ashley Borden 514-14-8905",
+                "",  # submit
+                "",  # exit
+            ],
+        )
+        # One ledger for the block, not one per line.
+        assert out.count("AFTER") == 2, "expected the canned demo + exactly one user ledger"
+        # Both SSNs found in the same scan.
+        assert "489-36-8350" in out and "514-14-8905" in out
+        # Line structure survives into what would be sent.
+        assert "Robert Aragon [SSN_" in out and "Ashley Borden [SSN_" in out
+
+    def test_blank_line_with_nothing_pending_exits(self, monkeypatch, tmp_path) -> None:
+        out = self._run(monkeypatch, tmp_path, ["", "unreached 489-36-8350"])
+        assert "489-36-8350" not in out
+
+    def test_ctrl_d_submits_the_pending_block(self, monkeypatch, tmp_path) -> None:
+        """EOF must not silently discard a paste the user already typed."""
+        out = self._run(monkeypatch, tmp_path, ["Robert Aragon 489-36-8350"])
+        assert "489-36-8350" in out
+
+    def test_after_block_indents_every_line(self, monkeypatch, tmp_path) -> None:
+        out = self._run(
+            monkeypatch, tmp_path, ["a 489-36-8350", "b 514-14-8905", "", ""]
+        )
+        # Drop the remainder of the "AFTER -> sent to the model" header line
+        # itself; assert on the body lines that follow it.
+        body = out.split("AFTER")[-1].splitlines()[1:]
+        rendered = [ln for ln in body if ln.strip()][:2]
+        assert len(rendered) == 2, rendered
+        assert all(ln.startswith("    ") for ln in rendered), rendered
