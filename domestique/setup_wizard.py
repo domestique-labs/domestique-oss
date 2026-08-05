@@ -218,9 +218,29 @@ def detect_gpu() -> tuple[str | None, float]:
 
     if platform.system() == "Darwin" and platform.machine() == "arm64":
         ram = detect_total_ram_gb()
-        return f"Apple Silicon (unified memory ≈ {ram} GB)", ram
+        usable = apple_usable_vram_gb(ram)
+        return f"Apple Silicon (unified memory {ram} GB, ~{usable} GB usable)", usable
 
     return None, 0.0
+
+
+#: Share of unified memory a model can realistically use on Apple Silicon.
+#: Metal caps a process's working set well below the installed total (its
+#: recommendedMaxWorkingSetSize is roughly two thirds to three quarters), and
+#: macOS itself plus the caller's own workload take a further slice.
+_APPLE_USABLE_VRAM_FRACTION = 0.7
+
+
+def apple_usable_vram_gb(total_ram_gb: float) -> float:
+    """Usable model memory on Apple Silicon, not the installed total.
+
+    Reporting unified memory as VRAM overstates what a model can have. On an
+    8 GB Mac it cleared the `quality` threshold (6 GB) and the wizard promised
+    gemma4:e4b — a 3.3 GB download — "fits without swapping". It does not:
+    macOS and Metal's working-set cap leave nowhere near 8 GB free, so the user
+    downloads 3.3 GB and then swaps. Scale it down instead of claiming the lot.
+    """
+    return round(total_ram_gb * _APPLE_USABLE_VRAM_FRACTION, 1)
 
 
 def detect_gpu_free_vram_gb() -> float | None:
