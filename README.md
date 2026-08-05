@@ -27,25 +27,38 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![Code style: Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![GitHub stars](https://img.shields.io/github/stars/domestique-labs/domestique-oss?style=flat)](https://github.com/domestique-labs/domestique-oss/stargazers)
-<!-- Uncomment together with the quick-start swap, in the release commit that publishes to PyPI:
 [![PyPI version](https://img.shields.io/pypi/v/domestique)](https://pypi.org/project/domestique/)
 [![PyPI downloads](https://static.pepy.tech/badge/domestique)](https://pepy.tech/project/domestique)
 [![Downloads/month](https://static.pepy.tech/badge/domestique/month)](https://pepy.tech/project/domestique)
--->
 
 📖 [Docs](https://github.com/domestique-labs/domestique-oss/tree/main/docs) · [Changelog](https://github.com/domestique-labs/domestique-oss/blob/main/docs/CHANGELOG.md) · [Recipes](https://github.com/domestique-labs/domestique-oss/tree/main/docs/recipes) · [Contributing](https://github.com/domestique-labs/domestique-oss/blob/main/CONTRIBUTING.md)
 
 ## Quick start
 
 ```bash
-git clone https://github.com/domestique-labs/domestique-oss && cd domestique-oss
-pip install -e .                   # in a virtualenv
+pipx install domestique            # or: pip install domestique
 domestique start                   # launches the redacting proxy on http://127.0.0.1:8000
 ```
 
-> **Not on PyPI yet.** `pipx install domestique` does not work today — install from
-> source as above. This note and the PyPI badges go live together with the first
-> published release.
+<details>
+<summary>Don't have <code>pipx</code>?</summary>
+
+```bash
+brew install pipx && pipx ensurepath     # macOS
+python3 -m pip install --user pipx       # Linux / Windows
+```
+
+On macOS, `pip install pipx` fails with `externally-managed-environment` (PEP 668)
+when Python came from Homebrew — use `brew install pipx` there.
+
+</details>
+
+Prefer to run from source?
+
+```bash
+git clone https://github.com/domestique-labs/domestique-oss && cd domestique-oss
+pip install -e .                   # in a virtualenv
+```
 
 Point your tool at it and keep using your own API key:
 
