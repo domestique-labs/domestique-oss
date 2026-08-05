@@ -84,6 +84,8 @@ the outbound prompt is touched.
 - **No CA, no system proxy, no admin** — pointing a tool at the wedge is just a base-URL env var.
 - **Your key stays yours** — it rides through in the request header to the provider.
 - **Redact by default** — your workflow keeps working; the loudest secrets block.
+- **Secrets by default, PII when you ask for it** — a bare install is regex-only. Names
+  and addresses need the optional NER tier ([see below](#what-a-default-install-actually-detects)).
 - **You can see what it caught** — each redaction/block prints a live line, and
   `domestique report` totals them by type (metadata only, never your prompt text).
 - **Cross-platform** — macOS, Linux, Windows.
@@ -92,22 +94,56 @@ Supported front doors today: OpenAI-compatible (`/v1/chat/completions`, `/v1/com
 `/v1/embeddings`) via `OPENAI_BASE_URL`, and Anthropic (`/v1/messages`) via
 `ANTHROPIC_BASE_URL`. Any other path is passed straight through untouched.
 
+### What a default install actually detects
+
+Be clear-eyed about this before you rely on it. `pipx install domestique` gives you
+**regex secret-scanning only** — nothing is downloaded, nothing runs in the background.
+
+**Detected out of the box:** API keys and tokens (AWS, GitHub, OpenAI, Anthropic,
+Slack), JWTs, private keys, connection strings, US SSNs, credit-card numbers, email
+addresses, phone numbers.
+
+**NOT detected out of the box:** people's names, street addresses, dates of birth, or
+anything needing context ("our Q4 revenue was $45M"). A prompt saying
+`Robert Aragon, 489-36-8350` has the SSN redacted and **the name sent through in
+cleartext**. If names matter to you, you need Tier 2 below.
+
 ### Turning on deeper detection (optional)
 
-Regex secret-scanning is always on and needs nothing extra. For names/addresses and
-nuanced content, install the optional detectors:
-
-| Component | Install extra | Size | Description |
+| Tier | What it adds | How to install | Download |
 |---|---|---|---|
-| Regex scanner | (always on) | 0 | API keys, JWTs, SSNs, credit cards, emails, phones |
-| GLiNER PII | `[ner]` | ~1.9 GB | Zero-shot NER for names, addresses, DOBs |
-| Presidio PII | `[pii]` | ~500 MB | spaCy-based PII with en_core_web_lg model |
-| LLM classifier | Ollama + model | 1-4 GB | Nuanced classification via a local LLM |
+| **1. Regex** | secrets, SSNs, cards, emails, phones | always on | — |
+| **2a. GLiNER** | names, addresses, DOBs | `pipx inject --force domestique 'domestique[ner]'` | ~1.9 GB |
+| **2b. Presidio** | alternative PII engine (spaCy) | `pipx inject --force domestique 'domestique[pii]'` | ~750 MB |
+| **3. Local LLM** | nuanced/contextual content | **needs Ollama — see below** | 1–3.3 GB |
 
-If a tier is **enabled but its dependency isn't installed**, `domestique start` prints a
-loud warning and keeps running with whatever protection *is* available (fail-loud-but-open).
-Prefer to never run half-protected? Add `--strict` and it will refuse to start until the
-gap is fixed (fail-closed).
+`domestique setup` walks you through all of this interactively and picks a Tier-3 model
+that fits your hardware. The commands above are for doing it yourself.
+
+> `--force` is required, not optional: the package being injected is the app itself, and
+> without it pipx treats the install as already done and silently changes nothing.
+
+#### Tier 3 needs Ollama, which is a separate program
+
+This is the part that surprises people. Tiers 1 and 2 are Python packages that
+`pip`/`pipx` installs. **Tier 3 is not.** It talks to [Ollama](https://ollama.com), a
+separate service you install and keep running yourself:
+
+```bash
+brew install ollama            # macOS; see ollama.com for Linux/Windows
+brew services start ollama     # or run it in a terminal: ollama serve
+ollama pull qwen3:1.7b         # the model domestique will use
+```
+
+Installing Ollama does **not** start it. If the daemon isn't running, Tier 3 is simply
+off — `domestique start` says so in its header rather than pretending otherwise, and
+your regex and GLiNER protection are unaffected.
+
+### If a tier is enabled but unavailable
+
+`domestique start` prints a loud warning and keeps running with whatever protection
+*is* available (fail-loud-but-open). Prefer to never run half-protected? Add `--strict`
+and it refuses to start until the gap is fixed (fail-closed).
 
 ---
 
