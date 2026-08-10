@@ -4,12 +4,13 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0]
 
-Nothing yet published to a package index — the `0.1.0` items below ship from source
-(`pip install -e .`). The package name `domestique` is settled; publishing is blocked
-on configuring a PyPI Trusted Publisher and clearing the `pypi` environment's
-approval gate, not on naming.
+First release published to PyPI: `pipx install domestique`.
+
+Rehearsed on TestPyPI before publishing — the wheel installed from a real index on a
+clean macOS VM (no source tree, empty `$HOME`), resolved its dependency graph, and the
+project page rendered with the logo and all links intact.
 
 ### Fixed — pre-release correctness pass
 - **Untrusted model output no longer reaches the outbound token or disk** (#61). The
@@ -73,4 +74,4 @@ approval gate, not on naming.
 - macOS is the fully-validated platform; Windows and Linux paths exist but are less
   exercised.
 
-[Unreleased]: https://github.com/domestique-labs/domestique-oss/commits/main
+[0.1.0]: https://github.com/domestique-labs/domestique-oss/releases/tag/v0.1.0
