@@ -35,9 +35,9 @@ dependencies = [
     # exists specifically to catch this class of regression automatically
     # for any dependency, not just this one -- raise this cap only once that
     # job is green with the new litellm range.
-    "litellm>=1.80,<1.92",
+    "litellm>=1.80,<1.97",
     "pydantic>=2.10,<2.14",
-    "pydantic-settings>=2.7,<2.15",
+    "pydantic-settings>=2.7,<2.16",
     "httpx>=0.28,<1",
     "structlog>=24.4,<27",
     "pyyaml>=6,<7",
@@ -46,7 +46,7 @@ dependencies = [
     # Note: the [browser-proxy] extra pins mitmproxy, which requires
     # cryptography<44.1 — installs including that extra resolve to 44.x
     # regardless of this ceiling. It only moves for base/dev installs.
-    "cryptography>=42,<50",
+    "cryptography>=42,<51",
     "keyring>=24,<26",
 ]
 
